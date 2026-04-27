@@ -368,6 +368,46 @@ body::before {
     margin: 0;
 }
 
+.history-block h3 {
+    margin-bottom: 12px;
+}
+
+.history-list {
+    display: grid;
+    gap: 10px;
+}
+
+.history-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(82px, 0.55fr) minmax(120px, 0.7fr);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: rgba(0, 0, 0, 0.16);
+}
+
+.history-row div,
+.history-row time {
+    display: grid;
+    gap: 4px;
+}
+
+.history-row span,
+.history-row time {
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+.history-row .win {
+    color: var(--green);
+}
+
+.history-row .loss {
+    color: var(--red);
+}
+
 .empty-state {
     margin-top: 18px;
     border: 1px dashed var(--line);
@@ -410,5 +450,9 @@ code {
     .search-box,
     .search-box input {
         width: 100%;
+    }
+
+    .history-row {
+        grid-template-columns: 1fr;
     }
 }

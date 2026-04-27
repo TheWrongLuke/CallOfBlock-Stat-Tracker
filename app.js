@@ -1,4 +1,5 @@
 const MODE_LABELS = {
+    overall: "Overall",
     battleRoyale: "Battle Royale",
     deathmatch: "Deathmatch"
 };
@@ -22,7 +23,7 @@ const state = {
     apiUrl: "",
     pollMs: DEFAULT_API_POLL_MS,
     refreshTimer: null,
-    mode: "battleRoyale",
+    mode: "overall",
     sort: "wins",
     sortDirection: "desc",
     page: 1,
@@ -304,9 +305,51 @@ function renderProfile() {
     }
 
     container.innerHTML = [
+        renderModeBlock("Overall", buildProfileOverall(profile)),
         renderModeBlock("Battle Royale", profile.battleRoyale),
-        renderModeBlock("Deathmatch", profile.deathmatch)
+        renderModeBlock("Deathmatch", profile.deathmatch),
+        renderMatchHistory(profile.recentMatches || [])
     ].join("");
+}
+
+function renderMatchHistory(matches) {
+    const rows = [...matches].slice(0, 12);
+    if (rows.length === 0) {
+        return `
+            <section class="mode-block history-block">
+                <h3>Game History</h3>
+                <p class="mode-empty">No game history yet.</p>
+            </section>
+        `;
+    }
+
+    return `
+        <section class="mode-block history-block">
+            <h3>Game History</h3>
+            <div class="history-list">
+                ${rows.map(renderMatchHistoryRow).join("")}
+            </div>
+        </section>
+    `;
+}
+
+function renderMatchHistoryRow(match) {
+    const result = match.won ? "Win" : "Loss";
+    const resultClass = match.won ? "win" : "loss";
+    const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
+    return `
+        <article class="history-row">
+            <div>
+                <strong class="${resultClass}">${result}</strong>
+                <span>${escapeHtml(mode)} • ${escapeHtml(String(match.playerCount || 0))} players</span>
+            </div>
+            <div>
+                <strong>${escapeHtml(String(match.kills || 0))} / ${escapeHtml(String(match.deaths || 0))}</strong>
+                <span>K / D</span>
+            </div>
+            <time datetime="${escapeHtml(match.endedAt || "")}">${escapeHtml(formatShortDate(match.endedAt))}</time>
+        </article>
+    `;
 }
 
 function renderModeBlock(label, payload) {
@@ -353,12 +396,80 @@ function filteredPlayers() {
 }
 
 function currentMode() {
+    if (state.mode === "overall") return buildOverallMode();
     return state.data?.modes?.[state.mode] || { players: [] };
 }
 
+function buildOverallMode() {
+    const players = (state.data?.profiles || []).map(buildOverallPlayer).filter(Boolean);
+    applyRanks(players);
+    return {
+        id: "overall",
+        label: "Overall",
+        totalPlayers: players.length,
+        players
+    };
+}
+
+function buildOverallPlayer(profile) {
+    if (!profile) return null;
+    const stats = combineStats(profile.battleRoyale?.stats, profile.deathmatch?.stats);
+    if (stats.games <= 0) return null;
+    return {
+        playerId: profile.playerId,
+        name: profile.name,
+        stats,
+        ranks: { wins: 0, kills: 0, games: 0 },
+        derived: derivedFromStats(stats)
+    };
+}
+
+function buildProfileOverall(profile) {
+    const player = buildOverallPlayer(profile);
+    if (!player) return null;
+    const overall = buildOverallMode();
+    const ranked = overall.players.find((entry) => entry.playerId === player.playerId);
+    return ranked || player;
+}
+
+function combineStats(...statsList) {
+    return statsList.reduce((total, stats) => {
+        if (!stats) return total;
+        total.wins += Number(stats.wins || 0);
+        total.kills += Number(stats.kills || 0);
+        total.deaths += Number(stats.deaths || 0);
+        total.games += Number(stats.games || 0);
+        return total;
+    }, { wins: 0, kills: 0, deaths: 0, games: 0 });
+}
+
+function derivedFromStats(stats) {
+    const games = Number(stats.games || 0);
+    const deaths = Number(stats.deaths || 0);
+    const kills = Number(stats.kills || 0);
+    return {
+        winRate: games > 0 ? round2((stats.wins || 0) / games) : 0,
+        avgKills: games > 0 ? round2(kills / games) : 0,
+        avgDeaths: games > 0 ? round2(deaths / games) : 0,
+        kdRatio: deaths > 0 ? round2(kills / deaths) : (kills > 0 ? kills : 0)
+    };
+}
+
+function applyRanks(players) {
+    for (const sort of ["wins", "kills", "games"]) {
+        [...players].sort(comparePlayersBy(sort, "desc")).forEach((player, index) => {
+            player.ranks[sort] = index + 1;
+        });
+    }
+}
+
 function comparePlayers(sort) {
+    return comparePlayersBy(sort, state.sortDirection);
+}
+
+function comparePlayersBy(sort, directionId) {
     return (a, b) => {
-        const direction = state.sortDirection === "asc" ? 1 : -1;
+        const direction = directionId === "asc" ? 1 : -1;
         const primary = (sortValue(a, sort) - sortValue(b, sort)) * direction;
         if (primary !== 0) return primary;
         const secondary = b.stats.wins - a.stats.wins;
@@ -444,6 +555,22 @@ function formatPercent(value) {
 
 function formatNumber(value) {
     return Number(value || 0).toFixed(2).replace(/\.00$/, "");
+}
+
+function round2(value) {
+    return Math.round(value * 100) / 100;
+}
+
+function formatShortDate(value) {
+    if (!value) return "Unknown time";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
 }
 
 function formatDateTime(value) {
