@@ -380,7 +380,58 @@ function renderModeBlock(label, payload) {
                 <li>Rank by Kills: ${payload.ranks.kills || "-"}</li>
                 <li>Rank by Games: ${payload.ranks.games || "-"}</li>
             </ul>
+            ${label === "Deathmatch" ? renderDeathmatchDetails(payload.details) : ""}
         </section>
+    `;
+}
+
+function renderDeathmatchDetails(details) {
+    if (!details) return "";
+    const maps = details.deathmatchMaps || [];
+    const kits = details.deathmatchKits || [];
+    if (maps.length === 0 && kits.length === 0) return "";
+
+    return `
+        <div class="dm-details">
+            ${renderFavorite("Favorite Kit", details.favoriteKit)}
+            ${renderBreakdownTable("Maps", maps)}
+            ${renderBreakdownTable("Kits", kits)}
+        </div>
+    `;
+}
+
+function renderFavorite(label, entry) {
+    if (!entry) return "";
+    return `
+        <div class="favorite-card">
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(entry.label)}</strong>
+            <small>${entry.stats.games} games - ${formatNumber(entry.derived.avgKills)} avg kills - ${formatPercent(entry.derived.winRate)} winrate</small>
+        </div>
+    `;
+}
+
+function renderBreakdownTable(title, entries) {
+    if (!entries || entries.length === 0) return "";
+    return `
+        <div class="breakdown-block">
+            <h4>${escapeHtml(title)}</h4>
+            <div class="breakdown-list">
+                ${entries.slice(0, 8).map(renderBreakdownRow).join("")}
+            </div>
+        </div>
+    `;
+}
+
+function renderBreakdownRow(entry) {
+    return `
+        <article class="breakdown-row">
+            <strong>${escapeHtml(entry.label)}</strong>
+            <span>${entry.stats.games} games</span>
+            <span>${formatNumber(entry.derived.avgKills)} avg K</span>
+            <span>${formatPercent(entry.derived.winRate)} WR</span>
+            <span>${formatNumber(entry.derived.kdRatio)} KD</span>
+        </article>
     `;
 }
 
