@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call of Block Stats</title>
+    <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<div class="app-shell">
+    <header class="hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Call of Block 3.0</p>
+            <h1>Match Stats Hub</h1>
+            <p class="hero-text">
+                Battle Royale and Deathmatch leaderboards, personal profile cards, sort controls, and room for deeper
+                stats later without needing a backend first.
+            </p>
+        </div>
+        <div class="hero-meta">
+            <div class="meta-card">
+                <span class="meta-label">Data Source</span>
+                <strong id="data-source">Loading...</strong>
+            </div>
+            <div class="meta-card">
+                <span class="meta-label">Generated</span>
+                <strong id="generated-at">-</strong>
+            </div>
+            <div class="meta-card">
+                <span class="meta-label">Preview</span>
+                <strong id="preview-flag">No</strong>
+            </div>
+        </div>
+    </header>
+
+    <main class="dashboard">
+        <section class="leaderboard-panel panel">
+            <div class="panel-header">
+                <div>
+                    <p class="panel-kicker">Leaderboards</p>
+                    <h2 id="leaderboard-title">Loading...</h2>
+                </div>
+                <div class="tab-row" id="mode-tabs"></div>
+            </div>
+
+            <div class="summary-grid" id="summary-grid"></div>
+
+            <div class="toolbar">
+                <div class="sort-row" id="sort-tabs"></div>
+                <label class="search-box">
+                    <span>Search</span>
+                    <input id="player-search" type="search" placeholder="Player name">
+                </label>
+            </div>
+
+            <div class="table-wrap">
+                <table class="leaderboard-table">
+                    <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Player</th>
+                        <th>Wins</th>
+                        <th>Kills</th>
+                        <th>Games</th>
+                        <th>Deaths</th>
+                        <th>Win Rate</th>
+                        <th>Avg K</th>
+                        <th>KD</th>
+                    </tr>
+                    </thead>
+                    <tbody id="leaderboard-body"></tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination"></div>
+            <div class="empty-state hidden" id="empty-state">
+                <h3>No players recorded yet</h3>
+                <p>
+                    Replace <code>data/stats.json</code> with the server export from
+                    <code>config/brcontrol/match_leaderboards_web.json</code> and reload.
+                </p>
+            </div>
+        </section>
+
+        <aside class="profile-panel panel">
+            <div class="panel-header">
+                <div>
+                    <p class="panel-kicker">Player Profile</p>
+                    <h2 id="profile-title">Select a player</h2>
+                </div>
+            </div>
+            <div id="profile-body" class="profile-body">
+                <div class="profile-placeholder">
+                    <p>Pick a player row to inspect their Battle Royale and Deathmatch stats side by side.</p>
+                </div>
+            </div>
+        </aside>
+    </main>
+</div>
+
+<script src="./app.js" defer></script>
+</body>
+</html>

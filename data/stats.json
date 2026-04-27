@@ -1,0 +1,232 @@
+﻿{
+    "schemaVersion":  1,
+    "generatedAt":  "2026-04-27T19:04:12Z",
+    "sourceFile":  "match_leaderboards.json",
+    "supportedSorts":  [
+                           "wins",
+                           "kills",
+                           "games"
+                       ],
+    "modes":  {
+                  "battleRoyale":  {
+                                       "id":  "battleRoyale",
+                                       "label":  "Battle Royale",
+                                       "totalPlayers":  2,
+                                       "leaderboards":  {
+                                                            "wins":  [
+                                                                         {
+                                                                             "rank":  1,
+                                                                             "playerId":  "4d8a51b6-1cfd-4cbc-8527-97eda0c4202d",
+                                                                             "name":  "Ryukai79",
+                                                                             "wins":  3,
+                                                                             "kills":  2,
+                                                                             "deaths":  0,
+                                                                             "games":  6,
+                                                                             "derived":  {
+                                                                                             "winRate":  0.5,
+                                                                                             "avgKills":  0.33,
+                                                                                             "avgDeaths":  0,
+                                                                                             "kdRatio":  2
+                                                                                         }
+                                                                         },
+                                                                         {
+                                                                             "rank":  2,
+                                                                             "playerId":  "6ce7870a-8e71-4971-9433-9fa3951b7fff",
+                                                                             "name":  "RTXLuke",
+                                                                             "wins":  3,
+                                                                             "kills":  0,
+                                                                             "deaths":  3,
+                                                                             "games":  6,
+                                                                             "derived":  {
+                                                                                             "winRate":  0.5,
+                                                                                             "avgKills":  0,
+                                                                                             "avgDeaths":  0.5,
+                                                                                             "kdRatio":  0
+                                                                                         }
+                                                                         }
+                                                                     ],
+                                                            "kills":  [
+                                                                          {
+                                                                              "rank":  1,
+                                                                              "playerId":  "4d8a51b6-1cfd-4cbc-8527-97eda0c4202d",
+                                                                              "name":  "Ryukai79",
+                                                                              "wins":  3,
+                                                                              "kills":  2,
+                                                                              "deaths":  0,
+                                                                              "games":  6,
+                                                                              "derived":  {
+                                                                                              "winRate":  0.5,
+                                                                                              "avgKills":  0.33,
+                                                                                              "avgDeaths":  0,
+                                                                                              "kdRatio":  2
+                                                                                          }
+                                                                          },
+                                                                          {
+                                                                              "rank":  2,
+                                                                              "playerId":  "6ce7870a-8e71-4971-9433-9fa3951b7fff",
+                                                                              "name":  "RTXLuke",
+                                                                              "wins":  3,
+                                                                              "kills":  0,
+                                                                              "deaths":  3,
+                                                                              "games":  6,
+                                                                              "derived":  {
+                                                                                              "winRate":  0.5,
+                                                                                              "avgKills":  0,
+                                                                                              "avgDeaths":  0.5,
+                                                                                              "kdRatio":  0
+                                                                                          }
+                                                                          }
+                                                                      ],
+                                                            "games":  [
+                                                                          {
+                                                                              "rank":  1,
+                                                                              "playerId":  "4d8a51b6-1cfd-4cbc-8527-97eda0c4202d",
+                                                                              "name":  "Ryukai79",
+                                                                              "wins":  3,
+                                                                              "kills":  2,
+                                                                              "deaths":  0,
+                                                                              "games":  6,
+                                                                              "derived":  {
+                                                                                              "winRate":  0.5,
+                                                                                              "avgKills":  0.33,
+                                                                                              "avgDeaths":  0,
+                                                                                              "kdRatio":  2
+                                                                                          }
+                                                                          },
+                                                                          {
+                                                                              "rank":  2,
+                                                                              "playerId":  "6ce7870a-8e71-4971-9433-9fa3951b7fff",
+                                                                              "name":  "RTXLuke",
+                                                                              "wins":  3,
+                                                                              "kills":  0,
+                                                                              "deaths":  3,
+                                                                              "games":  6,
+                                                                              "derived":  {
+                                                                                              "winRate":  0.5,
+                                                                                              "avgKills":  0,
+                                                                                              "avgDeaths":  0.5,
+                                                                                              "kdRatio":  0
+                                                                                          }
+                                                                          }
+                                                                      ]
+                                                        },
+                                       "players":  [
+                                                       {
+                                                           "playerId":  "6ce7870a-8e71-4971-9433-9fa3951b7fff",
+                                                           "name":  "RTXLuke",
+                                                           "stats":  {
+                                                                         "wins":  3,
+                                                                         "kills":  0,
+                                                                         "deaths":  3,
+                                                                         "games":  6
+                                                                     },
+                                                           "ranks":  {
+                                                                         "wins":  2,
+                                                                         "kills":  2,
+                                                                         "games":  2
+                                                                     },
+                                                           "derived":  {
+                                                                           "winRate":  0.5,
+                                                                           "avgKills":  0,
+                                                                           "avgDeaths":  0.5,
+                                                                           "kdRatio":  0
+                                                                       }
+                                                       },
+                                                       {
+                                                           "playerId":  "4d8a51b6-1cfd-4cbc-8527-97eda0c4202d",
+                                                           "name":  "Ryukai79",
+                                                           "stats":  {
+                                                                         "wins":  3,
+                                                                         "kills":  2,
+                                                                         "deaths":  0,
+                                                                         "games":  6
+                                                                     },
+                                                           "ranks":  {
+                                                                         "wins":  1,
+                                                                         "kills":  1,
+                                                                         "games":  1
+                                                                     },
+                                                           "derived":  {
+                                                                           "winRate":  0.5,
+                                                                           "avgKills":  0.33,
+                                                                           "avgDeaths":  0,
+                                                                           "kdRatio":  2
+                                                                       }
+                                                       }
+                                                   ]
+                                   },
+                  "deathmatch":  {
+                                     "id":  "deathmatch",
+                                     "label":  "Deathmatch",
+                                     "totalPlayers":  0,
+                                     "leaderboards":  {
+                                                          "wins":  [
+
+                                                                   ],
+                                                          "kills":  [
+
+                                                                    ],
+                                                          "games":  [
+
+                                                                    ]
+                                                      },
+                                     "players":  [
+
+                                                 ]
+                                 }
+              },
+    "profiles":  [
+                     {
+                         "playerId":  "6ce7870a-8e71-4971-9433-9fa3951b7fff",
+                         "name":  "RTXLuke",
+                         "battleRoyale":  {
+                                              "playerId":  "6ce7870a-8e71-4971-9433-9fa3951b7fff",
+                                              "name":  "RTXLuke",
+                                              "stats":  {
+                                                            "wins":  3,
+                                                            "kills":  0,
+                                                            "deaths":  3,
+                                                            "games":  6
+                                                        },
+                                              "ranks":  {
+                                                            "wins":  2,
+                                                            "kills":  2,
+                                                            "games":  2
+                                                        },
+                                              "derived":  {
+                                                              "winRate":  0.5,
+                                                              "avgKills":  0,
+                                                              "avgDeaths":  0.5,
+                                                              "kdRatio":  0
+                                                          }
+                                          },
+                         "deathmatch":  null
+                     },
+                     {
+                         "playerId":  "4d8a51b6-1cfd-4cbc-8527-97eda0c4202d",
+                         "name":  "Ryukai79",
+                         "battleRoyale":  {
+                                              "playerId":  "4d8a51b6-1cfd-4cbc-8527-97eda0c4202d",
+                                              "name":  "Ryukai79",
+                                              "stats":  {
+                                                            "wins":  3,
+                                                            "kills":  2,
+                                                            "deaths":  0,
+                                                            "games":  6
+                                                        },
+                                              "ranks":  {
+                                                            "wins":  1,
+                                                            "kills":  1,
+                                                            "games":  1
+                                                        },
+                                              "derived":  {
+                                                              "winRate":  0.5,
+                                                              "avgKills":  0.33,
+                                                              "avgDeaths":  0,
+                                                              "kdRatio":  2
+                                                          }
+                                          },
+                         "deathmatch":  null
+                     }
+                 ]
+}

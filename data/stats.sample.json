@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-04-27T18:10:00Z",
+  "sourceFile": "preview-sample",
+  "supportedSorts": [
+    "wins",
+    "kills",
+    "games"
+  ],
+  "modes": {
+    "battleRoyale": {
+      "id": "battleRoyale",
+      "label": "Battle Royale",
+      "totalPlayers": 4,
+      "leaderboards": {
+        "wins": [],
+        "kills": [],
+        "games": []
+      },
+      "players": [
+        {
+          "playerId": "f4ec1a9f-0001-4f01-a3ab-19d9c0f77001",
+          "name": "Ryukai79",
+          "stats": { "wins": 8, "kills": 42, "deaths": 17, "games": 21 },
+          "ranks": { "wins": 1, "kills": 1, "games": 2 },
+          "derived": { "winRate": 0.38, "avgKills": 2.0, "avgDeaths": 0.81, "kdRatio": 2.47 }
+        },
+        {
+          "playerId": "f4ec1a9f-0002-4f01-a3ab-19d9c0f77002",
+          "name": "RTXLuke",
+          "stats": { "wins": 5, "kills": 33, "deaths": 16, "games": 18 },
+          "ranks": { "wins": 2, "kills": 2, "games": 3 },
+          "derived": { "winRate": 0.28, "avgKills": 1.83, "avgDeaths": 0.89, "kdRatio": 2.06 }
+        },
+        {
+          "playerId": "f4ec1a9f-0003-4f01-a3ab-19d9c0f77003",
+          "name": "HexaBlue",
+          "stats": { "wins": 2, "kills": 15, "deaths": 11, "games": 22 },
+          "ranks": { "wins": 3, "kills": 3, "games": 1 },
+          "derived": { "winRate": 0.09, "avgKills": 0.68, "avgDeaths": 0.5, "kdRatio": 1.36 }
+        },
+        {
+          "playerId": "f4ec1a9f-0004-4f01-a3ab-19d9c0f77004",
+          "name": "NovaAsh",
+          "stats": { "wins": 1, "kills": 7, "deaths": 8, "games": 10 },
+          "ranks": { "wins": 4, "kills": 4, "games": 4 },
+          "derived": { "winRate": 0.1, "avgKills": 0.7, "avgDeaths": 0.8, "kdRatio": 0.88 }
+        }
+      ]
+    },
+    "deathmatch": {
+      "id": "deathmatch",
+      "label": "Deathmatch",
+      "totalPlayers": 4,
+      "leaderboards": {
+        "wins": [],
+        "kills": [],
+        "games": []
+      },
+      "players": [
+        {
+          "playerId": "f4ec1a9f-0002-4f01-a3ab-19d9c0f77002",
+          "name": "RTXLuke",
+          "stats": { "wins": 11, "kills": 126, "deaths": 77, "games": 24 },
+          "ranks": { "wins": 1, "kills": 1, "games": 2 },
+          "derived": { "winRate": 0.46, "avgKills": 5.25, "avgDeaths": 3.21, "kdRatio": 1.64 }
+        },
+        {
+          "playerId": "f4ec1a9f-0001-4f01-a3ab-19d9c0f77001",
+          "name": "Ryukai79",
+          "stats": { "wins": 9, "kills": 113, "deaths": 82, "games": 26 },
+          "ranks": { "wins": 2, "kills": 2, "games": 1 },
+          "derived": { "winRate": 0.35, "avgKills": 4.35, "avgDeaths": 3.15, "kdRatio": 1.38 }
+        },
+        {
+          "playerId": "f4ec1a9f-0005-4f01-a3ab-19d9c0f77005",
+          "name": "BrickShift",
+          "stats": { "wins": 3, "kills": 38, "deaths": 41, "games": 15 },
+          "ranks": { "wins": 3, "kills": 3, "games": 3 },
+          "derived": { "winRate": 0.2, "avgKills": 2.53, "avgDeaths": 2.73, "kdRatio": 0.93 }
+        },
+        {
+          "playerId": "f4ec1a9f-0006-4f01-a3ab-19d9c0f77006",
+          "name": "PixelFox",
+          "stats": { "wins": 1, "kills": 22, "deaths": 37, "games": 11 },
+          "ranks": { "wins": 4, "kills": 4, "games": 4 },
+          "derived": { "winRate": 0.09, "avgKills": 2.0, "avgDeaths": 3.36, "kdRatio": 0.59 }
+        }
+      ]
+    }
+  },
+  "profiles": [
+    {
+      "playerId": "f4ec1a9f-0001-4f01-a3ab-19d9c0f77001",
+      "name": "Ryukai79",
+      "battleRoyale": {
+        "playerId": "f4ec1a9f-0001-4f01-a3ab-19d9c0f77001",
+        "name": "Ryukai79",
+        "stats": { "wins": 8, "kills": 42, "deaths": 17, "games": 21 },
+        "ranks": { "wins": 1, "kills": 1, "games": 2 },
+        "derived": { "winRate": 0.38, "avgKills": 2.0, "avgDeaths": 0.81, "kdRatio": 2.47 }
+      },
+      "deathmatch": {
+        "playerId": "f4ec1a9f-0001-4f01-a3ab-19d9c0f77001",
+        "name": "Ryukai79",
+        "stats": { "wins": 9, "kills": 113, "deaths": 82, "games": 26 },
+        "ranks": { "wins": 2, "kills": 2, "games": 1 },
+        "derived": { "winRate": 0.35, "avgKills": 4.35, "avgDeaths": 3.15, "kdRatio": 1.38 }
+      }
+    },
+    {
+      "playerId": "f4ec1a9f-0002-4f01-a3ab-19d9c0f77002",
+      "name": "RTXLuke",
+      "battleRoyale": {
+        "playerId": "f4ec1a9f-0002-4f01-a3ab-19d9c0f77002",
+        "name": "RTXLuke",
+        "stats": { "wins": 5, "kills": 33, "deaths": 16, "games": 18 },
+        "ranks": { "wins": 2, "kills": 2, "games": 3 },
+        "derived": { "winRate": 0.28, "avgKills": 1.83, "avgDeaths": 0.89, "kdRatio": 2.06 }
+      },
+      "deathmatch": {
+        "playerId": "f4ec1a9f-0002-4f01-a3ab-19d9c0f77002",
+        "name": "RTXLuke",
+        "stats": { "wins": 11, "kills": 126, "deaths": 77, "games": 24 },
+        "ranks": { "wins": 1, "kills": 1, "games": 2 },
+        "derived": { "winRate": 0.46, "avgKills": 5.25, "avgDeaths": 3.21, "kdRatio": 1.64 }
+      }
+    },
+    {
+      "playerId": "f4ec1a9f-0003-4f01-a3ab-19d9c0f77003",
+      "name": "HexaBlue",
+      "battleRoyale": {
+        "playerId": "f4ec1a9f-0003-4f01-a3ab-19d9c0f77003",
+        "name": "HexaBlue",
+        "stats": { "wins": 2, "kills": 15, "deaths": 11, "games": 22 },
+        "ranks": { "wins": 3, "kills": 3, "games": 1 },
+        "derived": { "winRate": 0.09, "avgKills": 0.68, "avgDeaths": 0.5, "kdRatio": 1.36 }
+      },
+      "deathmatch": null
+    },
+    {
+      "playerId": "f4ec1a9f-0004-4f01-a3ab-19d9c0f77004",
+      "name": "NovaAsh",
+      "battleRoyale": {
+        "playerId": "f4ec1a9f-0004-4f01-a3ab-19d9c0f77004",
+        "name": "NovaAsh",
+        "stats": { "wins": 1, "kills": 7, "deaths": 8, "games": 10 },
+        "ranks": { "wins": 4, "kills": 4, "games": 4 },
+        "derived": { "winRate": 0.1, "avgKills": 0.7, "avgDeaths": 0.8, "kdRatio": 0.88 }
+      },
+      "deathmatch": null
+    },
+    {
+      "playerId": "f4ec1a9f-0005-4f01-a3ab-19d9c0f77005",
+      "name": "BrickShift",
+      "battleRoyale": null,
+      "deathmatch": {
+        "playerId": "f4ec1a9f-0005-4f01-a3ab-19d9c0f77005",
+        "name": "BrickShift",
+        "stats": { "wins": 3, "kills": 38, "deaths": 41, "games": 15 },
+        "ranks": { "wins": 3, "kills": 3, "games": 3 },
+        "derived": { "winRate": 0.2, "avgKills": 2.53, "avgDeaths": 2.73, "kdRatio": 0.93 }
+      }
+    },
+    {
+      "playerId": "f4ec1a9f-0006-4f01-a3ab-19d9c0f77006",
+      "name": "PixelFox",
+      "battleRoyale": null,
+      "deathmatch": {
+        "playerId": "f4ec1a9f-0006-4f01-a3ab-19d9c0f77006",
+        "name": "PixelFox",
+        "stats": { "wins": 1, "kills": 22, "deaths": 37, "games": 11 },
+        "ranks": { "wins": 4, "kills": 4, "games": 4 },
+        "derived": { "winRate": 0.09, "avgKills": 2.0, "avgDeaths": 3.36, "kdRatio": 0.59 }
+      }
+    }
+  ]
+}
