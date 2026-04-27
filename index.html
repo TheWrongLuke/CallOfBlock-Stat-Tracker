@@ -13,7 +13,7 @@
             <p class="eyebrow">Call of Block 3.0</p>
             <h1>Match Stats Hub</h1>
             <p class="hero-text">
-                Battle Royale and Deathmatch leaderboards, personal profile cards, sort controls, and room for deeper
+                Battle Royale and Deathmatch leaderboards, personal profile cards, sortable stat columns, and room for deeper
                 stats later without needing a backend first.
             </p>
         </div>
@@ -27,7 +27,7 @@
                 <strong id="generated-at">-</strong>
             </div>
             <div class="meta-card">
-                <span class="meta-label">Preview</span>
+                <span class="meta-label">Live API</span>
                 <strong id="preview-flag">No</strong>
             </div>
         </div>
@@ -46,7 +46,6 @@
             <div class="summary-grid" id="summary-grid"></div>
 
             <div class="toolbar">
-                <div class="sort-row" id="sort-tabs"></div>
                 <label class="search-box">
                     <span>Search</span>
                     <input id="player-search" type="search" placeholder="Player name">
@@ -59,13 +58,13 @@
                     <tr>
                         <th>#</th>
                         <th>Player</th>
-                        <th>Wins</th>
-                        <th>Kills</th>
-                        <th>Games</th>
-                        <th>Deaths</th>
-                        <th>Win Rate</th>
-                        <th>Avg K</th>
-                        <th>KD</th>
+                        <th><button class="sort-header" type="button" data-sort="wins">Wins <span data-sort-indicator="wins"></span></button></th>
+                        <th><button class="sort-header" type="button" data-sort="kills">Kills <span data-sort-indicator="kills"></span></button></th>
+                        <th><button class="sort-header" type="button" data-sort="games">Games <span data-sort-indicator="games"></span></button></th>
+                        <th><button class="sort-header" type="button" data-sort="deaths">Deaths <span data-sort-indicator="deaths"></span></button></th>
+                        <th><button class="sort-header" type="button" data-sort="winRate">Win Rate <span data-sort-indicator="winRate"></span></button></th>
+                        <th><button class="sort-header" type="button" data-sort="avgKills">Avg K <span data-sort-indicator="avgKills"></span></button></th>
+                        <th><button class="sort-header" type="button" data-sort="kdRatio">KD <span data-sort-indicator="kdRatio"></span></button></th>
                     </tr>
                     </thead>
                     <tbody id="leaderboard-body"></tbody>
@@ -74,11 +73,7 @@
 
             <div class="pagination" id="pagination"></div>
             <div class="empty-state hidden" id="empty-state">
-                <h3>No players recorded yet</h3>
-                <p>
-                    Replace <code>data/stats.json</code> with the server export from
-                    <code>config/brcontrol/match_leaderboards_web.json</code> and reload.
-                </p>
+                <h3>No games have been played yet</h3>
             </div>
         </section>
 
@@ -98,6 +93,7 @@
     </main>
 </div>
 
+<script src="./api-config.js"></script>
 <script src="./app.js" defer></script>
 </body>
 </html>

@@ -1,11 +1,16 @@
 param(
     [string]$Source = "",
-    [string]$ServerRoot = "C:\Users\fossa\Desktop\ServersFolder\Minecraft Servers\servers\Call of Block"
+    [string]$ServerRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 $destination = Join-Path $PSScriptRoot "data\stats.json"
+$workspaceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$defaultServerRoot = Join-Path $workspaceRoot "Minecraft Servers\servers\Call of Block"
+if ([string]::IsNullOrWhiteSpace($ServerRoot)) {
+    $ServerRoot = $defaultServerRoot
+}
 $defaultConfig = Join-Path $ServerRoot "config\brcontrol"
 
 function Get-ExistingExportPath {
@@ -53,6 +58,46 @@ function Get-Number {
     param($Value)
     if ($null -eq $Value) { return 0 }
     return [int]$Value
+}
+
+function Get-PublicPlayerId {
+    param([string]$PlayerId)
+
+    if ([string]::IsNullOrWhiteSpace($PlayerId)) { return "" }
+    if ($PlayerId -match "^p_[0-9a-f]{12}$") { return $PlayerId }
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($PlayerId.ToLowerInvariant())
+        $hash = $sha.ComputeHash($bytes)
+        $hex = -join ($hash | ForEach-Object { $_.ToString("x2") })
+        return "p_$($hex.Substring(0, 12))"
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Hide-PlayerIds {
+    param($Value)
+
+    if ($null -eq $Value -or $Value -is [string]) { return }
+
+    if ($Value -is [System.Array]) {
+        foreach ($item in $Value) {
+            Hide-PlayerIds $item
+        }
+        return
+    }
+
+    if ($Value -is [pscustomobject]) {
+        foreach ($property in $Value.PSObject.Properties) {
+            if ($property.Name -eq "playerId") {
+                $property.Value = Get-PublicPlayerId ([string]$property.Value)
+            } else {
+                Hide-PlayerIds $property.Value
+            }
+        }
+    }
 }
 
 function New-DerivedStats {
@@ -128,6 +173,7 @@ function New-ModeExport {
     if ($null -ne $RawPlayers) {
         foreach ($entry in $RawPlayers.PSObject.Properties) {
             $stats = $entry.Value
+            $publicPlayerId = Get-PublicPlayerId $entry.Name
             $name = [string]$stats.name
             if ([string]::IsNullOrWhiteSpace($name)) {
                 $name = $entry.Name
@@ -139,7 +185,7 @@ function New-ModeExport {
             }
 
             $players += [pscustomobject]@{
-                playerId = $entry.Name
+                playerId = $publicPlayerId
                 name = $name
                 stats = [pscustomobject]@{
                     wins = Get-Number $stats.wins
@@ -241,8 +287,9 @@ if (!$sourcePath) {
 
 $json = Get-Content -Raw -LiteralPath $sourcePath | ConvertFrom-Json
 if ($json.modes -and $json.profiles) {
-    Copy-Item -LiteralPath $sourcePath -Destination $destination -Force
-    Write-Host "Copied web leaderboard export:"
+    Hide-PlayerIds $json
+    $json | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $destination -Encoding UTF8
+    Write-Host "Copied sanitized web leaderboard export:"
     Write-Host "  $sourcePath"
 } else {
     $converted = Convert-RawLeaderboardExport $json ([System.IO.Path]::GetFileName($sourcePath))

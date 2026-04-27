@@ -78,7 +78,6 @@ body::before {
 .hero h1,
 .panel h2,
 .tab-pill,
-.sort-pill,
 .summary-card strong {
     font-family: "Chakra Petch", sans-serif;
 }
@@ -145,7 +144,6 @@ body::before {
 }
 
 .tab-row,
-.sort-row,
 .pagination {
     display: flex;
     gap: 10px;
@@ -153,7 +151,6 @@ body::before {
 }
 
 .tab-pill,
-.sort-pill,
 .page-button {
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.035);
@@ -165,14 +162,12 @@ body::before {
 }
 
 .tab-pill:hover,
-.sort-pill:hover,
 .page-button:hover {
     transform: translateY(-1px);
     border-color: rgba(255, 255, 255, 0.22);
 }
 
 .tab-pill.active,
-.sort-pill.active,
 .page-button.active {
     background: linear-gradient(135deg, rgba(255, 203, 107, 0.22), rgba(126, 200, 255, 0.2));
     border-color: rgba(255, 203, 107, 0.35);
@@ -180,7 +175,7 @@ body::before {
 
 .summary-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: minmax(220px, 280px);
     gap: 14px;
     margin: 22px 0 18px;
 }
@@ -202,7 +197,7 @@ body::before {
 
 .toolbar {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 16px;
     margin: 12px 0 16px;
     align-items: center;
@@ -255,6 +250,32 @@ body::before {
     font-size: 0.72rem;
 }
 
+.sort-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 30px;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    cursor: pointer;
+}
+
+.sort-header:hover,
+.sort-header.active {
+    color: var(--gold);
+}
+
+.sort-header span {
+    display: inline-block;
+    min-width: 10px;
+    color: var(--gold);
+}
+
 .leaderboard-table tbody tr {
     cursor: pointer;
     transition: background 120ms ease, transform 120ms ease;
@@ -283,16 +304,6 @@ body::before {
 .rank-1 { color: var(--gold); }
 .rank-2 { color: #d0d9eb; }
 .rank-3 { color: #f3a46f; }
-
-.player-name {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.player-name small {
-    color: var(--muted);
-}
 
 .pagination {
     justify-content: space-between;
@@ -380,10 +391,6 @@ code {
     .dashboard,
     .hero {
         grid-template-columns: 1fr;
-    }
-
-    .summary-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 

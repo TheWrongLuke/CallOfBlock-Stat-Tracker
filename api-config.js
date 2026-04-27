@@ -1,0 +1,2 @@
+window.COB_STATS_API_URL = "";
+window.COB_STATS_POLL_MS = 10000;

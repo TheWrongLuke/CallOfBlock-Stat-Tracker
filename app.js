@@ -6,14 +6,25 @@ const MODE_LABELS = {
 const SORT_LABELS = {
     wins: "Wins",
     kills: "Kills",
-    games: "Games"
+    games: "Games",
+    deaths: "Deaths",
+    winRate: "Win Rate",
+    avgKills: "Avg Kills",
+    kdRatio: "KD"
 };
+
+const DEFAULT_API_POLL_MS = 10000;
 
 const state = {
     data: null,
     preview: false,
+    dataMode: "Static file",
+    apiUrl: "",
+    pollMs: DEFAULT_API_POLL_MS,
+    refreshTimer: null,
     mode: "battleRoyale",
     sort: "wins",
+    sortDirection: "desc",
     page: 1,
     pageSize: 20,
     query: "",
@@ -21,9 +32,17 @@ const state = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+    setupLiveConfig();
     bindStaticEvents();
     void loadData();
 });
+
+function setupLiveConfig() {
+    const params = new URLSearchParams(window.location.search);
+    state.apiUrl = params.get("api") || window.COB_STATS_API_URL || "";
+    const pollMs = Number(params.get("pollMs") || window.COB_STATS_POLL_MS || DEFAULT_API_POLL_MS);
+    state.pollMs = Number.isFinite(pollMs) && pollMs >= 3000 ? pollMs : DEFAULT_API_POLL_MS;
+}
 
 function bindStaticEvents() {
     const search = document.getElementById("player-search");
@@ -32,19 +51,66 @@ function bindStaticEvents() {
         state.page = 1;
         render();
     });
+
+    document.querySelectorAll("[data-sort]").forEach((button) => {
+        button.addEventListener("click", () => {
+            setSort(button.dataset.sort);
+        });
+    });
 }
 
 async function loadData() {
+    await refreshData({ initial: true });
+    if (!state.apiUrl) return;
+
+    window.clearInterval(state.refreshTimer);
+    state.refreshTimer = window.setInterval(() => {
+        void refreshData({ initial: false });
+    }, state.pollMs);
+}
+
+async function refreshData({ initial }) {
+    if (state.apiUrl) {
+        const apiData = await fetchJson(state.apiUrl);
+        if (isStatsExport(apiData)) {
+            applyData(apiData, false, "Live API");
+            return;
+        }
+    }
+
+    if (!initial && state.data) {
+        return;
+    }
+
     let data = await fetchJson("./data/stats.json");
+    let preview = false;
+    let dataMode = "Static file";
     if (!hasTrackedPlayers(data)) {
         const sample = await fetchJson("./data/stats.sample.json");
         if (sample) {
             data = sample;
-            state.preview = true;
+            preview = true;
+            dataMode = "Sample data";
         }
     }
-    state.data = data || emptyExport();
-    state.selectedId = state.data.profiles[0]?.playerId || null;
+
+    applyData(data || emptyExport(), preview, dataMode);
+}
+
+function applyData(data, preview, dataMode) {
+    const previousSelectedId = state.selectedId;
+    state.data = data;
+    state.preview = preview;
+    state.dataMode = dataMode;
+    if (previousSelectedId && (state.data.profiles || []).some((profile) => profile.playerId === previousSelectedId)) {
+        state.selectedId = previousSelectedId;
+    } else {
+        state.selectedId = state.data.profiles?.[0]?.playerId || null;
+    }
+
+    const rowCount = filteredPlayers().length;
+    const totalPages = Math.max(1, Math.ceil(rowCount / state.pageSize));
+    state.page = Math.min(state.page, totalPages);
     render();
 }
 
@@ -57,6 +123,10 @@ async function fetchJson(path) {
         console.error("Failed to load", path, error);
         return null;
     }
+}
+
+function isStatsExport(data) {
+    return Boolean(data?.modes && Array.isArray(data.profiles));
 }
 
 function hasTrackedPlayers(data) {
@@ -80,16 +150,17 @@ function emptyExport() {
 function render() {
     renderMeta();
     renderModeTabs();
-    renderSortTabs();
+    renderSortHeaders();
     renderSummary();
     renderTable();
     renderProfile();
 }
 
 function renderMeta() {
-    document.getElementById("data-source").textContent = state.data?.sourceFile || "stats.json";
+    const sourceFile = state.data?.sourceFile || "stats.json";
+    document.getElementById("data-source").textContent = state.dataMode === "Live API" ? `Live API / ${sourceFile}` : sourceFile;
     document.getElementById("generated-at").textContent = state.data?.generatedAt ? formatDateTime(state.data.generatedAt) : "No export yet";
-    document.getElementById("preview-flag").textContent = state.preview ? "Yes" : "No";
+    document.getElementById("preview-flag").textContent = state.dataMode === "Live API" ? `Yes, ${Math.round(state.pollMs / 1000)}s` : "No";
 }
 
 function renderModeTabs() {
@@ -107,28 +178,25 @@ function renderModeTabs() {
     document.getElementById("leaderboard-title").textContent = `${MODE_LABELS[state.mode]} ranking`;
 }
 
-function renderSortTabs() {
-    const container = document.getElementById("sort-tabs");
-    container.innerHTML = "";
-    for (const sortId of state.data?.supportedSorts || Object.keys(SORT_LABELS)) {
-        const button = createPill(SORT_LABELS[sortId] || sortId, state.sort === sortId, () => {
-            state.sort = sortId;
-            state.page = 1;
-            render();
-        });
-        button.classList.add("sort-pill");
-        container.appendChild(button);
-    }
+function renderSortHeaders() {
+    document.querySelectorAll("[data-sort]").forEach((button) => {
+        const active = button.dataset.sort === state.sort;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-sort", active ? (state.sortDirection === "desc" ? "descending" : "ascending") : "none");
+    });
+
+    document.querySelectorAll("[data-sort-indicator]").forEach((indicator) => {
+        indicator.textContent = indicator.dataset.sortIndicator === state.sort
+            ? (state.sortDirection === "desc" ? "v" : "^")
+            : "";
+    });
 }
 
 function renderSummary() {
     const mode = currentMode();
     const players = mode.players || [];
     const summary = [
-        { label: "Tracked Players", value: players.length, helper: `${MODE_LABELS[state.mode]} totals` },
-        { label: "Leaders With Wins", value: players.filter((player) => player.stats.wins > 0).length, helper: "Players with at least one win" },
-        { label: "Average Kills", value: formatNumber(average(players, (player) => player.derived.avgKills)), helper: "Kills per game across all tracked players" },
-        { label: "Best KD", value: formatNumber(best(players, (player) => player.derived.kdRatio)), helper: "Highest KD in this mode" }
+        { label: "Tracked Players", value: players.length, helper: MODE_LABELS[state.mode] }
     ];
 
     const container = document.getElementById("summary-grid");
@@ -161,7 +229,8 @@ function renderTable() {
 
     const start = (state.page - 1) * state.pageSize;
     const pageRows = rows.slice(start, start + state.pageSize);
-    for (const player of pageRows) {
+    pageRows.forEach((player, index) => {
+        const displayRank = start + index + 1;
         const tr = document.createElement("tr");
         if (player.playerId === state.selectedId) tr.classList.add("selected");
         tr.addEventListener("click", () => {
@@ -170,11 +239,10 @@ function renderTable() {
         });
 
         tr.innerHTML = `
-            <td><span class="rank-badge rank-${Math.min(player.ranks[state.sort], 3)}">${player.ranks[state.sort] || "-"}</span></td>
+            <td><span class="rank-badge rank-${Math.min(displayRank, 3)}">${displayRank}</span></td>
             <td>
                 <div class="player-name">
                     <strong>${escapeHtml(player.name)}</strong>
-                    <small>${escapeHtml(player.playerId)}</small>
                 </div>
             </td>
             <td>${player.stats.wins}</td>
@@ -186,7 +254,7 @@ function renderTable() {
             <td>${formatNumber(player.derived.kdRatio)}</td>
         `;
         body.appendChild(tr);
-    }
+    });
 
     renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
 }
@@ -254,7 +322,7 @@ function renderModeBlock(label, payload) {
         return `
             <section class="mode-block">
                 <h3>${escapeHtml(label)}</h3>
-                <p class="mode-empty">No recorded matches in this mode yet.</p>
+                <p class="mode-empty">No games have been played yet.</p>
             </section>
         `;
     }
@@ -298,7 +366,8 @@ function currentMode() {
 
 function comparePlayers(sort) {
     return (a, b) => {
-        const primary = sortValue(b, sort) - sortValue(a, sort);
+        const direction = state.sortDirection === "asc" ? 1 : -1;
+        const primary = (sortValue(a, sort) - sortValue(b, sort)) * direction;
         if (primary !== 0) return primary;
         const secondary = b.stats.wins - a.stats.wins;
         if (secondary !== 0) return secondary;
@@ -314,10 +383,30 @@ function sortValue(player, sort) {
             return player.stats.kills;
         case "games":
             return player.stats.games;
+        case "deaths":
+            return player.stats.deaths;
+        case "winRate":
+            return player.derived.winRate;
+        case "avgKills":
+            return player.derived.avgKills;
+        case "kdRatio":
+            return player.derived.kdRatio;
         case "wins":
         default:
             return player.stats.wins;
     }
+}
+
+function setSort(sort) {
+    if (!SORT_LABELS[sort]) return;
+    if (state.sort === sort) {
+        state.sortDirection = state.sortDirection === "desc" ? "asc" : "desc";
+    } else {
+        state.sort = sort;
+        state.sortDirection = "desc";
+    }
+    state.page = 1;
+    render();
 }
 
 function createPill(label, active, onClick) {
