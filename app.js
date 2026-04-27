@@ -11,7 +11,18 @@ const SORT_LABELS = {
     deaths: "Deaths",
     winRate: "Win Rate",
     avgKills: "Avg Kills",
+    playtimeSeconds: "Playtime",
+    headshotRate: "HS%",
     kdRatio: "KD"
+};
+
+const PLAYER_TABS = {
+    overview: "Overview",
+    battleRoyale: "Battle Royale",
+    deathmatch: "Deathmatch",
+    maps: "Maps",
+    weapons: "Weapons",
+    history: "History"
 };
 
 const DEFAULT_API_POLL_MS = 10000;
@@ -29,11 +40,16 @@ const state = {
     page: 1,
     pageSize: 20,
     query: "",
-    selectedId: null
+    selectedId: null,
+    view: "leaderboard",
+    playerTab: "overview",
+    historyFilter: "overall",
+    expandedMatchIds: new Set()
 };
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
+    applyRoute();
     bindStaticEvents();
     void loadData();
 });
@@ -54,10 +70,85 @@ function bindStaticEvents() {
     });
 
     document.querySelectorAll("[data-sort]").forEach((button) => {
-        button.addEventListener("click", () => {
-            setSort(button.dataset.sort);
-        });
+        button.addEventListener("click", () => setSort(button.dataset.sort));
     });
+
+    document.getElementById("back-to-leaderboard").addEventListener("click", () => routeToLeaderboard());
+
+    document.getElementById("player-detail-body").addEventListener("click", (event) => {
+        const tabButton = event.target.closest("[data-player-tab]");
+        if (tabButton) {
+            state.playerTab = tabButton.dataset.playerTab;
+            updatePlayerHash();
+            render();
+            return;
+        }
+
+        const historyFilter = event.target.closest("[data-history-filter]");
+        if (historyFilter) {
+            state.historyFilter = historyFilter.dataset.historyFilter;
+            state.expandedMatchIds.clear();
+            render();
+            return;
+        }
+
+        const matchToggle = event.target.closest("[data-match-toggle]");
+        if (matchToggle) {
+            const matchId = matchToggle.dataset.matchToggle;
+            if (state.expandedMatchIds.has(matchId)) {
+                state.expandedMatchIds.delete(matchId);
+            } else {
+                state.expandedMatchIds.add(matchId);
+            }
+            render();
+        }
+    });
+
+    window.addEventListener("hashchange", () => {
+        applyRoute();
+        render();
+    });
+}
+
+function applyRoute() {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash) {
+        state.view = "leaderboard";
+        return;
+    }
+    const params = new URLSearchParams(hash);
+    const playerId = params.get("player");
+    const tab = params.get("tab");
+    if (!playerId) {
+        state.view = "leaderboard";
+        return;
+    }
+    state.view = "player";
+    state.selectedId = playerId;
+    state.playerTab = PLAYER_TABS[tab] ? tab : "overview";
+}
+
+function routeToPlayer(playerId, tab = state.playerTab || "overview") {
+    if (!playerId) return;
+    state.selectedId = playerId;
+    state.view = "player";
+    state.playerTab = PLAYER_TABS[tab] ? tab : "overview";
+    updatePlayerHash();
+}
+
+function updatePlayerHash() {
+    if (!state.selectedId) return;
+    const hash = `player=${encodeURIComponent(state.selectedId)}&tab=${encodeURIComponent(state.playerTab)}`;
+    if (window.location.hash.replace(/^#/, "") !== hash) {
+        window.location.hash = hash;
+    }
+}
+
+function routeToLeaderboard() {
+    state.view = "leaderboard";
+    state.expandedMatchIds.clear();
+    history.pushState("", document.title, window.location.pathname + window.location.search);
+    render();
 }
 
 async function loadData() {
@@ -79,9 +170,7 @@ async function refreshData({ initial }) {
         }
     }
 
-    if (!initial && state.data) {
-        return;
-    }
+    if (!initial && state.data) return;
 
     let data = await fetchJson("./data/stats.json");
     let preview = false;
@@ -103,10 +192,12 @@ function applyData(data, preview, dataMode) {
     state.data = data;
     state.preview = preview;
     state.dataMode = dataMode;
-    if (previousSelectedId && (state.data.profiles || []).some((profile) => profile.playerId === previousSelectedId)) {
+
+    if (previousSelectedId && profileById(previousSelectedId)) {
         state.selectedId = previousSelectedId;
     } else {
         state.selectedId = state.data.profiles?.[0]?.playerId || null;
+        if (state.view === "player" && !state.selectedId) state.view = "leaderboard";
     }
 
     const rowCount = filteredPlayers().length;
@@ -139,7 +230,7 @@ function emptyExport() {
     return {
         generatedAt: null,
         sourceFile: "match_leaderboards_web.json",
-        supportedSorts: ["wins", "kills", "games"],
+        supportedSorts: Object.keys(SORT_LABELS),
         modes: {
             battleRoyale: { id: "battleRoyale", label: "Battle Royale", totalPlayers: 0, leaderboards: {}, players: [] },
             deathmatch: { id: "deathmatch", label: "Deathmatch", totalPlayers: 0, leaderboards: {}, players: [] }
@@ -153,7 +244,14 @@ function render() {
     renderSortHeaders();
     renderSummary();
     renderTable();
-    renderProfile();
+    renderProfilePreview();
+    renderRoute();
+}
+
+function renderRoute() {
+    document.querySelector(".dashboard").classList.toggle("hidden", state.view !== "leaderboard");
+    document.getElementById("player-view").classList.toggle("hidden", state.view !== "player");
+    if (state.view === "player") renderPlayerDetail();
 }
 
 function renderModeTabs() {
@@ -188,18 +286,13 @@ function renderSortHeaders() {
 function renderSummary() {
     const mode = currentMode();
     const players = mode.players || [];
-    const summary = [
-        { label: "Tracked Players", value: players.length, helper: MODE_LABELS[state.mode] }
-    ];
-
     const container = document.getElementById("summary-grid");
     container.innerHTML = "";
-    for (const item of summary) {
-        const card = document.createElement("article");
-        card.className = "summary-card";
-        card.innerHTML = `<span>${escapeHtml(item.label)}</span><strong>${escapeHtml(String(item.value))}</strong><span>${escapeHtml(item.helper)}</span>`;
-        container.appendChild(card);
-    }
+
+    const card = document.createElement("article");
+    card.className = "summary-card";
+    card.innerHTML = `<span>Tracked Players</span><strong>${escapeHtml(String(players.length))}</strong><span>${escapeHtml(MODE_LABELS[state.mode])}</span>`;
+    container.appendChild(card);
 }
 
 function renderTable() {
@@ -224,12 +317,11 @@ function renderTable() {
     const pageRows = rows.slice(start, start + state.pageSize);
     pageRows.forEach((player, index) => {
         const displayRank = start + index + 1;
+        const stats = normalizeStats(player.stats);
+        const derived = normalizeDerived(player.derived, stats);
         const tr = document.createElement("tr");
         if (player.playerId === state.selectedId) tr.classList.add("selected");
-        tr.addEventListener("click", () => {
-            state.selectedId = player.playerId;
-            render();
-        });
+        tr.addEventListener("click", () => routeToPlayer(player.playerId));
 
         tr.innerHTML = `
             <td><span class="rank-badge rank-${Math.min(displayRank, 3)}">${displayRank}</span></td>
@@ -238,13 +330,15 @@ function renderTable() {
                     <strong>${escapeHtml(player.name)}</strong>
                 </div>
             </td>
-            <td>${player.stats.wins}</td>
-            <td>${player.stats.kills}</td>
-            <td>${player.stats.games}</td>
-            <td>${player.stats.deaths}</td>
-            <td>${formatPercent(player.derived.winRate)}</td>
-            <td>${formatNumber(player.derived.avgKills)}</td>
-            <td>${formatNumber(player.derived.kdRatio)}</td>
+            <td>${stats.wins}</td>
+            <td>${stats.kills}</td>
+            <td>${stats.games}</td>
+            <td>${stats.deaths}</td>
+            <td>${formatPercent(derived.winRate)}</td>
+            <td>${formatNumber(derived.avgKills)}</td>
+            <td>${formatDuration(stats.playtimeSeconds)}</td>
+            <td>${formatPercent(derived.headshotRate)}</td>
+            <td>${formatNumber(derived.kdRatio)}</td>
         `;
         body.appendChild(tr);
     });
@@ -266,15 +360,12 @@ function renderPagination(totalRows, totalPages) {
     const right = document.createElement("div");
     right.className = "tab-row";
 
-    const prev = createPageButton("Prev", state.page > 1, () => {
-        if (state.page <= 1) return;
+    right.appendChild(createPageButton("Prev", state.page > 1, () => {
         state.page -= 1;
         render();
-    });
-    right.appendChild(prev);
+    }));
 
-    const visiblePages = pageWindow(totalPages, state.page, 5);
-    for (const page of visiblePages) {
+    for (const page of pageWindow(totalPages, state.page, 5)) {
         const button = createPageButton(String(page), true, () => {
             state.page = page;
             render();
@@ -283,77 +374,278 @@ function renderPagination(totalRows, totalPages) {
         right.appendChild(button);
     }
 
-    const next = createPageButton("Next", state.page < totalPages, () => {
-        if (state.page >= totalPages) return;
+    right.appendChild(createPageButton("Next", state.page < totalPages, () => {
         state.page += 1;
         render();
-    });
-    right.appendChild(next);
+    }));
 
     container.appendChild(left);
     container.appendChild(right);
 }
 
-function renderProfile() {
+function renderProfilePreview() {
     const container = document.getElementById("profile-body");
-    const profile = state.data?.profiles?.find((entry) => entry.playerId === state.selectedId) || null;
+    const profile = profileById(state.selectedId);
     document.getElementById("profile-title").textContent = profile?.name || "Select a player";
 
     if (!profile) {
-        container.innerHTML = `<div class="profile-placeholder"><p>Pick a player row to inspect their Battle Royale and Deathmatch stats side by side.</p></div>`;
+        container.innerHTML = `<div class="profile-placeholder"><p>Pick a player row to inspect their stats.</p></div>`;
         return;
     }
 
-    container.innerHTML = [
-        renderModeBlock("Overall", buildProfileOverall(profile)),
-        renderModeBlock("Battle Royale", profile.battleRoyale),
-        renderModeBlock("Deathmatch", profile.deathmatch),
-        renderMatchHistory(profile.recentMatches || [])
-    ].join("");
+    const overall = buildProfileOverall(profile);
+    container.innerHTML = `
+        ${renderModeBlock("Overall", overall, { compact: true })}
+        ${renderModeBlock("Battle Royale", profile.battleRoyale, { compact: true })}
+        ${renderModeBlock("Deathmatch", profile.deathmatch, { compact: true })}
+        <button class="primary-action" type="button" id="open-full-profile">Open Full Profile</button>
+    `;
+    document.getElementById("open-full-profile").addEventListener("click", () => routeToPlayer(profile.playerId));
 }
 
-function renderMatchHistory(matches) {
-    const rows = [...matches].slice(0, 12);
-    if (rows.length === 0) {
-        return `
-            <section class="mode-block history-block">
-                <h3>Game History</h3>
-                <p class="mode-empty">No game history yet.</p>
-            </section>
-        `;
+function renderPlayerDetail() {
+    const profile = profileById(state.selectedId);
+    const title = document.getElementById("player-detail-title");
+    const subtitle = document.getElementById("player-detail-subtitle");
+    const body = document.getElementById("player-detail-body");
+
+    if (!profile) {
+        title.textContent = "Player not found";
+        subtitle.textContent = "";
+        body.innerHTML = `<div class="profile-placeholder"><p>This player is not in the current stats export.</p></div>`;
+        return;
     }
 
+    title.textContent = profile.name;
+    subtitle.textContent = "Stats update from the live export when the server/API publishes new data.";
+
+    const tabs = renderPlayerTabs();
+    const content = renderPlayerTabContent(profile);
+    body.innerHTML = `${tabs}${content}`;
+}
+
+function renderPlayerTabs() {
     return `
-        <section class="mode-block history-block">
-            <h3>Game History</h3>
-            <div class="history-list">
-                ${rows.map(renderMatchHistoryRow).join("")}
+        <nav class="player-tabs" aria-label="Player sections">
+            ${Object.entries(PLAYER_TABS).map(([id, label]) => `
+                <button class="tab-pill ${state.playerTab === id ? "active" : ""}" type="button" data-player-tab="${escapeHtml(id)}">${escapeHtml(label)}</button>
+            `).join("")}
+        </nav>
+    `;
+}
+
+function renderPlayerTabContent(profile) {
+    switch (state.playerTab) {
+        case "battleRoyale":
+            return renderBattleRoyaleTab(profile);
+        case "deathmatch":
+            return renderDeathmatchTab(profile);
+        case "maps":
+            return renderMapsTab(profile);
+        case "weapons":
+            return renderWeaponsTab(profile);
+        case "history":
+            return renderHistoryTab(profile);
+        case "overview":
+        default:
+            return renderOverviewTab(profile);
+    }
+}
+
+function renderOverviewTab(profile) {
+    const overall = buildProfileOverall(profile);
+    const br = normalizePlayer(profile.battleRoyale);
+    const dm = normalizePlayer(profile.deathmatch);
+    const weapons = combinedWeapons(profile);
+    const favoriteWeapon = weapons[0] || null;
+    const stats = normalizeStats(overall?.stats);
+    const derived = normalizeDerived(overall?.derived, stats);
+
+    return `
+        <section class="detail-grid">
+            ${renderStatCard("Wins", stats.wins)}
+            ${renderStatCard("Kills", stats.kills)}
+            ${renderStatCard("Games", stats.games)}
+            ${renderStatCard("Playtime", formatDuration(stats.playtimeSeconds))}
+            ${renderStatCard("Win Rate", formatPercent(derived.winRate))}
+            ${renderStatCard("HS%", formatPercent(derived.headshotRate))}
+            ${renderStatCard("Highest Streak", Math.max(br.stats.bestKillStreak, dm.stats.bestKillStreak))}
+            ${renderStatCard("Top DM Kills", dm.stats.topMatchKills)}
+        </section>
+        <section class="detail-section">
+            <h3>Profile Snapshot</h3>
+            <div class="snapshot-grid">
+                ${renderSnapshotItem("Favorite Weapon", favoriteWeapon ? favoriteWeapon.label : "-")}
+                ${renderSnapshotItem("BR Best Placement", br.details?.battleRoyalePlacement?.best ? `#${br.details.battleRoyalePlacement.best}` : "-")}
+                ${renderSnapshotItem("Favorite DM Kit", dm.details?.favoriteKit?.label || "-")}
+                ${renderSnapshotItem("Utility Kills", stats.utilityKills)}
+                ${renderSnapshotItem("Vehicle Kills", stats.vehicleKills)}
+                ${renderSnapshotItem("Headshot Kills", stats.headshotKills)}
             </div>
+        </section>
+        ${renderRecentHistory(profile, "overall", 5)}
+    `;
+}
+
+function renderBattleRoyaleTab(profile) {
+    const player = normalizePlayer(profile.battleRoyale);
+    if (!player.exists) return renderEmptyDetail("No Battle Royale games have been played yet.");
+    const placement = player.details?.battleRoyalePlacement || {};
+    return `
+        ${renderModeBlock("Battle Royale", player)}
+        <section class="detail-section">
+            <h3>Placement</h3>
+            <div class="snapshot-grid">
+                ${renderSnapshotItem("Best", placement.best ? `#${placement.best}` : "-")}
+                ${renderSnapshotItem("Average", placement.average ? `#${formatNumber(placement.average)}` : "-")}
+                ${renderSnapshotItem("Top 3", placement.top3 || 0)}
+                ${renderSnapshotItem("Top 5", placement.top5 || 0)}
+                ${renderSnapshotItem("Top 10", placement.top10 || 0)}
+            </div>
+        </section>
+        ${renderWeaponTable("BR Weapons", player.details?.weapons || [])}
+        ${renderRecentHistory(profile, "battleRoyale", 8)}
+    `;
+}
+
+function renderDeathmatchTab(profile) {
+    const player = normalizePlayer(profile.deathmatch);
+    if (!player.exists) return renderEmptyDetail("No Deathmatch games have been played yet.");
+    return `
+        ${renderModeBlock("Deathmatch", player)}
+        <section class="detail-section">
+            <h3>Deathmatch Details</h3>
+            <div class="snapshot-grid">
+                ${renderSnapshotItem("Top Match Kills", player.stats.topMatchKills)}
+                ${renderSnapshotItem("Highest Streak", player.stats.bestKillStreak)}
+                ${renderSnapshotItem("Favorite Kit", player.details?.favoriteKit?.label || "-")}
+                ${renderSnapshotItem("Favorite Map", player.details?.favoriteMap?.label || "-")}
+            </div>
+        </section>
+        ${renderBreakdownTable("Maps", player.details?.deathmatchMaps || [], { wide: true })}
+        ${renderBreakdownTable("Kits", player.details?.deathmatchKits || [], { wide: true })}
+        ${renderRecentHistory(profile, "deathmatch", 8)}
+    `;
+}
+
+function renderMapsTab(profile) {
+    const dm = normalizePlayer(profile.deathmatch);
+    const maps = dm.details?.deathmatchMaps || [];
+    return maps.length
+        ? renderBreakdownTable("Deathmatch Maps", maps, { wide: true })
+        : renderEmptyDetail("No map stats yet. New Deathmatch games will start filling this in.");
+}
+
+function renderWeaponsTab(profile) {
+    const overall = combinedWeapons(profile);
+    const br = normalizePlayer(profile.battleRoyale).details?.weapons || [];
+    const dm = normalizePlayer(profile.deathmatch).details?.weapons || [];
+    if (overall.length === 0) return renderEmptyDetail("No weapon stats yet. Weapon tables start filling in after the updated server jar records new hits and kills.");
+    return `
+        ${renderWeaponTable("All Weapons", overall)}
+        ${renderWeaponTable("Battle Royale Weapons", br)}
+        ${renderWeaponTable("Deathmatch Weapons", dm)}
+    `;
+}
+
+function renderHistoryTab(profile) {
+    return `
+        <section class="detail-section">
+            <div class="history-heading">
+                <h3>Match History</h3>
+                <span>Local time: ${escapeHtml(viewerTimeZoneLabel())}</span>
+            </div>
+            <div class="history-filters">
+                ${Object.entries(MODE_LABELS).map(([id, label]) => `
+                    <button class="tab-pill ${state.historyFilter === id ? "active" : ""}" type="button" data-history-filter="${escapeHtml(id)}">${escapeHtml(label)}</button>
+                `).join("")}
+            </div>
+            ${renderHistoryList(filteredHistory(profile, state.historyFilter), { expandable: true })}
         </section>
     `;
 }
 
-function renderMatchHistoryRow(match) {
+function renderRecentHistory(profile, mode, limit) {
+    const matches = filteredHistory(profile, mode).slice(0, limit);
+    if (matches.length === 0) return "";
+    return `
+        <section class="detail-section">
+            <div class="history-heading">
+                <h3>Recent ${escapeHtml(MODE_LABELS[mode] || "Overall")} Matches</h3>
+                <span>Local time: ${escapeHtml(viewerTimeZoneLabel())}</span>
+            </div>
+            ${renderHistoryList(matches, { expandable: true })}
+        </section>
+    `;
+}
+
+function renderHistoryList(matches, { expandable }) {
+    if (!matches || matches.length === 0) return `<p class="mode-empty">No game history yet.</p>`;
+    return `
+        <div class="history-list detail-history">
+            ${matches.map((match) => renderMatchHistoryRow(match, { expandable })).join("")}
+        </div>
+    `;
+}
+
+function renderMatchHistoryRow(match, { expandable }) {
     const result = match.won ? "Win" : "Loss";
     const resultClass = match.won ? "win" : "loss";
     const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
+    const expanded = state.expandedMatchIds.has(match.matchId);
+    const placement = match.mode === "battleRoyale" && match.placement ? `<span>Placement #${escapeHtml(String(match.placement))}</span>` : "";
+    const buttonAttrs = expandable ? `button type="button" data-match-toggle="${escapeHtml(match.matchId)}"` : "article";
+    const closeTag = expandable ? "button" : "article";
+
     return `
-        <article class="history-row">
-            <div>
-                <strong class="${resultClass}">${result}</strong>
-                <span>${escapeHtml(mode)} • ${escapeHtml(String(match.playerCount || 0))} players</span>
-            </div>
-            <div>
-                <strong>${escapeHtml(String(match.kills || 0))} / ${escapeHtml(String(match.deaths || 0))}</strong>
-                <span>K / D</span>
-            </div>
-            <time datetime="${escapeHtml(match.endedAt || "")}">${escapeHtml(formatShortDate(match.endedAt))}</time>
+        <article class="history-card ${expanded ? "expanded" : ""}">
+            <${buttonAttrs} class="history-row">
+                <div>
+                    <strong class="${resultClass}">${result}</strong>
+                    <span>${escapeHtml(mode)} - ${escapeHtml(String(match.playerCount || 0))} players</span>
+                    ${placement}
+                </div>
+                <div>
+                    <strong>${escapeHtml(String(match.kills || 0))} / ${escapeHtml(String(match.deaths || 0))}</strong>
+                    <span>K / D</span>
+                </div>
+                <div>
+                    <strong>${formatPercent(rate(match.headshots, match.hits))}</strong>
+                    <span>HS%</span>
+                </div>
+                <time datetime="${escapeHtml(match.endedAt || "")}" title="${escapeHtml(formatFullLocalDate(match.endedAt))}">${escapeHtml(formatShortDate(match.endedAt))}</time>
+            </${closeTag}>
+            ${expanded ? renderMatchParticipants(match) : ""}
         </article>
     `;
 }
 
-function renderModeBlock(label, payload) {
-    if (!payload) {
+function renderMatchParticipants(match) {
+    const participants = match.participants || [];
+    if (participants.length === 0) {
+        return `<div class="match-expanded"><p class="mode-empty">Detailed roster was not saved for this match.</p></div>`;
+    }
+    return `
+        <div class="match-expanded">
+            <div class="match-roster">
+                ${participants.map((player, index) => `
+                    <article class="roster-row ${player.won ? "winner" : ""}">
+                        <strong>${player.placement ? `#${escapeHtml(String(player.placement))}` : `#${index + 1}`}</strong>
+                        <span>${escapeHtml(player.name || "Unknown")}</span>
+                        <span>${escapeHtml(String(player.kills || 0))} K</span>
+                        <span>${escapeHtml(String(player.deaths || 0))} D</span>
+                        <span>${formatPercent(rate(player.headshots, player.hits))} HS</span>
+                        <span>${escapeHtml(player.topWeapon || "-")}</span>
+                    </article>
+                `).join("")}
+            </div>
+        </div>
+    `;
+}
+
+function renderModeBlock(label, payload, options = {}) {
+    const player = normalizePlayer(payload);
+    if (!player.exists) {
         return `
             <section class="mode-block">
                 <h3>${escapeHtml(label)}</h3>
@@ -362,81 +654,120 @@ function renderModeBlock(label, payload) {
         `;
     }
 
+    const stats = player.stats;
+    const derived = player.derived;
+    const compact = options.compact;
+    const statItems = [
+        ["Wins", stats.wins],
+        ["Kills", stats.kills],
+        ["Games", stats.games],
+        ["Deaths", stats.deaths],
+        ["Win Rate", formatPercent(derived.winRate)],
+        ["Avg Kills", formatNumber(derived.avgKills)],
+        ["Playtime", formatDuration(stats.playtimeSeconds)],
+        ["HS%", formatPercent(derived.headshotRate)],
+        ["KD Ratio", formatNumber(derived.kdRatio)]
+    ];
+    if (!compact) {
+        statItems.push(["Highest Streak", stats.bestKillStreak]);
+        statItems.push(["Top Match Kills", stats.topMatchKills]);
+    }
+
     return `
         <section class="mode-block">
             <h3>${escapeHtml(label)}</h3>
             <div class="profile-stats">
-                ${renderProfileStat("Wins", payload.stats.wins)}
-                ${renderProfileStat("Kills", payload.stats.kills)}
-                ${renderProfileStat("Games", payload.stats.games)}
-                ${renderProfileStat("Deaths", payload.stats.deaths)}
-                ${renderProfileStat("Win Rate", formatPercent(payload.derived.winRate))}
-                ${renderProfileStat("Avg Kills", formatNumber(payload.derived.avgKills))}
-                ${renderProfileStat("Avg Deaths", formatNumber(payload.derived.avgDeaths))}
-                ${renderProfileStat("KD Ratio", formatNumber(payload.derived.kdRatio))}
+                ${statItems.map(([statLabel, value]) => renderProfileStat(statLabel, value)).join("")}
             </div>
-            <ul class="profile-rank-list">
-                <li>Rank by Wins: ${payload.ranks.wins || "-"}</li>
-                <li>Rank by Kills: ${payload.ranks.kills || "-"}</li>
-                <li>Rank by Games: ${payload.ranks.games || "-"}</li>
-            </ul>
-            ${label === "Deathmatch" ? renderDeathmatchDetails(payload.details) : ""}
+            ${compact ? "" : `
+                <ul class="profile-rank-list">
+                    <li>Rank by Wins: ${player.ranks.wins || "-"}</li>
+                    <li>Rank by Kills: ${player.ranks.kills || "-"}</li>
+                    <li>Rank by Games: ${player.ranks.games || "-"}</li>
+                </ul>
+            `}
         </section>
     `;
 }
 
-function renderDeathmatchDetails(details) {
-    if (!details) return "";
-    const maps = details.deathmatchMaps || [];
-    const kits = details.deathmatchKits || [];
-    if (maps.length === 0 && kits.length === 0) return "";
-
-    return `
-        <div class="dm-details">
-            ${renderFavorite("Favorite Kit", details.favoriteKit)}
-            ${renderBreakdownTable("Maps", maps)}
-            ${renderBreakdownTable("Kits", kits)}
-        </div>
-    `;
-}
-
-function renderFavorite(label, entry) {
-    if (!entry) return "";
-    return `
-        <div class="favorite-card">
-            <span>${escapeHtml(label)}</span>
-            <strong>${escapeHtml(entry.label)}</strong>
-            <small>${entry.stats.games} games - ${formatNumber(entry.derived.avgKills)} avg kills - ${formatPercent(entry.derived.winRate)} winrate</small>
-        </div>
-    `;
-}
-
-function renderBreakdownTable(title, entries) {
+function renderBreakdownTable(title, entries, options = {}) {
     if (!entries || entries.length === 0) return "";
     return `
-        <div class="breakdown-block">
-            <h4>${escapeHtml(title)}</h4>
-            <div class="breakdown-list">
-                ${entries.slice(0, 8).map(renderBreakdownRow).join("")}
+        <section class="detail-section">
+            <h3>${escapeHtml(title)}</h3>
+            <div class="breakdown-list ${options.wide ? "wide" : ""}">
+                ${entries.map(renderBreakdownRow).join("")}
             </div>
-        </div>
+        </section>
     `;
 }
 
 function renderBreakdownRow(entry) {
+    const stats = normalizeStats(entry.stats);
+    const derived = normalizeDerived(entry.derived, stats);
     return `
         <article class="breakdown-row">
             <strong>${escapeHtml(entry.label)}</strong>
-            <span>${entry.stats.games} games</span>
-            <span>${formatNumber(entry.derived.avgKills)} avg K</span>
-            <span>${formatPercent(entry.derived.winRate)} WR</span>
-            <span>${formatNumber(entry.derived.kdRatio)} KD</span>
+            <span>${stats.games} games</span>
+            <span>${formatNumber(derived.avgKills)} avg K</span>
+            <span>${formatPercent(derived.winRate)} WR</span>
+            <span>${formatNumber(derived.kdRatio)} KD</span>
+            <span>${formatDuration(stats.playtimeSeconds)}</span>
         </article>
     `;
 }
 
+function renderWeaponTable(title, weapons) {
+    if (!weapons || weapons.length === 0) return "";
+    return `
+        <section class="detail-section">
+            <h3>${escapeHtml(title)}</h3>
+            <div class="weapon-table">
+                <div class="weapon-row heading">
+                    <span>Weapon</span>
+                    <span>Kills</span>
+                    <span>Hits</span>
+                    <span>HS%</span>
+                    <span>HS Kills</span>
+                    <span>Utility</span>
+                    <span>Vehicle</span>
+                </div>
+                ${weapons.map(renderWeaponRow).join("")}
+            </div>
+        </section>
+    `;
+}
+
+function renderWeaponRow(entry) {
+    const stats = normalizeStats(entry.stats);
+    const derived = normalizeDerived(entry.derived, stats);
+    return `
+        <article class="weapon-row">
+            <strong>${escapeHtml(entry.label)}</strong>
+            <span>${stats.kills}</span>
+            <span>${stats.hits}</span>
+            <span>${formatPercent(derived.headshotRate)}</span>
+            <span>${stats.headshotKills}</span>
+            <span>${stats.utilityKills}</span>
+            <span>${stats.vehicleKills}</span>
+        </article>
+    `;
+}
+
+function renderStatCard(label, value) {
+    return `<article class="detail-stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`;
+}
+
+function renderSnapshotItem(label, value) {
+    return `<article class="snapshot-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`;
+}
+
 function renderProfileStat(label, value) {
     return `<div class="profile-stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
+}
+
+function renderEmptyDetail(text) {
+    return `<section class="detail-section"><p class="mode-empty">${escapeHtml(text)}</p></section>`;
 }
 
 function filteredPlayers() {
@@ -485,25 +816,121 @@ function buildProfileOverall(profile) {
 
 function combineStats(...statsList) {
     return statsList.reduce((total, stats) => {
-        if (!stats) return total;
-        total.wins += Number(stats.wins || 0);
-        total.kills += Number(stats.kills || 0);
-        total.deaths += Number(stats.deaths || 0);
-        total.games += Number(stats.games || 0);
+        const next = normalizeStats(stats);
+        total.wins += next.wins;
+        total.kills += next.kills;
+        total.deaths += next.deaths;
+        total.games += next.games;
+        total.playtimeSeconds += next.playtimeSeconds;
+        total.hits += next.hits;
+        total.headshots += next.headshots;
+        total.headshotKills += next.headshotKills;
+        total.bestKillStreak = Math.max(total.bestKillStreak, next.bestKillStreak);
+        total.topMatchKills = Math.max(total.topMatchKills, next.topMatchKills);
+        total.utilityKills += next.utilityKills;
+        total.vehicleKills += next.vehicleKills;
         return total;
-    }, { wins: 0, kills: 0, deaths: 0, games: 0 });
+    }, normalizeStats(null));
+}
+
+function normalizePlayer(player) {
+    if (!player) {
+        return {
+            exists: false,
+            playerId: "",
+            name: "",
+            stats: normalizeStats(null),
+            ranks: { wins: 0, kills: 0, games: 0 },
+            derived: derivedFromStats(normalizeStats(null)),
+            details: {}
+        };
+    }
+    const stats = normalizeStats(player.stats);
+    return {
+        ...player,
+        exists: true,
+        stats,
+        ranks: player.ranks || { wins: 0, kills: 0, games: 0 },
+        derived: normalizeDerived(player.derived, stats),
+        details: player.details || {}
+    };
+}
+
+function normalizeStats(stats) {
+    return {
+        wins: number(stats?.wins),
+        kills: number(stats?.kills),
+        deaths: number(stats?.deaths),
+        games: number(stats?.games ?? stats?.matches),
+        playtimeSeconds: number(stats?.playtimeSeconds),
+        hits: number(stats?.hits),
+        headshots: number(stats?.headshots),
+        headshotKills: number(stats?.headshotKills),
+        bestKillStreak: number(stats?.bestKillStreak),
+        topMatchKills: number(stats?.topMatchKills),
+        utilityKills: number(stats?.utilityKills),
+        vehicleKills: number(stats?.vehicleKills)
+    };
+}
+
+function normalizeDerived(derived, stats) {
+    const fallback = derivedFromStats(stats);
+    return {
+        winRate: number(derived?.winRate ?? fallback.winRate),
+        avgKills: number(derived?.avgKills ?? fallback.avgKills),
+        avgDeaths: number(derived?.avgDeaths ?? fallback.avgDeaths),
+        kdRatio: number(derived?.kdRatio ?? fallback.kdRatio),
+        avgPlaytimeSeconds: number(derived?.avgPlaytimeSeconds ?? fallback.avgPlaytimeSeconds),
+        headshotRate: number(derived?.headshotRate ?? fallback.headshotRate)
+    };
 }
 
 function derivedFromStats(stats) {
-    const games = Number(stats.games || 0);
-    const deaths = Number(stats.deaths || 0);
-    const kills = Number(stats.kills || 0);
+    const games = number(stats?.games);
+    const deaths = number(stats?.deaths);
+    const kills = number(stats?.kills);
+    const hits = number(stats?.hits);
     return {
-        winRate: games > 0 ? round2((stats.wins || 0) / games) : 0,
+        winRate: games > 0 ? round2(number(stats?.wins) / games) : 0,
         avgKills: games > 0 ? round2(kills / games) : 0,
         avgDeaths: games > 0 ? round2(deaths / games) : 0,
-        kdRatio: deaths > 0 ? round2(kills / deaths) : (kills > 0 ? kills : 0)
+        kdRatio: deaths > 0 ? round2(kills / deaths) : (kills > 0 ? kills : 0),
+        avgPlaytimeSeconds: games > 0 ? round2(number(stats?.playtimeSeconds) / games) : 0,
+        headshotRate: hits > 0 ? round2(number(stats?.headshots) / hits) : 0
     };
+}
+
+function combinedWeapons(profile) {
+    const merged = new Map();
+    for (const entry of [
+        ...(profile.battleRoyale?.details?.weapons || []),
+        ...(profile.deathmatch?.details?.weapons || [])
+    ]) {
+        if (!entry?.id) continue;
+        const current = merged.get(entry.id) || {
+            id: entry.id,
+            label: entry.label,
+            stats: normalizeStats(null)
+        };
+        current.stats = combineStats(current.stats, entry.stats);
+        current.derived = derivedFromStats(current.stats);
+        merged.set(entry.id, current);
+    }
+    return [...merged.values()].sort((a, b) => {
+        const kills = normalizeStats(b.stats).kills - normalizeStats(a.stats).kills;
+        if (kills) return kills;
+        return normalizeStats(b.stats).hits - normalizeStats(a.stats).hits;
+    });
+}
+
+function filteredHistory(profile, mode) {
+    const matches = profile?.recentMatches || [];
+    if (mode === "overall") return matches;
+    return matches.filter((match) => match.mode === mode);
+}
+
+function profileById(playerId) {
+    return (state.data?.profiles || []).find((entry) => entry.playerId === playerId) || null;
 }
 
 function applyRanks(players) {
@@ -523,31 +950,37 @@ function comparePlayersBy(sort, directionId) {
         const direction = directionId === "asc" ? 1 : -1;
         const primary = (sortValue(a, sort) - sortValue(b, sort)) * direction;
         if (primary !== 0) return primary;
-        const secondary = b.stats.wins - a.stats.wins;
+        const secondary = normalizeStats(b.stats).wins - normalizeStats(a.stats).wins;
         if (secondary !== 0) return secondary;
-        const tertiary = b.stats.kills - a.stats.kills;
+        const tertiary = normalizeStats(b.stats).kills - normalizeStats(a.stats).kills;
         if (tertiary !== 0) return tertiary;
         return a.name.localeCompare(b.name);
     };
 }
 
 function sortValue(player, sort) {
+    const stats = normalizeStats(player.stats);
+    const derived = normalizeDerived(player.derived, stats);
     switch (sort) {
         case "kills":
-            return player.stats.kills;
+            return stats.kills;
         case "games":
-            return player.stats.games;
+            return stats.games;
         case "deaths":
-            return player.stats.deaths;
+            return stats.deaths;
         case "winRate":
-            return player.derived.winRate;
+            return derived.winRate;
         case "avgKills":
-            return player.derived.avgKills;
+            return derived.avgKills;
+        case "playtimeSeconds":
+            return stats.playtimeSeconds;
+        case "headshotRate":
+            return derived.headshotRate;
         case "kdRatio":
-            return player.derived.kdRatio;
+            return derived.kdRatio;
         case "wins":
         default:
-            return player.stats.wins;
+            return stats.wins;
     }
 }
 
@@ -590,14 +1023,12 @@ function pageWindow(totalPages, currentPage, radius) {
     return pages;
 }
 
-function average(items, getter) {
-    if (items.length === 0) return 0;
-    return items.reduce((sum, item) => sum + getter(item), 0) / items.length;
+function number(value) {
+    return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
 
-function best(items, getter) {
-    if (items.length === 0) return 0;
-    return items.reduce((max, item) => Math.max(max, getter(item)), 0);
+function rate(part, total) {
+    return number(total) > 0 ? number(part) / number(total) : 0;
 }
 
 function formatPercent(value) {
@@ -606,6 +1037,15 @@ function formatPercent(value) {
 
 function formatNumber(value) {
     return Number(value || 0).toFixed(2).replace(/\.00$/, "");
+}
+
+function formatDuration(seconds) {
+    const total = Math.max(0, Math.round(number(seconds)));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m`;
+    return `${total}s`;
 }
 
 function round2(value) {
@@ -620,16 +1060,28 @@ function formatShortDate(value) {
         month: "short",
         day: "numeric",
         hour: "2-digit",
-        minute: "2-digit"
+        minute: "2-digit",
+        timeZoneName: "short"
     });
 }
 
-function formatDateTime(value) {
-    try {
-        return new Date(value).toLocaleString();
-    } catch (error) {
-        return value;
-    }
+function formatFullLocalDate(value) {
+    if (!value) return "Unknown time";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString(undefined, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZoneName: "long"
+    });
+}
+
+function viewerTimeZoneLabel() {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "your timezone";
 }
 
 function escapeHtml(value) {

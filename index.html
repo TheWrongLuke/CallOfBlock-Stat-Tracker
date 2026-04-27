@@ -15,8 +15,8 @@
             <p class="eyebrow">Call of Block 3.0</p>
             <h1>Match Stats Hub</h1>
             <p class="hero-text">
-                Battle Royale and Deathmatch leaderboards, personal profile cards, sortable stat columns, and room for deeper
-                stats later without needing a backend first.
+                Battle Royale and Deathmatch leaderboards, player pages, match history, weapon tables, map stats, and live
+                updates from the server export.
             </p>
         </div>
     </header>
@@ -52,6 +52,8 @@
                         <th><button class="sort-header" type="button" data-sort="deaths">Deaths <span data-sort-indicator="deaths"></span></button></th>
                         <th><button class="sort-header" type="button" data-sort="winRate">Win Rate <span data-sort-indicator="winRate"></span></button></th>
                         <th><button class="sort-header" type="button" data-sort="avgKills">Avg K <span data-sort-indicator="avgKills"></span></button></th>
+                        <th><button class="sort-header" type="button" data-sort="playtimeSeconds">Playtime <span data-sort-indicator="playtimeSeconds"></span></button></th>
+                        <th><button class="sort-header" type="button" data-sort="headshotRate">HS% <span data-sort-indicator="headshotRate"></span></button></th>
                         <th><button class="sort-header" type="button" data-sort="kdRatio">KD <span data-sort-indicator="kdRatio"></span></button></th>
                     </tr>
                     </thead>
@@ -79,6 +81,18 @@
             </div>
         </aside>
     </main>
+
+    <section class="player-view panel hidden" id="player-view">
+        <div class="player-view-header">
+            <button class="back-button" type="button" id="back-to-leaderboard">Back</button>
+            <div>
+                <p class="panel-kicker">Player Profile</p>
+                <h2 id="player-detail-title">Player</h2>
+                <p id="player-detail-subtitle" class="detail-subtitle"></p>
+            </div>
+        </div>
+        <div id="player-detail-body" class="player-detail-body"></div>
+    </section>
 </div>
 
 <script src="./api-config.js"></script>
