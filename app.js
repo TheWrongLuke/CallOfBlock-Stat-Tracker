@@ -148,19 +148,11 @@ function emptyExport() {
 }
 
 function render() {
-    renderMeta();
     renderModeTabs();
     renderSortHeaders();
     renderSummary();
     renderTable();
     renderProfile();
-}
-
-function renderMeta() {
-    const sourceFile = state.data?.sourceFile || "stats.json";
-    document.getElementById("data-source").textContent = state.dataMode === "Live API" ? `Live API / ${sourceFile}` : sourceFile;
-    document.getElementById("generated-at").textContent = state.data?.generatedAt ? formatDateTime(state.data.generatedAt) : "No export yet";
-    document.getElementById("preview-flag").textContent = state.dataMode === "Live API" ? `Yes, ${Math.round(state.pollMs / 1000)}s` : "No";
 }
 
 function renderModeTabs() {
