@@ -34,6 +34,7 @@ const state = {
     apiUrl: "",
     pollMs: DEFAULT_API_POLL_MS,
     refreshTimer: null,
+    dataSignature: "",
     mode: "overall",
     sort: "wins",
     sortDirection: "desc",
@@ -71,6 +72,12 @@ function bindStaticEvents() {
 
     document.querySelectorAll("[data-sort]").forEach((button) => {
         button.addEventListener("click", () => setSort(button.dataset.sort));
+    });
+
+    document.getElementById("leaderboard-body").addEventListener("click", (event) => {
+        if (event.target.closest("a")) return;
+        const row = event.target.closest("[data-player-id]");
+        if (row) routeToPlayer(row.dataset.playerId);
     });
 
     document.getElementById("back-to-leaderboard").addEventListener("click", () => routeToLeaderboard());
@@ -188,10 +195,14 @@ async function refreshData({ initial }) {
 }
 
 function applyData(data, preview, dataMode) {
+    const signature = exportSignature(data);
+    if (signature === state.dataSignature && state.preview === preview && state.dataMode === dataMode) return;
+
     const previousSelectedId = state.selectedId;
     state.data = data;
     state.preview = preview;
     state.dataMode = dataMode;
+    state.dataSignature = signature;
 
     if (previousSelectedId && profileById(previousSelectedId)) {
         state.selectedId = previousSelectedId;
@@ -219,6 +230,14 @@ async function fetchJson(path) {
 
 function isStatsExport(data) {
     return Boolean(data?.modes && Array.isArray(data.profiles));
+}
+
+function exportSignature(data) {
+    if (!data) return "";
+    const modeParts = Object.entries(data.modes || {})
+        .map(([id, mode]) => `${id}:${mode.totalPlayers || 0}:${mode.players?.length || 0}`)
+        .join(",");
+    return `${data.schemaVersion || ""}|${data.generatedAt || ""}|${data.profiles?.length || 0}|${modeParts}`;
 }
 
 function hasTrackedPlayers(data) {
@@ -318,7 +337,7 @@ function renderTable() {
         const derived = normalizeDerived(player.derived, stats);
         const tr = document.createElement("tr");
         if (player.playerId === state.selectedId) tr.classList.add("selected");
-        tr.addEventListener("click", () => routeToPlayer(player.playerId));
+        tr.dataset.playerId = player.playerId;
 
         tr.innerHTML = `
             <td><span class="rank-badge rank-${Math.min(displayRank, 3)}">${displayRank}</span></td>
@@ -393,10 +412,10 @@ function renderProfilePreview() {
 
     const overall = buildProfileOverall(profile);
     container.innerHTML = `
+        <button class="primary-action" type="button" id="open-full-profile">Open Full Profile</button>
         ${renderModeBlock("Overall", overall, { compact: true })}
         ${renderModeBlock("Battle Royale", profile.battleRoyale, { compact: true })}
         ${renderModeBlock("Deathmatch", profile.deathmatch, { compact: true })}
-        <button class="primary-action" type="button" id="open-full-profile">Open Full Profile</button>
     `;
     document.getElementById("open-full-profile").addEventListener("click", () => routeToPlayer(profile.playerId));
 }
@@ -612,7 +631,7 @@ function renderMatchParticipants(match) {
                 ${participants.map((player, index) => `
                     <article class="roster-row ${player.won ? "winner" : ""}">
                         <strong>${player.placement ? `#${escapeHtml(String(player.placement))}` : `#${index + 1}`}</strong>
-                        <span>${escapeHtml(player.name || "Unknown")}</span>
+                        ${player.playerId ? `<a class="roster-player-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview">${escapeHtml(player.name || "Unknown")}</a>` : `<span>${escapeHtml(player.name || "Unknown")}</span>`}
                         <span>${escapeHtml(String(player.kills || 0))} K</span>
                         <span>${escapeHtml(String(player.deaths || 0))} D</span>
                         <span>${formatPercent(rate(player.headshots, player.hits))} HS</span>
