@@ -286,13 +286,10 @@ function renderSortHeaders() {
 function renderSummary() {
     const mode = currentMode();
     const players = mode.players || [];
-    const container = document.getElementById("summary-grid");
-    container.innerHTML = "";
-
-    const card = document.createElement("article");
-    card.className = "summary-card";
-    card.innerHTML = `<span>Tracked Players</span><strong>${escapeHtml(String(players.length))}</strong><span>${escapeHtml(MODE_LABELS[state.mode])}</span>`;
-    container.appendChild(card);
+    const count = document.getElementById("leaderboard-count");
+    const noun = players.length === 1 ? "player" : "players";
+    const modeLabel = state.mode === "overall" ? "across all modes" : `in ${MODE_LABELS[state.mode]}`;
+    count.textContent = `${players.length} tracked ${noun} ${modeLabel}`;
 }
 
 function renderTable() {
@@ -328,6 +325,7 @@ function renderTable() {
             <td>
                 <div class="player-name">
                     <strong>${escapeHtml(player.name)}</strong>
+                    <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview">Profile</a>
                 </div>
             </td>
             <td>${stats.wins}</td>
@@ -483,7 +481,6 @@ function renderOverviewTab(profile) {
                 ${renderSnapshotItem("Headshot Kills", stats.headshotKills)}
             </div>
         </section>
-        ${renderRecentHistory(profile, "overall", 5)}
     `;
 }
 
@@ -504,7 +501,6 @@ function renderBattleRoyaleTab(profile) {
             </div>
         </section>
         ${renderWeaponTable("BR Weapons", player.details?.weapons || [])}
-        ${renderRecentHistory(profile, "battleRoyale", 8)}
     `;
 }
 
@@ -524,7 +520,6 @@ function renderDeathmatchTab(profile) {
         </section>
         ${renderBreakdownTable("Maps", player.details?.deathmatchMaps || [], { wide: true })}
         ${renderBreakdownTable("Kits", player.details?.deathmatchKits || [], { wide: true })}
-        ${renderRecentHistory(profile, "deathmatch", 8)}
     `;
 }
 
@@ -561,20 +556,6 @@ function renderHistoryTab(profile) {
                 `).join("")}
             </div>
             ${renderHistoryList(filteredHistory(profile, state.historyFilter), { expandable: true })}
-        </section>
-    `;
-}
-
-function renderRecentHistory(profile, mode, limit) {
-    const matches = filteredHistory(profile, mode).slice(0, limit);
-    if (matches.length === 0) return "";
-    return `
-        <section class="detail-section">
-            <div class="history-heading">
-                <h3>Recent ${escapeHtml(MODE_LABELS[mode] || "Overall")} Matches</h3>
-                <span>Local time: ${escapeHtml(viewerTimeZoneLabel())}</span>
-            </div>
-            ${renderHistoryList(matches, { expandable: true })}
         </section>
     `;
 }
