@@ -32,6 +32,10 @@ const state = {
     preview: false,
     dataMode: "Static file",
     apiUrl: "",
+    supabaseUrl: "",
+    supabaseKey: "",
+    supabaseTable: "cob_stats_exports",
+    supabaseRowId: "live",
     pollMs: DEFAULT_API_POLL_MS,
     refreshTimer: null,
     dataSignature: "",
@@ -58,6 +62,10 @@ document.addEventListener("DOMContentLoaded", () => {
 function setupLiveConfig() {
     const params = new URLSearchParams(window.location.search);
     state.apiUrl = params.get("api") || window.COB_STATS_API_URL || "";
+    state.supabaseUrl = params.get("supabaseUrl") || window.COB_SUPABASE_URL || "";
+    state.supabaseKey = params.get("supabaseKey") || window.COB_SUPABASE_KEY || "";
+    state.supabaseTable = params.get("supabaseTable") || window.COB_SUPABASE_TABLE || "cob_stats_exports";
+    state.supabaseRowId = params.get("supabaseRowId") || window.COB_SUPABASE_ROW_ID || "live";
     const pollMs = Number(params.get("pollMs") || window.COB_STATS_POLL_MS || DEFAULT_API_POLL_MS);
     state.pollMs = Number.isFinite(pollMs) && pollMs >= 3000 ? pollMs : DEFAULT_API_POLL_MS;
 }
@@ -160,7 +168,7 @@ function routeToLeaderboard() {
 
 async function loadData() {
     await refreshData({ initial: true });
-    if (!state.apiUrl) return;
+    if (!state.supabaseUrl && !state.apiUrl) return;
 
     window.clearInterval(state.refreshTimer);
     state.refreshTimer = window.setInterval(() => {
@@ -169,6 +177,12 @@ async function loadData() {
 }
 
 async function refreshData({ initial }) {
+    const supabaseData = await fetchSupabaseExport();
+    if (isStatsExport(supabaseData)) {
+        applyData(supabaseData, false, "Supabase database");
+        return;
+    }
+
     if (state.apiUrl) {
         const apiData = await fetchJson(state.apiUrl);
         if (isStatsExport(apiData)) {
@@ -192,6 +206,33 @@ async function refreshData({ initial }) {
     }
 
     applyData(data || emptyExport(), preview, dataMode);
+}
+
+async function fetchSupabaseExport() {
+    if (!state.supabaseUrl || !state.supabaseKey) return null;
+
+    const baseUrl = state.supabaseUrl.replace(/\/+$/, "");
+    const table = encodeURIComponent(state.supabaseTable || "cob_stats_exports");
+    const rowId = encodeURIComponent(state.supabaseRowId || "live");
+    const url = `${baseUrl}/rest/v1/${table}?id=eq.${rowId}&select=payload&limit=1`;
+
+    try {
+        const response = await fetch(url, {
+            cache: "no-store",
+            headers: {
+                "apikey": state.supabaseKey,
+                "Authorization": `Bearer ${state.supabaseKey}`,
+                "Accept": "application/json"
+            }
+        });
+        if (!response.ok) return null;
+
+        const rows = await response.json();
+        return rows?.[0]?.payload || null;
+    } catch (error) {
+        console.error("Failed to load Supabase stats", error);
+        return null;
+    }
 }
 
 function applyData(data, preview, dataMode) {
@@ -434,7 +475,7 @@ function renderPlayerDetail() {
     }
 
     title.textContent = profile.name;
-    subtitle.textContent = "Stats update from the live export when the server/API publishes new data.";
+    subtitle.textContent = "Stats update when the server publishes new data.";
 
     const tabs = renderPlayerTabs();
     const content = renderPlayerTabContent(profile);

@@ -1,2 +1,7 @@
-window.COB_STATS_API_URL = "https://4b2c-2a0c-8a80-62-a00-39f3-dd68-9a23-4f9a.ngrok-free.app/stats";
+window.COB_SUPABASE_URL = "https://dtmnbplnubttbfzgkxfg.supabase.co";
+window.COB_SUPABASE_KEY = "sb_publishable_eXIhrB6Q9aIYnBvYrHPQow_H73HZlly";
+window.COB_SUPABASE_TABLE = "cob_stats_exports";
+window.COB_SUPABASE_ROW_ID = "live";
+
+window.COB_STATS_API_URL = "";
 window.COB_STATS_POLL_MS = 10000;
