@@ -634,7 +634,10 @@ function renderMatchHistoryRow(match, { expandable }) {
     const resultClass = match.won ? "win" : "loss";
     const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
     const expanded = state.expandedMatchIds.has(match.matchId);
-    const placement = match.mode === "battleRoyale" && match.placement ? `<span>Placement #${escapeHtml(String(match.placement))}</span>` : "";
+    const placement = match.mode === "battleRoyale" && match.placement ? `<span>${escapeHtml(formatPlacement(match.placement))} place</span>` : "";
+    const finalScore = match.mode === "deathmatch" && hasMatchScore(match)
+        ? `<span>Final score Red ${escapeHtml(String(match.redScore))} - ${escapeHtml(String(match.blueScore))} Blue</span>`
+        : "";
     const buttonAttrs = expandable ? `button type="button" data-match-toggle="${escapeHtml(match.matchId)}"` : "article";
     const closeTag = expandable ? "button" : "article";
 
@@ -645,6 +648,7 @@ function renderMatchHistoryRow(match, { expandable }) {
                     <strong class="${resultClass}">${result}</strong>
                     <span>${escapeHtml(mode)} - ${escapeHtml(String(match.playerCount || 0))} players</span>
                     ${placement}
+                    ${finalScore}
                 </div>
                 <div>
                     <strong>${escapeHtml(String(match.kills || 0))} / ${escapeHtml(String(match.deaths || 0))}</strong>
@@ -671,7 +675,7 @@ function renderMatchParticipants(match) {
             <div class="match-roster">
                 ${participants.map((player, index) => `
                     <article class="roster-row ${player.won ? "winner" : ""}">
-                        <strong>${player.placement ? `#${escapeHtml(String(player.placement))}` : `#${index + 1}`}</strong>
+                        <strong>${escapeHtml(match.mode === "battleRoyale" && player.placement ? formatPlacement(player.placement) : `#${index + 1}`)}</strong>
                         ${player.playerId ? `<a class="roster-player-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview">${escapeHtml(player.name || "Unknown")}</a>` : `<span>${escapeHtml(player.name || "Unknown")}</span>`}
                         <span>${escapeHtml(String(player.kills || 0))} K</span>
                         <span>${escapeHtml(String(player.deaths || 0))} D</span>
@@ -1078,6 +1082,28 @@ function formatPercent(value) {
 
 function formatNumber(value) {
     return Number(value || 0).toFixed(2).replace(/\.00$/, "");
+}
+
+function formatPlacement(value) {
+    const place = Math.max(0, Math.round(number(value)));
+    if (place <= 0) return "-";
+    const lastTwo = place % 100;
+    if (lastTwo >= 11 && lastTwo <= 13) return `${place}th`;
+    switch (place % 10) {
+        case 1: return `${place}st`;
+        case 2: return `${place}nd`;
+        case 3: return `${place}rd`;
+        default: return `${place}th`;
+    }
+}
+
+function hasMatchScore(match) {
+    return match?.redScore !== null
+        && match?.redScore !== undefined
+        && match?.blueScore !== null
+        && match?.blueScore !== undefined
+        && Number.isFinite(Number(match.redScore))
+        && Number.isFinite(Number(match.blueScore));
 }
 
 function formatDuration(seconds) {
