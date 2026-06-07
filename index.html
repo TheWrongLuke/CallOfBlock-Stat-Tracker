@@ -8,18 +8,194 @@
     <link rel="apple-touch-icon" href="./Icon.png">
     <link rel="stylesheet" href="./styles.css">
 </head>
-<body>
+<body class="home-route">
 <div class="app-shell">
     <header class="hero">
         <div class="hero-copy">
-            <p class="eyebrow">Call of Block 3.0</p>
-            <h1>Match Stats Hub</h1>
+            <p class="eyebrow">Call of Block 2.3</p>
+            <h1><button type="button" class="hero-title-link" data-route="home">Call of Block</button></h1>
             <p class="hero-text">
-                Battle Royale and Deathmatch leaderboards, player pages, match history, weapon tables, map stats, and live
-                updates from the server export.
+                Play battle royale or deathmatch with players in this server.
             </p>
+            <div class="hero-links" aria-label="Server links">
+                <a class="join-link" href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord invite</a>
+                <a class="join-link" href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">YouTube</a>
+                <span class="server-pill">IP not yet available</span>
+            </div>
+        </div>
+        <div class="hero-champions">
+            <div class="section-heading">
+                <h2>Current Champions</h2>
+            </div>
+            <div class="champion-carousel" id="champion-carousel" tabindex="0" aria-label="Featured leaderboard carousel">
+                <article class="podium-panel podium-br" data-champion-panel="battleRoyale">
+                    <div class="featured-header">
+                        <div>
+                            <p class="panel-kicker">Battle Royale</p>
+                            <h3>Top 5</h3>
+                        </div>
+                    </div>
+                    <div class="featured-list podium-list" id="featured-battle-royale"></div>
+                </article>
+
+                <article class="podium-panel podium-dm" data-champion-panel="deathmatch">
+                    <div class="featured-header">
+                        <div>
+                            <p class="panel-kicker">Deathmatch</p>
+                            <h3>Top 5</h3>
+                        </div>
+                    </div>
+                    <div class="featured-list podium-list" id="featured-deathmatch"></div>
+                </article>
+            </div>
+        </div>
+        <div class="hero-status">
+            <article class="status-card">
+                <span>Online Players</span>
+                <strong id="online-player-count">Offline</strong>
+            </article>
+            <article class="status-card">
+                <span>Game Status</span>
+                <strong id="server-status">Idle</strong>
+            </article>
+            <article class="status-card">
+                <span>Tracked Players</span>
+                <strong id="hero-player-count">0</strong>
+            </article>
+            <article class="status-card">
+                <span>Last Game Played</span>
+                <strong id="last-game-played">Waiting for games</strong>
+            </article>
         </div>
     </header>
+    <button type="button" class="tracker-float" data-route="leaderboard">Tracker</button>
+
+    <main class="home-view" id="home-view">
+        <section class="landing-intro">
+            <article>
+                <p class="panel-kicker">Main Modes</p>
+                <h2>Drop, loot, survive.</h2>
+                <p>
+                    Battle Royale drops players over Shmar with custom guns, upgrades, explosives, and possible vehicles
+                    scattered through the map. The zone keeps moving, forcing squads and solo players into fights until one
+                    side is left standing. Deathmatch is the faster mode: pick a kit, spawn with your team, and keep trading
+                    rounds until the final score decides the winner.
+                </p>
+            </article>
+            <aside class="latest-panel">
+                <p class="panel-kicker">Latest Match</p>
+                <div id="home-latest-match"></div>
+            </aside>
+        </section>
+
+        <section class="info-grid">
+            <article class="info-panel">
+                <span>01</span>
+                <h3>Battle Royale</h3>
+                <p>Queue up, fly over Shmar, drop where you want, loot weapons and upgrades, use explosives or vehicles when you find them, and stay ahead of the moving zone.</p>
+                <a href="#view=leaderboards&mode=battleRoyale&board=players&sort=wins">BR stats</a>
+            </article>
+            <article class="info-panel">
+                <span>02</span>
+                <h3>Deathmatch</h3>
+                <p>Vote maps, pick kits, chase team score, and build a profile with map stats, kit stats, top match kills, accuracy, and favorite weapons.</p>
+                <a href="#view=leaderboards&mode=deathmatch&board=players&sort=wins">DM stats</a>
+            </article>
+            <article class="info-panel">
+                <span>03</span>
+                <h3>Tracker</h3>
+                <p>Check rankings, player profiles, match history, weapons, maps, headshots, playtime, win rates, and the last completed games from the live server stats.</p>
+                <a href="#view=leaderboards&mode=overall&board=players&sort=wins">Leaderboards</a>
+            </article>
+        </section>
+
+        <section class="join-section">
+            <div>
+                <p class="panel-kicker">Join The Server</p>
+                <h2>Get the pack, join Discord, join the server and play.</h2>
+            </div>
+            <div class="join-cards">
+                <article>
+                    <span>Discord</span>
+                    <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Join Discord</a>
+                </article>
+                <article>
+                    <span>Server IP</span>
+                    <strong>IP not yet available</strong>
+                </article>
+                <article>
+                    <span>Modpack</span>
+                    <div class="link-row">
+                        <a href="https://www.curseforge.com/minecraft/modpacks/call-of-block" target="_blank" rel="noopener noreferrer">CurseForge</a>
+                        <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Modrinth</a>
+                        <a href="#" aria-disabled="true">Direct zip unavailable</a>
+                    </div>
+                </article>
+                <article>
+                    <span>YouTube</span>
+                    <a href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">Watch channel</a>
+                </article>
+            </div>
+        </section>
+
+        <section class="video-section">
+            <div>
+                <p class="panel-kicker">Featured Videos</p>
+                <h2>Call of Block clips and updates.</h2>
+                <p>Follow the channel for match highlights, trailers, update previews, and event recaps. A specific featured video can be added here once one is published.</p>
+            </div>
+            <div class="video-card">
+                <span>YouTube</span>
+                <strong>TheWrongLuke</strong>
+                <a href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">Open channel</a>
+            </div>
+        </section>
+
+        <section class="guide-grid">
+            <article class="guide-panel">
+                <p class="panel-kicker">Getting Started</p>
+                <h2>How to play</h2>
+                <ol class="step-list">
+                    <li>Join the Discord so you can see announcements, match times, rules, and server updates.</li>
+                    <li>Install the Call of Block modpack from CurseForge or Modrinth. A direct zip download can be added later.</li>
+                    <li>Open the server, queue for Battle Royale or Deathmatch, and pick the team or kit shown in-game.</li>
+                    <li>For Battle Royale, drop from the fly-by, loot Shmar, watch the zone, and survive to the final fight.</li>
+                    <li>For Deathmatch, choose a kit, play with your team, and reach the target score before the other side.</li>
+                </ol>
+                <div class="link-row">
+                    <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord invite</a>
+                    <a href="https://www.curseforge.com/minecraft/modpacks/call-of-block" target="_blank" rel="noopener noreferrer">CurseForge</a>
+                    <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Modrinth</a>
+                    <a href="#" aria-disabled="true">Direct zip unavailable</a>
+                </div>
+            </article>
+
+            <article class="guide-panel">
+                <p class="panel-kicker">Questions</p>
+                <h2>FAQ</h2>
+                <details open>
+                    <summary>Is this vanilla Minecraft?</summary>
+                    <p>No. Call of Block is a modded server and needs the matching modpack version.</p>
+                </details>
+                <details>
+                    <summary>What version is the server on?</summary>
+                    <p>The server runs Minecraft 1.20.1 on Forge.</p>
+                </details>
+                <details>
+                    <summary>Can cracked players join?</summary>
+                    <p>The server can allow cracked players, but the modpack is still required.</p>
+                </details>
+                <details>
+                    <summary>What modes are available?</summary>
+                    <p>Battle Royale and Deathmatch are the main modes right now. Vehicle-focused modes are planned later.</p>
+                </details>
+                <details>
+                    <summary>Where do stats come from?</summary>
+                    <p>Stats are saved by the server after matches and shown here for leaderboards, profiles, weapons, maps, and match history.</p>
+                </details>
+            </article>
+        </section>
+    </main>
 
     <main class="dashboard">
         <section class="leaderboard-panel panel">
@@ -33,6 +209,7 @@
             </div>
 
             <div class="toolbar">
+                <nav class="view-tabs" id="main-view-tabs" aria-label="Global stat views"></nav>
                 <label class="search-box">
                     <span>Search</span>
                     <input id="player-search" type="search" placeholder="Player name">
@@ -72,6 +249,7 @@
                     <p class="panel-kicker">Player Profile</p>
                     <h2 id="profile-title">Select a player</h2>
                 </div>
+                <button class="profile-close" type="button" id="close-profile-preview" aria-label="Close player preview">X</button>
             </div>
             <div id="profile-body" class="profile-body">
                 <div class="profile-placeholder">

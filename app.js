@@ -13,7 +13,11 @@ const SORT_LABELS = {
     avgKills: "Avg Kills",
     playtimeSeconds: "Playtime",
     headshotRate: "HS%",
-    kdRatio: "KD"
+    kdRatio: "KD",
+    hits: "Hits",
+    headshotKills: "Headshot Kills",
+    utilityKills: "Utility Kills",
+    vehicleKills: "Vehicle Kills"
 };
 
 const PLAYER_TABS = {
@@ -25,7 +29,15 @@ const PLAYER_TABS = {
     history: "History"
 };
 
+const MAIN_VIEWS = {
+    players: "Players",
+    weapons: "Weapons",
+    maps: "Maps"
+};
+
 const DEFAULT_API_POLL_MS = 10000;
+const DEFAULT_SKIN_NAME = "Steve";
+const CHAMPION_ROTATE_MS = 5000;
 
 const state = {
     data: null,
@@ -40,22 +52,29 @@ const state = {
     refreshTimer: null,
     dataSignature: "",
     mode: "overall",
+    mainView: "players",
     sort: "wins",
     sortDirection: "desc",
     page: 1,
     pageSize: 20,
     query: "",
     selectedId: null,
-    view: "leaderboard",
+    view: "home",
+    profilePreviewOpen: false,
     playerTab: "overview",
     historyFilter: "overall",
-    expandedMatchIds: new Set()
+    expandedMatchIds: new Set(),
+    championMode: "battleRoyale",
+    championTimer: null,
+    championScrollTimer: null,
+    cache: emptyCache()
 };
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
     applyRoute();
     bindStaticEvents();
+    startChampionRotation();
     void loadData();
 });
 
@@ -71,6 +90,27 @@ function setupLiveConfig() {
 }
 
 function bindStaticEvents() {
+    document.addEventListener("click", (event) => {
+        const disabledLink = event.target.closest("a[aria-disabled='true']");
+        if (disabledLink) {
+            event.preventDefault();
+            return;
+        }
+
+        const button = event.target.closest("[data-route]");
+        if (button) {
+            event.preventDefault();
+            routeTo(button.dataset.route);
+            return;
+        }
+
+        const championButton = event.target.closest("[data-champion-mode]");
+        if (championButton) {
+            event.preventDefault();
+            showChampionMode(championButton.dataset.championMode, true);
+        }
+    });
+
     const search = document.getElementById("player-search");
     search.addEventListener("input", (event) => {
         state.query = event.target.value.trim().toLowerCase();
@@ -78,17 +118,27 @@ function bindStaticEvents() {
         render();
     });
 
-    document.querySelectorAll("[data-sort]").forEach((button) => {
-        button.addEventListener("click", () => setSort(button.dataset.sort));
+    document.querySelector(".leaderboard-table").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-sort]");
+        if (button) setSort(button.dataset.sort);
     });
 
     document.getElementById("leaderboard-body").addEventListener("click", (event) => {
         if (event.target.closest("a")) return;
         const row = event.target.closest("[data-player-id]");
-        if (row) routeToPlayer(row.dataset.playerId);
+        if (row) {
+            state.selectedId = row.dataset.playerId;
+            state.profilePreviewOpen = true;
+            render();
+        }
     });
 
     document.getElementById("back-to-leaderboard").addEventListener("click", () => routeToLeaderboard());
+    document.getElementById("close-profile-preview").addEventListener("click", () => {
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        render();
+    });
 
     document.getElementById("player-detail-body").addEventListener("click", (event) => {
         const tabButton = event.target.closest("[data-player-tab]");
@@ -119,23 +169,65 @@ function bindStaticEvents() {
         }
     });
 
+    const championCarousel = document.getElementById("champion-carousel");
+    championCarousel.addEventListener("scroll", () => {
+        window.clearTimeout(state.championScrollTimer);
+        state.championScrollTimer = window.setTimeout(() => {
+            const mode = championCarousel.scrollLeft > championCarousel.clientWidth * 0.5 ? "deathmatch" : "battleRoyale";
+            if (mode !== state.championMode) {
+                state.championMode = mode;
+                renderChampionControls();
+            }
+        }, 120);
+    });
+
     window.addEventListener("hashchange", () => {
         applyRoute();
         render();
     });
+
+    window.addEventListener("scroll", updateFloatingButtonPosition, { passive: true });
+}
+
+function startChampionRotation() {
+    window.clearInterval(state.championTimer);
+    state.championTimer = window.setInterval(() => {
+        if (state.view !== "home") return;
+        const nextMode = state.championMode === "battleRoyale" ? "deathmatch" : "battleRoyale";
+        showChampionMode(nextMode, true);
+    }, CHAMPION_ROTATE_MS);
 }
 
 function applyRoute() {
     const hash = window.location.hash.replace(/^#/, "");
     if (!hash) {
-        state.view = "leaderboard";
+        state.view = "home";
         return;
     }
     const params = new URLSearchParams(hash);
+    const route = params.get("view") || hash;
+    if (route === "home") {
+        state.view = "home";
+        return;
+    }
+    if (route === "leaderboards" || route === "leaderboard" || route === "weapons" || route === "maps") {
+        state.view = "leaderboard";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        const board = params.get("board") || (route === "weapons" || route === "maps" ? route : state.mainView);
+        if (MAIN_VIEWS[board]) state.mainView = board;
+        const mode = params.get("mode");
+        if (MODE_LABELS[mode]) state.mode = mode;
+        const sort = params.get("sort");
+        if (SORT_LABELS[sort]) state.sort = sort;
+        state.page = 1;
+        return;
+    }
+
     const playerId = params.get("player");
     const tab = params.get("tab");
     if (!playerId) {
-        state.view = "leaderboard";
+        state.view = "home";
         return;
     }
     state.view = "player";
@@ -147,6 +239,7 @@ function routeToPlayer(playerId, tab = state.playerTab || "overview") {
     if (!playerId) return;
     state.selectedId = playerId;
     state.view = "player";
+    state.profilePreviewOpen = false;
     state.playerTab = PLAYER_TABS[tab] ? tab : "overview";
     updatePlayerHash();
 }
@@ -159,11 +252,44 @@ function updatePlayerHash() {
     }
 }
 
-function routeToLeaderboard() {
+function routeTo(route) {
+    if (route === "home") {
+        state.view = "home";
+        state.expandedMatchIds.clear();
+        history.pushState("", document.title, window.location.pathname + window.location.search);
+        render();
+        return;
+    }
+    if (route === "weapons") {
+        routeToLeaderboard({ mainView: "weapons", mode: "overall", sort: "kills" });
+        return;
+    }
+    if (route === "maps") {
+        routeToLeaderboard({ mainView: "maps", mode: state.mode, sort: "games" });
+        return;
+    }
+    routeToLeaderboard({ mainView: "players" });
+}
+
+function routeToLeaderboard(options = {}) {
+    routeToLeaderboardWithOptions(options);
+}
+
+function routeToLeaderboardWithOptions(options) {
     state.view = "leaderboard";
     state.expandedMatchIds.clear();
-    history.pushState("", document.title, window.location.pathname + window.location.search);
-    render();
+    state.selectedId = null;
+    state.profilePreviewOpen = false;
+    if (MAIN_VIEWS[options.mainView]) state.mainView = options.mainView;
+    if (MODE_LABELS[options.mode]) state.mode = options.mode;
+    if (SORT_LABELS[options.sort]) state.sort = options.sort;
+    state.page = 1;
+    const hash = `view=leaderboards&board=${encodeURIComponent(state.mainView)}&mode=${encodeURIComponent(state.mode)}&sort=${encodeURIComponent(state.sort)}`;
+    if (window.location.hash.replace(/^#/, "") !== hash) {
+        window.location.hash = hash;
+    } else {
+        render();
+    }
 }
 
 async function loadData() {
@@ -244,15 +370,17 @@ function applyData(data, preview, dataMode) {
     state.preview = preview;
     state.dataMode = dataMode;
     state.dataSignature = signature;
+    rebuildCache();
 
-    if (previousSelectedId && profileById(previousSelectedId)) {
+    if (previousSelectedId && profileById(previousSelectedId) && (state.view === "player" || state.profilePreviewOpen)) {
         state.selectedId = previousSelectedId;
     } else {
-        state.selectedId = state.data.profiles?.[0]?.playerId || null;
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
         if (state.view === "player" && !state.selectedId) state.view = "leaderboard";
     }
 
-    const rowCount = filteredPlayers().length;
+    const rowCount = filteredLeaderboardRows().length;
     const totalPages = Math.max(1, Math.ceil(rowCount / state.pageSize));
     state.page = Math.min(state.page, totalPages);
     render();
@@ -276,9 +404,27 @@ function isStatsExport(data) {
 function exportSignature(data) {
     if (!data) return "";
     const modeParts = Object.entries(data.modes || {})
-        .map(([id, mode]) => `${id}:${mode.totalPlayers || 0}:${mode.players?.length || 0}`)
+        .map(([id, mode]) => {
+            const totals = (mode.players || []).reduce((sum, player) => {
+                const stats = normalizeStats(player.stats);
+                sum.kills += stats.kills;
+                sum.wins += stats.wins;
+                sum.games += stats.games;
+                sum.deaths += stats.deaths;
+                return sum;
+            }, { kills: 0, wins: 0, games: 0, deaths: 0 });
+            return `${id}:${mode.totalPlayers || 0}:${mode.players?.length || 0}:${totals.wins}:${totals.kills}:${totals.games}:${totals.deaths}`;
+        })
         .join(",");
-    return `${data.schemaVersion || ""}|${data.generatedAt || ""}|${data.profiles?.length || 0}|${modeParts}`;
+    const profileParts = (data.profiles || []).map((profile) => {
+        const br = normalizeStats(profile.battleRoyale?.stats);
+        const dm = normalizeStats(profile.deathmatch?.stats);
+        const last = (profile.recentMatches || [])[0]?.endedAt || "";
+        return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${dm.games}:${dm.kills}:${dm.wins}:${profile.recentMatches?.length || 0}:${last}`;
+    }).join(",");
+    const live = data.liveStatus || {};
+    const livePart = `${live.onlinePlayers ?? ""}:${live.state ?? ""}:${live.mode ?? ""}:${live.mapId ?? ""}:${live.redScore ?? ""}:${live.blueScore ?? ""}:${live.matchPlayers ?? ""}:${live.alivePlayers ?? ""}:${live.teamMode ?? ""}`;
+    return `${data.schemaVersion || ""}|${data.generatedAt || ""}|${data.profiles?.length || 0}|${modeParts}|${profileParts}|${livePart}`;
 }
 
 function hasTrackedPlayers(data) {
@@ -299,24 +445,271 @@ function emptyExport() {
     };
 }
 
+function emptyCache() {
+    return {
+        profiles: [],
+        profileMap: new Map(),
+        overallMode: { id: "overall", label: "Overall", totalPlayers: 0, players: [] },
+        overallById: new Map(),
+        weaponsByMode: { overall: [], battleRoyale: [], deathmatch: [] },
+        maps: [],
+        lastMatch: null
+    };
+}
+
+function rebuildCache() {
+    const profiles = Array.isArray(state.data?.profiles) ? state.data.profiles : [];
+    const overallPlayers = profiles.map(buildOverallPlayer).filter(Boolean);
+    applyRanks(overallPlayers);
+
+    state.cache = {
+        profiles,
+        profileMap: new Map(profiles.map((profile) => [profile.playerId, profile])),
+        overallMode: {
+            id: "overall",
+            label: "Overall",
+            totalPlayers: overallPlayers.length,
+            players: overallPlayers
+        },
+        overallById: new Map(overallPlayers.map((player) => [player.playerId, player])),
+        weaponsByMode: {
+            overall: aggregateWeapons(profiles, "overall"),
+            battleRoyale: aggregateWeapons(profiles, "battleRoyale"),
+            deathmatch: aggregateWeapons(profiles, "deathmatch")
+        },
+        maps: aggregateDeathmatchMaps(profiles),
+        lastMatch: findLastMatch(profiles)
+    };
+}
+
 function render() {
+    renderHeroStatus();
+    renderTopNav();
+    renderHome();
+    renderMainViewTabs();
     renderModeTabs();
-    renderSortHeaders();
     renderSummary();
     renderTable();
+    renderSortHeaders();
     renderProfilePreview();
     renderRoute();
 }
 
 function renderRoute() {
-    document.querySelector(".dashboard").classList.toggle("hidden", state.view !== "leaderboard");
+    document.body.classList.toggle("home-route", state.view === "home");
+    document.getElementById("home-view").classList.toggle("hidden", state.view !== "home");
+    const dashboard = document.querySelector(".dashboard");
+    dashboard.classList.toggle("hidden", state.view !== "leaderboard");
+    dashboard.classList.toggle("profile-closed", state.view === "leaderboard" && !state.profilePreviewOpen);
     document.getElementById("player-view").classList.toggle("hidden", state.view !== "player");
+    updateFloatingButtonPosition();
     if (state.view === "player") renderPlayerDetail();
+}
+
+function updateFloatingButtonPosition() {
+    const compact = state.view === "home" && window.scrollY > 90;
+    document.body.classList.toggle("home-scrolled", compact);
+    if (state.view !== "home") document.body.classList.remove("home-scrolled");
+}
+
+function renderTopNav() {
+    const floatingButton = document.querySelector(".tracker-float");
+    if (floatingButton) {
+        const onHome = state.view === "home";
+        floatingButton.textContent = onHome ? "Tracker" : "Hub";
+        floatingButton.dataset.route = onHome ? "leaderboard" : "home";
+    }
+}
+
+function renderHome() {
+    renderHomeLatestMatch();
+    renderFeaturedList("battleRoyale", document.getElementById("featured-battle-royale"));
+    renderFeaturedList("deathmatch", document.getElementById("featured-deathmatch"));
+    renderChampionControls();
+    window.requestAnimationFrame(() => syncChampionScroll(false));
+}
+
+function renderHomeLatestMatch() {
+    const container = document.getElementById("home-latest-match");
+    const match = state.cache.lastMatch;
+    if (!match) {
+        container.innerHTML = `
+            <div class="latest-empty">
+                <strong>No games have been played yet</strong>
+                <span>The latest match card will appear after the next completed round.</span>
+            </div>
+        `;
+        return;
+    }
+
+    const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
+    const players = number(match.playerCount);
+    const winner = matchWinnerText(match);
+    const score = match.mode === "deathmatch" && hasMatchScore(match)
+        ? `<span>Final score Red ${escapeHtml(String(match.redScore))} - ${escapeHtml(String(match.blueScore))} Blue</span>`
+        : "";
+
+    container.innerHTML = `
+        <div class="latest-match-card">
+            <strong>${escapeHtml(mode)}</strong>
+            <time datetime="${escapeHtml(match.endedAt || "")}" title="${escapeHtml(formatFullLocalDate(match.endedAt))}">${escapeHtml(formatCompactDate(match.endedAt))}</time>
+            <div class="latest-match-meta">
+                <span>${players} ${players === 1 ? "player" : "players"}</span>
+                ${winner ? `<span>${escapeHtml(winner)}</span>` : ""}
+                ${score}
+            </div>
+        </div>
+    `;
+}
+
+function renderFeaturedList(modeId, container) {
+    if (!container) return;
+    const rows = featuredPlayers(modeId);
+    if (rows.length === 0) {
+        container.innerHTML = `<p class="mode-empty">No games have been played yet.</p>`;
+        return;
+    }
+
+    container.innerHTML = rows.map((player, index) => renderFeaturedPlayer(player, index + 1, modeId)).join("");
+}
+
+function renderFeaturedPlayer(player, rank, modeId) {
+    const stats = normalizeStats(player.stats);
+    const derived = normalizeDerived(player.derived, stats);
+    const profile = profileById(player.playerId);
+    const name = player.name || profile?.name || "Unknown";
+    const skinUrl = playerSkinUrl(player, profile, 96);
+    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 96);
+    const modeTab = modeId === "deathmatch" ? "deathmatch" : "battleRoyale";
+
+    return `
+        <a class="featured-player podium-rank-${rank}" href="#player=${encodeURIComponent(player.playerId)}&tab=${encodeURIComponent(modeTab)}">
+            <img src="${escapeHtml(skinUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+            <div class="featured-player-main">
+                <div>
+                    <span class="rank-badge rank-${Math.min(rank, 3)}">${rank}</span>
+                    <strong>${escapeHtml(name)}</strong>
+                </div>
+                <small>${stats.wins} wins - ${stats.kills} kills - ${stats.games} games</small>
+            </div>
+            <div class="featured-player-stat">
+                <strong>${formatPercent(derived.winRate)}</strong>
+                <span>WR</span>
+            </div>
+        </a>
+    `;
+}
+
+function renderChampionControls() {
+    document.querySelectorAll("[data-champion-mode]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.championMode === state.championMode);
+    });
+    const fullBoard = document.getElementById("champion-full-board");
+    if (fullBoard) {
+        fullBoard.href = `#view=leaderboards&mode=${encodeURIComponent(state.championMode)}&board=players&sort=wins`;
+    }
+}
+
+function showChampionMode(modeId, smooth) {
+    if (modeId !== "battleRoyale" && modeId !== "deathmatch") return;
+    state.championMode = modeId;
+    renderChampionControls();
+    syncChampionScroll(smooth);
+}
+
+function syncChampionScroll(smooth) {
+    const carousel = document.getElementById("champion-carousel");
+    if (!carousel) return;
+    const panel = carousel.querySelector(`[data-champion-panel="${state.championMode}"]`);
+    const left = panel ? panel.offsetLeft - carousel.offsetLeft : 0;
+    carousel.scrollTo({
+        left,
+        behavior: smooth ? "smooth" : "auto"
+    });
+}
+
+function renderHeroStatus() {
+    const totalPlayers = state.cache.overallMode.players.length;
+    document.getElementById("hero-player-count").textContent = String(totalPlayers);
+    renderLiveStatus();
+
+    const lastMatch = state.cache.lastMatch;
+    const lastGame = document.getElementById("last-game-played");
+    if (!lastMatch) {
+        lastGame.textContent = "Waiting for games";
+        return;
+    }
+
+    const mode = compactModeLabel(lastMatch.modeLabel || MODE_LABELS[lastMatch.mode] || "Match");
+    const date = formatCompactDate(lastMatch.endedAt);
+    lastGame.innerHTML = `<span class="status-mode">${escapeHtml(mode)}</span><time datetime="${escapeHtml(lastMatch.endedAt || "")}" title="${escapeHtml(formatFullLocalDate(lastMatch.endedAt))}">${escapeHtml(date)}</time>`;
+}
+
+function renderLiveStatus() {
+    const status = state.data?.liveStatus;
+    const online = document.getElementById("online-player-count");
+    const serverStatus = document.getElementById("server-status");
+    if (!status || isExportStale()) {
+        online.textContent = "Offline";
+        serverStatus.textContent = "Server offline";
+        return;
+    }
+
+    online.textContent = String(number(status.onlinePlayers));
+    serverStatus.textContent = liveStatusText(status);
+}
+
+function liveStatusText(status) {
+    if (!status || status.state === "idle") return "Idle";
+    if (status.mode === "deathmatch") {
+        const map = status.mapName || status.mapId || "Unknown map";
+        const red = Number.isFinite(Number(status.redScore)) ? Number(status.redScore) : 0;
+        const blue = Number.isFinite(Number(status.blueScore)) ? Number(status.blueScore) : 0;
+        return `Deathmatch - ${map} - ${red}-${blue}`;
+    }
+    if (status.mode === "battleRoyale") {
+        const teamMode = status.teamMode || "Solo";
+        const stateLabel = status.state === "preparing" ? "Preparing" : "Running";
+        const alive = number(status.alivePlayers);
+        const players = number(status.matchPlayers);
+        const countText = alive > 0 ? `${alive}/${players || alive} alive` : `${players} players`;
+        return `Battle Royale - ${stateLabel} - ${teamMode} - ${countText}`;
+    }
+    return status.label || "Idle";
+}
+
+function isExportStale() {
+    const generated = dateValue(state.data?.generatedAt);
+    if (!generated) return false;
+    return Date.now() - generated > 90000;
+}
+
+function renderMainViewTabs() {
+    const container = document.getElementById("main-view-tabs");
+    container.innerHTML = "";
+    for (const [viewId, label] of Object.entries(MAIN_VIEWS)) {
+        const button = createPill(label, state.mainView === viewId, () => {
+            state.mainView = viewId;
+            state.selectedId = null;
+            state.profilePreviewOpen = false;
+            state.page = 1;
+            state.query = "";
+            document.getElementById("player-search").value = "";
+            if (viewId === "players") state.sort = "wins";
+            if (viewId === "weapons") state.sort = "kills";
+            if (viewId === "maps") state.sort = "games";
+            state.sortDirection = "desc";
+            render();
+        });
+        button.classList.add("tab-pill");
+        container.appendChild(button);
+    }
 }
 
 function renderModeTabs() {
     const container = document.getElementById("mode-tabs");
     container.innerHTML = "";
+    container.classList.toggle("hidden", state.mainView === "maps");
     for (const modeId of Object.keys(MODE_LABELS)) {
         const button = createPill(MODE_LABELS[modeId], state.mode === modeId, () => {
             state.mode = modeId;
@@ -326,7 +719,12 @@ function renderModeTabs() {
         button.classList.add("tab-pill");
         container.appendChild(button);
     }
-    document.getElementById("leaderboard-title").textContent = `${MODE_LABELS[state.mode]} ranking`;
+    const title = state.mainView === "players"
+        ? `${MODE_LABELS[state.mode]} ranking`
+        : state.mainView === "weapons"
+            ? `${MODE_LABELS[state.mode]} weapon stats`
+            : "Deathmatch map stats";
+    document.getElementById("leaderboard-title").textContent = title;
 }
 
 function renderSortHeaders() {
@@ -344,23 +742,45 @@ function renderSortHeaders() {
 }
 
 function renderSummary() {
-    const mode = currentMode();
-    const players = mode.players || [];
     const count = document.getElementById("leaderboard-count");
-    const noun = players.length === 1 ? "player" : "players";
+    const rows = currentLeaderboardRows();
+    const search = document.getElementById("player-search");
+    search.placeholder = state.mainView === "weapons"
+        ? "Weapon name"
+        : state.mainView === "maps"
+            ? "Map name"
+            : "Player name";
+
+    if (state.mainView === "weapons") {
+        const noun = rows.length === 1 ? "weapon" : "weapons";
+        const modeLabel = state.mode === "overall" ? "across all modes" : `in ${MODE_LABELS[state.mode]}`;
+        count.textContent = `${rows.length} tracked ${noun} ${modeLabel}`;
+        return;
+    }
+
+    if (state.mainView === "maps") {
+        const noun = rows.length === 1 ? "map" : "maps";
+        count.textContent = `${rows.length} tracked Deathmatch ${noun}`;
+        return;
+    }
+
+    const noun = rows.length === 1 ? "player" : "players";
     const modeLabel = state.mode === "overall" ? "across all modes" : `in ${MODE_LABELS[state.mode]}`;
-    count.textContent = `${players.length} tracked ${noun} ${modeLabel}`;
+    count.textContent = `${rows.length} tracked ${noun} ${modeLabel}`;
 }
 
 function renderTable() {
-    const rows = filteredPlayers();
+    const rows = filteredLeaderboardRows();
     const body = document.getElementById("leaderboard-body");
     const empty = document.getElementById("empty-state");
     const wrap = document.querySelector(".table-wrap");
+    const head = document.querySelector(".leaderboard-table thead");
 
     body.innerHTML = "";
+    head.innerHTML = renderTableHead();
 
     if (rows.length === 0) {
+        empty.querySelector("h3").textContent = emptyStateText();
         empty.classList.remove("hidden");
         wrap.classList.add("hidden");
         renderPagination(0, 0);
@@ -372,6 +792,18 @@ function renderTable() {
 
     const start = (state.page - 1) * state.pageSize;
     const pageRows = rows.slice(start, start + state.pageSize);
+    if (state.mainView === "weapons") {
+        pageRows.forEach((entry, index) => body.appendChild(renderWeaponLeaderboardRow(entry, start + index + 1)));
+        renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+        return;
+    }
+
+    if (state.mainView === "maps") {
+        pageRows.forEach((entry, index) => body.appendChild(renderMapLeaderboardRow(entry, start + index + 1)));
+        renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+        return;
+    }
+
     pageRows.forEach((player, index) => {
         const displayRank = start + index + 1;
         const stats = normalizeStats(player.stats);
@@ -402,6 +834,97 @@ function renderTable() {
     });
 
     renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+}
+
+function renderTableHead() {
+    if (state.mainView === "weapons") {
+        return `
+            <tr>
+                <th>#</th>
+                <th>Weapon</th>
+                <th><button class="sort-header" type="button" data-sort="kills">Kills <span data-sort-indicator="kills"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="hits">Hits <span data-sort-indicator="hits"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="headshotRate">HS% <span data-sort-indicator="headshotRate"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="headshotKills">HS Kills <span data-sort-indicator="headshotKills"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="utilityKills">Utility <span data-sort-indicator="utilityKills"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="vehicleKills">Vehicle <span data-sort-indicator="vehicleKills"></span></button></th>
+            </tr>
+        `;
+    }
+
+    if (state.mainView === "maps") {
+        return `
+            <tr>
+                <th>#</th>
+                <th>Map</th>
+                <th><button class="sort-header" type="button" data-sort="games">Games <span data-sort-indicator="games"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="kills">Kills <span data-sort-indicator="kills"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="avgKills">Avg K <span data-sort-indicator="avgKills"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="deaths">Deaths <span data-sort-indicator="deaths"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="kdRatio">KD <span data-sort-indicator="kdRatio"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="headshotRate">HS% <span data-sort-indicator="headshotRate"></span></button></th>
+                <th><button class="sort-header" type="button" data-sort="playtimeSeconds">Playtime <span data-sort-indicator="playtimeSeconds"></span></button></th>
+            </tr>
+        `;
+    }
+
+    return `
+        <tr>
+            <th>#</th>
+            <th>Player</th>
+            <th><button class="sort-header" type="button" data-sort="wins">Wins <span data-sort-indicator="wins"></span></button></th>
+            <th><button class="sort-header" type="button" data-sort="kills">Kills <span data-sort-indicator="kills"></span></button></th>
+            <th><button class="sort-header" type="button" data-sort="games">Games <span data-sort-indicator="games"></span></button></th>
+            <th><button class="sort-header" type="button" data-sort="deaths">Deaths <span data-sort-indicator="deaths"></span></button></th>
+            <th><button class="sort-header" type="button" data-sort="winRate">Win Rate <span data-sort-indicator="winRate"></span></button></th>
+            <th><button class="sort-header" type="button" data-sort="avgKills">Avg K <span data-sort-indicator="avgKills"></span></button></th>
+            <th><button class="sort-header" type="button" data-sort="playtimeSeconds">Playtime <span data-sort-indicator="playtimeSeconds"></span></button></th>
+            <th><button class="sort-header" type="button" data-sort="headshotRate">HS% <span data-sort-indicator="headshotRate"></span></button></th>
+            <th><button class="sort-header" type="button" data-sort="kdRatio">KD <span data-sort-indicator="kdRatio"></span></button></th>
+        </tr>
+    `;
+}
+
+function renderWeaponLeaderboardRow(entry, rank) {
+    const stats = normalizeStats(entry.stats);
+    const derived = normalizeDerived(entry.derived, stats);
+    const label = weaponLabel(entry);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+        <td><span class="rank-badge rank-${Math.min(rank, 3)}">${rank}</span></td>
+        <td><strong>${escapeHtml(label)}</strong></td>
+        <td>${stats.kills}</td>
+        <td>${stats.hits}</td>
+        <td>${formatPercent(derived.headshotRate)}</td>
+        <td>${stats.headshotKills}</td>
+        <td>${stats.utilityKills}</td>
+        <td>${stats.vehicleKills}</td>
+    `;
+    return tr;
+}
+
+function renderMapLeaderboardRow(entry, rank) {
+    const stats = normalizeStats(entry.stats);
+    const derived = normalizeDerived(entry.derived, stats);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+        <td><span class="rank-badge rank-${Math.min(rank, 3)}">${rank}</span></td>
+        <td><strong>${escapeHtml(entry.label || entry.id || "Unknown")}</strong></td>
+        <td>${stats.games}</td>
+        <td>${stats.kills}</td>
+        <td>${formatNumber(derived.avgKills)}</td>
+        <td>${stats.deaths}</td>
+        <td>${formatNumber(derived.kdRatio)}</td>
+        <td>${formatPercent(derived.headshotRate)}</td>
+        <td>${formatDuration(stats.playtimeSeconds)}</td>
+    `;
+    return tr;
+}
+
+function emptyStateText() {
+    if (state.mainView === "weapons") return "No weapon stats have been tracked yet";
+    if (state.mainView === "maps") return "No Deathmatch map stats have been tracked yet";
+    return "No games have been played yet";
 }
 
 function renderPagination(totalRows, totalPages) {
@@ -452,7 +975,16 @@ function renderProfilePreview() {
     }
 
     const overall = buildProfileOverall(profile);
+    const skinUrl = playerSkinUrl(profile, profile, 96);
+    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 96);
     container.innerHTML = `
+        <div class="profile-preview-head">
+            <img src="${escapeHtml(skinUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+            <div>
+                <span>Selected Player</span>
+                <strong>${escapeHtml(profile.name || "Unknown")}</strong>
+            </div>
+        </div>
         <button class="primary-action" type="button" id="open-full-profile">Open Full Profile</button>
         ${renderModeBlock("Overall", overall, { compact: true })}
         ${renderModeBlock("Battle Royale", profile.battleRoyale, { compact: true })}
@@ -763,7 +1295,8 @@ function renderBreakdownRow(entry) {
 }
 
 function renderWeaponTable(title, weapons) {
-    if (!weapons || weapons.length === 0) return "";
+    const rows = cleanWeaponEntries(weapons);
+    if (rows.length === 0) return "";
     return `
         <section class="detail-section">
             <h3>${escapeHtml(title)}</h3>
@@ -777,7 +1310,7 @@ function renderWeaponTable(title, weapons) {
                     <span>Utility</span>
                     <span>Vehicle</span>
                 </div>
-                ${weapons.map(renderWeaponRow).join("")}
+                ${rows.map(renderWeaponRow).join("")}
             </div>
         </section>
     `;
@@ -788,7 +1321,7 @@ function renderWeaponRow(entry) {
     const derived = normalizeDerived(entry.derived, stats);
     return `
         <article class="weapon-row">
-            <strong>${escapeHtml(entry.label)}</strong>
+            <strong>${escapeHtml(weaponLabel(entry))}</strong>
             <span>${stats.kills}</span>
             <span>${stats.hits}</span>
             <span>${formatPercent(derived.headshotRate)}</span>
@@ -815,11 +1348,21 @@ function renderEmptyDetail(text) {
     return `<section class="detail-section"><p class="mode-empty">${escapeHtml(text)}</p></section>`;
 }
 
-function filteredPlayers() {
-    const players = [...(currentMode().players || [])];
-    players.sort(comparePlayers(state.sort));
-    if (!state.query) return players;
-    return players.filter((player) => player.name.toLowerCase().includes(state.query));
+function filteredLeaderboardRows() {
+    const rows = [...currentLeaderboardRows()];
+    rows.sort(comparePlayers(state.sort));
+    if (!state.query) return rows;
+    return rows.filter((row) => rowSearchText(row).includes(state.query));
+}
+
+function currentLeaderboardRows() {
+    if (state.mainView === "weapons") return state.cache.weaponsByMode[state.mode] || [];
+    if (state.mainView === "maps") return state.cache.maps;
+    return currentMode().players || [];
+}
+
+function rowSearchText(row) {
+    return String(row.name || row.label || row.id || "").toLowerCase();
 }
 
 function currentMode() {
@@ -828,14 +1371,7 @@ function currentMode() {
 }
 
 function buildOverallMode() {
-    const players = (state.data?.profiles || []).map(buildOverallPlayer).filter(Boolean);
-    applyRanks(players);
-    return {
-        id: "overall",
-        label: "Overall",
-        totalPlayers: players.length,
-        players
-    };
+    return state.cache.overallMode || emptyCache().overallMode;
 }
 
 function buildOverallPlayer(profile) {
@@ -852,11 +1388,7 @@ function buildOverallPlayer(profile) {
 }
 
 function buildProfileOverall(profile) {
-    const player = buildOverallPlayer(profile);
-    if (!player) return null;
-    const overall = buildOverallMode();
-    const ranked = overall.players.find((entry) => entry.playerId === player.playerId);
-    return ranked || player;
+    return state.cache.overallById.get(profile?.playerId) || buildOverallPlayer(profile);
 }
 
 function combineStats(...statsList) {
@@ -951,15 +1483,16 @@ function combinedWeapons(profile) {
         ...(profile.battleRoyale?.details?.weapons || []),
         ...(profile.deathmatch?.details?.weapons || [])
     ]) {
-        if (!entry?.id) continue;
-        const current = merged.get(entry.id) || {
-            id: entry.id,
-            label: entry.label,
+        const normalized = normalizeWeaponEntry(entry);
+        if (!normalized) continue;
+        const current = merged.get(normalized.id) || {
+            id: normalized.id,
+            label: normalized.label,
             stats: normalizeStats(null)
         };
-        current.stats = combineStats(current.stats, entry.stats);
+        current.stats = combineStats(current.stats, normalized.stats);
         current.derived = derivedFromStats(current.stats);
-        merged.set(entry.id, current);
+        merged.set(normalized.id, current);
     }
     return [...merged.values()].sort((a, b) => {
         const kills = normalizeStats(b.stats).kills - normalizeStats(a.stats).kills;
@@ -968,14 +1501,128 @@ function combinedWeapons(profile) {
     });
 }
 
+function aggregateWeapons(profiles, mode) {
+    const merged = new Map();
+    for (const profile of profiles) {
+        const sources = mode === "battleRoyale"
+            ? [profile.battleRoyale?.details?.weapons || []]
+            : mode === "deathmatch"
+                ? [profile.deathmatch?.details?.weapons || []]
+                : [profile.battleRoyale?.details?.weapons || [], profile.deathmatch?.details?.weapons || []];
+
+        for (const entries of sources) {
+            for (const entry of entries) {
+                const normalized = normalizeWeaponEntry(entry);
+                if (!normalized) continue;
+                const current = merged.get(normalized.id) || {
+                    id: normalized.id,
+                    label: normalized.label,
+                    stats: normalizeStats(null)
+                };
+                current.stats = combineStats(current.stats, normalized.stats);
+                current.derived = derivedFromStats(current.stats);
+                merged.set(normalized.id, current);
+            }
+        }
+    }
+
+    return [...merged.values()].sort(comparePlayersBy("kills", "desc"));
+}
+
+function cleanWeaponEntries(entries) {
+    return (entries || []).map(normalizeWeaponEntry).filter(Boolean);
+}
+
+function normalizeWeaponEntry(entry) {
+    if (!entry) return null;
+    const id = String(entry.id || entry.label || "").trim();
+    if (!id) return null;
+    const lowerId = id.toLowerCase();
+    const lowerLabel = String(entry.label || "").trim().toLowerCase();
+    if (lowerId.endsWith(":bullet") || lowerLabel === "bullet") return null;
+    return {
+        ...entry,
+        id,
+        label: weaponLabel(entry),
+        stats: normalizeStats(entry.stats),
+        derived: normalizeDerived(entry.derived, normalizeStats(entry.stats))
+    };
+}
+
+function weaponLabel(entry) {
+    const id = String(entry?.id || "").toLowerCase();
+    if (id === "minecraft:player") return "Melee";
+    const label = String(entry?.label || "").trim();
+    if (!label || label.toLowerCase() === "bullet") return labelFromIdentifier(entry?.id || "Unknown");
+    return label;
+}
+
+function labelFromIdentifier(value) {
+    const tail = String(value || "Unknown").split(":").pop().replaceAll("-", "_");
+    return tail.split("_").filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") || "Unknown";
+}
+
+function aggregateDeathmatchMaps(profiles) {
+    const merged = new Map();
+    for (const profile of profiles) {
+        for (const entry of profile.deathmatch?.details?.deathmatchMaps || []) {
+            const id = entry?.id || entry?.label;
+            if (!id) continue;
+            const current = merged.get(id) || {
+                id,
+                label: entry.label || id,
+                stats: normalizeStats(null)
+            };
+            current.stats = combineStats(current.stats, entry.stats);
+            current.derived = derivedFromStats(current.stats);
+            merged.set(id, current);
+        }
+    }
+    return [...merged.values()].sort(comparePlayersBy("games", "desc"));
+}
+
 function filteredHistory(profile, mode) {
     const matches = profile?.recentMatches || [];
     if (mode === "overall") return matches;
     return matches.filter((match) => match.mode === mode);
 }
 
+function findLastMatch(profiles) {
+    const matches = new Map();
+    for (const profile of profiles) {
+        for (const match of profile.recentMatches || []) {
+            const key = match.matchId || `${match.mode || "match"}-${match.endedAt || ""}`;
+            const current = matches.get(key);
+            if (!current || dateValue(match.endedAt) > dateValue(current.endedAt)) matches.set(key, match);
+        }
+    }
+    return [...matches.values()].sort((a, b) => dateValue(b.endedAt) - dateValue(a.endedAt))[0] || null;
+}
+
+function featuredPlayers(modeId) {
+    const players = state.data?.modes?.[modeId]?.players || [];
+    return [...players]
+        .filter((player) => normalizeStats(player.stats).games > 0)
+        .sort(comparePlayersBy("wins", "desc"))
+        .slice(0, 5);
+}
+
+function matchWinnerText(match) {
+    if (!match) return "";
+    const winner = (match.participants || []).find((player) => player.won);
+    if (winner?.name) return `Winner: ${winner.name}`;
+    if (match.mode === "battleRoyale" && match.won) return "Winner recorded";
+    if (match.mode === "deathmatch" && hasMatchScore(match)) {
+        const red = number(match.redScore);
+        const blue = number(match.blueScore);
+        if (red === blue) return "Draw";
+        return red > blue ? "Red won" : "Blue won";
+    }
+    return "";
+}
+
 function profileById(playerId) {
-    return (state.data?.profiles || []).find((entry) => entry.playerId === playerId) || null;
+    return state.cache.profileMap.get(playerId) || null;
 }
 
 function applyRanks(players) {
@@ -999,7 +1646,7 @@ function comparePlayersBy(sort, directionId) {
         if (secondary !== 0) return secondary;
         const tertiary = normalizeStats(b.stats).kills - normalizeStats(a.stats).kills;
         if (tertiary !== 0) return tertiary;
-        return a.name.localeCompare(b.name);
+        return rowSearchText(a).localeCompare(rowSearchText(b));
     };
 }
 
@@ -1023,6 +1670,14 @@ function sortValue(player, sort) {
             return derived.headshotRate;
         case "kdRatio":
             return derived.kdRatio;
+        case "hits":
+            return stats.hits;
+        case "headshotKills":
+            return stats.headshotKills;
+        case "utilityKills":
+            return stats.utilityKills;
+        case "vehicleKills":
+            return stats.vehicleKills;
         case "wins":
         default:
             return stats.wins;
@@ -1070,6 +1725,11 @@ function pageWindow(totalPages, currentPage, radius) {
 
 function number(value) {
     return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function dateValue(value) {
+    const time = value ? new Date(value).getTime() : 0;
+    return Number.isFinite(time) ? time : 0;
 }
 
 function rate(part, total) {
@@ -1132,6 +1792,17 @@ function formatShortDate(value) {
     });
 }
 
+function formatCompactDate(value) {
+    if (!value) return "TBD";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleDateString(undefined, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit"
+    });
+}
+
 function formatFullLocalDate(value) {
     if (!value) return "Unknown time";
     const date = new Date(value);
@@ -1147,8 +1818,25 @@ function formatFullLocalDate(value) {
     });
 }
 
+function compactModeLabel(value) {
+    const text = String(value || "").toLowerCase();
+    if (text.includes("battle")) return "BR";
+    if (text.includes("death")) return "DM";
+    return value || "Match";
+}
+
 function viewerTimeZoneLabel() {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "your timezone";
+}
+
+function playerSkinUrl(player, profile, size) {
+    return skinHeadUrl(player?.name || profile?.name || DEFAULT_SKIN_NAME, size);
+}
+
+function skinHeadUrl(name, size) {
+    const safeName = String(name || DEFAULT_SKIN_NAME).trim() || DEFAULT_SKIN_NAME;
+    const safeSize = Math.max(16, Math.min(256, Math.round(number(size) || 96)));
+    return `https://api.mcheads.org/head/${encodeURIComponent(safeName)}/${safeSize}`;
 }
 
 function escapeHtml(value) {
