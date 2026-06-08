@@ -38,6 +38,7 @@ const MAIN_VIEWS = {
 const DEFAULT_API_POLL_MS = 10000;
 const DEFAULT_SKIN_NAME = "Steve";
 const CHAMPION_ROTATE_MS = 5000;
+const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64, 103, 109, 97, 105, 108, 46, 99, 111, 109];
 
 const state = {
     data: null,
@@ -108,6 +109,13 @@ function bindStaticEvents() {
         if (championButton) {
             event.preventDefault();
             showChampionMode(championButton.dataset.championMode, true);
+            return;
+        }
+
+        const contactButton = event.target.closest("[data-contact-email]");
+        if (contactButton) {
+            event.preventDefault();
+            openContactEmail();
         }
     });
 
@@ -1837,6 +1845,12 @@ function skinHeadUrl(name, size) {
     const safeName = String(name || DEFAULT_SKIN_NAME).trim() || DEFAULT_SKIN_NAME;
     const safeSize = Math.max(16, Math.min(256, Math.round(number(size) || 96)));
     return `https://api.mcheads.org/head/${encodeURIComponent(safeName)}/${safeSize}`;
+}
+
+function openContactEmail() {
+    const email = String.fromCharCode(...CONTACT_EMAIL_CODES);
+    const subject = encodeURIComponent("Call of Block");
+    window.location.href = `mailto:${email}?subject=${subject}`;
 }
 
 function escapeHtml(value) {
