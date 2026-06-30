@@ -68,6 +68,7 @@ const state = {
     championMode: "battleRoyale",
     championTimer: null,
     championScrollTimer: null,
+    pendingScrollTarget: "",
     cache: emptyCache()
 };
 
@@ -218,6 +219,17 @@ function applyRoute() {
         state.view = "home";
         return;
     }
+    if (route === "help") {
+        state.view = "home";
+        state.pendingScrollTarget = "help";
+        return;
+    }
+    if (route === "admin-help") {
+        state.view = "adminHelp";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        return;
+    }
     if (route === "leaderboards" || route === "leaderboard" || route === "weapons" || route === "maps") {
         state.view = "leaderboard";
         state.selectedId = null;
@@ -265,6 +277,21 @@ function routeTo(route) {
         state.view = "home";
         state.expandedMatchIds.clear();
         history.pushState("", document.title, window.location.pathname + window.location.search);
+        render();
+        return;
+    }
+    if (route === "help") {
+        state.view = "home";
+        state.pendingScrollTarget = "help";
+        window.location.hash = "help";
+        render();
+        return;
+    }
+    if (route === "admin-help") {
+        state.view = "adminHelp";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        window.location.hash = "admin-help";
         render();
         return;
     }
@@ -506,12 +533,20 @@ function render() {
 function renderRoute() {
     document.body.classList.toggle("home-route", state.view === "home");
     document.getElementById("home-view").classList.toggle("hidden", state.view !== "home");
+    document.getElementById("admin-help-view").classList.toggle("hidden", state.view !== "adminHelp");
     const dashboard = document.querySelector(".dashboard");
     dashboard.classList.toggle("hidden", state.view !== "leaderboard");
     dashboard.classList.toggle("profile-closed", state.view === "leaderboard" && !state.profilePreviewOpen);
     document.getElementById("player-view").classList.toggle("hidden", state.view !== "player");
     updateFloatingButtonPosition();
     if (state.view === "player") renderPlayerDetail();
+    if (state.view === "home" && state.pendingScrollTarget) {
+        const targetId = state.pendingScrollTarget;
+        state.pendingScrollTarget = "";
+        window.requestAnimationFrame(() => {
+            document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    }
 }
 
 function updateFloatingButtonPosition() {
@@ -657,23 +692,37 @@ function renderLiveStatus() {
     const status = state.data?.liveStatus;
     const online = document.getElementById("online-player-count");
     const serverStatus = document.getElementById("server-status");
+    const detail = document.getElementById("server-status-detail");
     if (!status || isExportStale()) {
         online.textContent = "Offline";
         serverStatus.textContent = "Server offline";
+        if (detail) detail.textContent = state.data?.generatedAt ? `Last export ${formatCompactDate(state.data.generatedAt)}` : "No live export yet";
         return;
     }
 
     online.textContent = String(number(status.onlinePlayers));
-    serverStatus.textContent = liveStatusText(status);
+    serverStatus.textContent = liveStatusHeadline(status);
+    if (detail) detail.textContent = liveStatusText(status);
+}
+
+function liveStatusHeadline(status) {
+    if (!status || status.state === "idle") return "Idle";
+    if (status.mode === "deathmatch") return status.state === "ending" ? "DM ending" : "DM live";
+    if (status.mode === "battleRoyale") {
+        if (status.state === "preparing") return "BR preparing";
+        return status.state === "ending" ? "BR ending" : "BR live";
+    }
+    return status.label || "Idle";
 }
 
 function liveStatusText(status) {
-    if (!status || status.state === "idle") return "Idle";
+    if (!status || status.state === "idle") return "Waiting for the next match";
     if (status.mode === "deathmatch") {
         const map = status.mapName || status.mapId || "Unknown map";
         const red = Number.isFinite(Number(status.redScore)) ? Number(status.redScore) : 0;
         const blue = Number.isFinite(Number(status.blueScore)) ? Number(status.blueScore) : 0;
-        return `Deathmatch - ${map} - ${red}-${blue}`;
+        const players = number(status.matchPlayers);
+        return `${map} - Red ${red} / Blue ${blue}${players ? ` - ${players} players` : ""}`;
     }
     if (status.mode === "battleRoyale") {
         const teamMode = status.teamMode || "Solo";
@@ -681,7 +730,7 @@ function liveStatusText(status) {
         const alive = number(status.alivePlayers);
         const players = number(status.matchPlayers);
         const countText = alive > 0 ? `${alive}/${players || alive} alive` : `${players} players`;
-        return `Battle Royale - ${stateLabel} - ${teamMode} - ${countText}`;
+        return `${stateLabel} - ${teamMode} - ${countText}`;
     }
     return status.label || "Idle";
 }
