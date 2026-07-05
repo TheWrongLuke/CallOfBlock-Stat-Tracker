@@ -1,6 +1,7 @@
 import { Events } from "discord.js";
 import { config } from "./config.js";
 import { createDiscordClient } from "./discord-client.js";
+import { bindLinkInteractions, registerLinkCommands } from "./linking.js";
 import { createLogger } from "./logger.js";
 import { startPollers } from "./pollers.js";
 import { loadState, saveState } from "./state-store.js";
@@ -13,8 +14,15 @@ const state = await loadState(config, logger);
 
 let stopPollers = null;
 
-client.once(Events.ClientReady, (readyClient) => {
+bindLinkInteractions({ client, config, state, logger });
+
+client.once(Events.ClientReady, async (readyClient) => {
   logger.info(`Logged in as ${readyClient.user.tag}`);
+  try {
+    await registerLinkCommands(client, config, logger);
+  } catch (error) {
+    logger.warn("Could not register Discord slash commands:", error.message);
+  }
   stopPollers = startPollers({ client, config, supabase, state, logger });
 });
 

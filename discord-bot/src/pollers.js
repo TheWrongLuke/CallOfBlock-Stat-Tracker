@@ -2,6 +2,7 @@ import { EmbedBuilder, Routes } from "discord.js";
 import { sendChannelMessage } from "./discord-client.js";
 import { discordTimestamp, formatShortRange, formatTimeRange, mentionUser, statusLabel, trimForDiscord } from "./format.js";
 import { hasLeaderboardRoleSyncConfig, syncLeaderboardRoles } from "./leaderboard-roles.js";
+import { hasMinecraftLinkingConfig, pollMinecraftLinkClaims } from "./linking.js";
 import { maybeSingle } from "./supabase.js";
 import { rememberId, saveState } from "./state-store.js";
 
@@ -14,6 +15,9 @@ export function startPollers(context) {
   const stopLeaderboardRoleSync = hasLeaderboardRoleSyncConfig(context.config)
     ? startLoop("leaderboard role sync", context.config.leaderboardRoleSyncIntervalMs, () => syncLeaderboardRoles(context), context.logger)
     : null;
+  const stopMinecraftLinkClaims = hasMinecraftLinkingConfig(context.config)
+    ? startLoop("Minecraft link claims", context.config.minecraftLinkPollMs, () => pollMinecraftLinkClaims(context), context.logger)
+    : null;
   if (!stopAdminRoleSync) {
     context.logger.warn("Discord admin role sync is disabled. Set DISCORD_GUILD_ID and DISCORD_ADMIN_ROLE_ID to enable website admins from a Discord role.");
   }
@@ -25,6 +29,7 @@ export function startPollers(context) {
     stopConfirmations();
     if (stopAdminRoleSync) stopAdminRoleSync();
     if (stopLeaderboardRoleSync) stopLeaderboardRoleSync();
+    if (stopMinecraftLinkClaims) stopMinecraftLinkClaims();
   };
 }
 

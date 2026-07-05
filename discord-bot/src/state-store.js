@@ -5,7 +5,9 @@ const DEFAULT_STATE = {
   lastVoteEventCreatedAt: "",
   lastConfirmationCheckedAt: "",
   processedVoteEventIds: [],
-  sentConfirmationSlotIds: []
+  sentConfirmationSlotIds: [],
+  minecraftLinkCodes: {},
+  minecraftPlayerBindings: {}
 };
 
 export async function loadState(config, logger) {
@@ -17,7 +19,9 @@ export async function loadState(config, logger) {
       ...DEFAULT_STATE,
       ...parsed,
       processedVoteEventIds: Array.isArray(parsed.processedVoteEventIds) ? parsed.processedVoteEventIds : [],
-      sentConfirmationSlotIds: Array.isArray(parsed.sentConfirmationSlotIds) ? parsed.sentConfirmationSlotIds : []
+      sentConfirmationSlotIds: Array.isArray(parsed.sentConfirmationSlotIds) ? parsed.sentConfirmationSlotIds : [],
+      minecraftLinkCodes: parsed.minecraftLinkCodes && typeof parsed.minecraftLinkCodes === "object" ? parsed.minecraftLinkCodes : {},
+      minecraftPlayerBindings: parsed.minecraftPlayerBindings && typeof parsed.minecraftPlayerBindings === "object" ? parsed.minecraftPlayerBindings : {}
     };
   } catch (error) {
     if (error.code !== "ENOENT") logger.warn("Could not load bot state; starting fresh.", error.message);

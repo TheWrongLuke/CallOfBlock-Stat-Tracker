@@ -8,6 +8,7 @@ Current features:
 - Mentions users who opted into confirmation notifications.
 - Syncs a configured Discord role into website admin access.
 - Syncs top leaderboard Discord roles from the published Minecraft stats export.
+- Links Discord accounts to Minecraft players through `/linkminecraft` in Discord and `/discordlink <code>` in Minecraft.
 - Persists processed event IDs in `.bot-state.json` so restarts do not resend old alerts.
 
 ## Setup
@@ -29,7 +30,7 @@ npm.cmd install
 npm.cmd run invite
 ```
 
-Open that URL, choose your Discord server, and authorize the bot. The bot needs access to the private admin-alert channel and the public confirmation channel. If leaderboard roles are enabled, the bot also needs `Manage Roles`, and the bot's Discord role must be higher than the roles it manages.
+Open that URL, choose your Discord server, and authorize the bot. The invite includes bot access and slash command installation. The bot needs access to the private admin-alert channel and the public confirmation channel. If leaderboard roles are enabled, the bot also needs `Manage Roles`, and the bot's Discord role must be higher than the roles it manages.
 
 8. Start the bot:
 
@@ -65,7 +66,13 @@ npm.cmd start
 
 `LEADERBOARD_PLAYER_BINDINGS` is optional JSON mapping leaderboard player IDs, Minecraft names, or public `p_...` IDs to Discord user IDs. Example: `{"name:rtxluke":"123","name:ryukai79":"456"}`.
 
+`LEADERBOARD_BINDINGS_FILE` is where completed `/linkminecraft` bindings should be saved. If omitted, the bot writes to `LEADERBOARD_ROLE_SYNC_CONFIG_PATH`.
+
 `MINECRAFT_USERCACHE_PATH` lets the bot translate old UUID bindings from `discord_sync.json` into the current `name:<player>` leaderboard IDs.
+
+`MINECRAFT_LINK_CLAIMS_PATH` is the claim file written by the Minecraft `/discordlink <code>` command. If omitted, the bot uses `discord_link_claims.json` next to `LEADERBOARD_ROLE_SYNC_CONFIG_PATH`.
+
+Players link themselves by running `/linkminecraft` in Discord, then running the shown `/discordlink <code>` command in Minecraft before the code expires.
 
 `STARTUP_BACKFILL_MINUTES=0` means the bot starts from "now" on first run. Increase it if you want the first run to catch recent events.
 

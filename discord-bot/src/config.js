@@ -57,7 +57,11 @@ export const config = {
   leaderboardRoleSyncSort: optional("LEADERBOARD_ROLE_SYNC_SORT", "wins").toLowerCase(),
   leaderboardRoleSyncIntervalMs: numberEnv("LEADERBOARD_ROLE_SYNC_INTERVAL_MS", 60000, 10000),
   leaderboardPlayerBindings: jsonObjectEnv("LEADERBOARD_PLAYER_BINDINGS"),
+  leaderboardBindingsFile: optional("LEADERBOARD_BINDINGS_FILE"),
   minecraftUsercachePath: optional("MINECRAFT_USERCACHE_PATH"),
+  minecraftLinkClaimsPath: optional("MINECRAFT_LINK_CLAIMS_PATH"),
+  minecraftLinkCodeTtlMs: numberEnv("MINECRAFT_LINK_CODE_TTL_MS", 900000, 60000),
+  minecraftLinkPollMs: numberEnv("MINECRAFT_LINK_POLL_MS", 5000, 1000),
   startupBackfillMinutes: numberEnv("STARTUP_BACKFILL_MINUTES", 0, 0),
   timeZone: optional("BOT_TIME_ZONE", "Europe/Rome"),
   stateFile: optional("BOT_STATE_FILE", ".bot-state.json")

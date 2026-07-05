@@ -18,7 +18,7 @@ const permissions = 1024n // View Channel
 
 const url = new URL("https://discord.com/oauth2/authorize");
 url.searchParams.set("client_id", clientId);
-url.searchParams.set("scope", "bot");
+url.searchParams.set("scope", "bot applications.commands");
 url.searchParams.set("permissions", permissions.toString());
 
 console.log(url.toString());

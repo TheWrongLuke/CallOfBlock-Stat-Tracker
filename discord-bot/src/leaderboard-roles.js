@@ -25,7 +25,7 @@ export async function syncLeaderboardRoles(context) {
     return;
   }
 
-  const bindings = loadPlayerBindings(settings, logger);
+  const bindings = loadPlayerBindings(settings, logger, context.state?.minecraftPlayerBindings);
   const boundDiscordIds = [...new Set(Object.values(bindings).filter(Boolean))];
   if (!boundDiscordIds.length) {
     logger.warn("Leaderboard role sync skipped: no player bindings configured.");
@@ -98,10 +98,11 @@ function leaderboardRoleSettings(config, logger) {
   };
 }
 
-function loadPlayerBindings(settings, logger) {
+function loadPlayerBindings(settings, logger, stateBindings = {}) {
   const bindings = normalizeBindingMap({
     ...settings.fileBindings,
-    ...settings.envBindings
+    ...settings.envBindings,
+    ...stateBindings
   });
   const usercache = loadUsercache(settings.usercachePath, logger);
 
