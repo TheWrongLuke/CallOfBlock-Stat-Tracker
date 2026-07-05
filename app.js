@@ -2461,7 +2461,7 @@ function cancelSlotDeleteConfirm(slotId) {
 
 function canDeletePlaytestSlot(playtest, slotId) {
     const slots = playtest?.slots || [];
-    return Boolean(slotId && slots.some((slot) => slot.id === slotId) && slots.length > 1);
+    return Boolean(slotId && slots.some((slot) => slot.id === slotId));
 }
 
 function deletePlaytestSlot(playtestId, slotId) {
