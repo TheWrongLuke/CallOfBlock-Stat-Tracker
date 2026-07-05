@@ -1910,6 +1910,74 @@ img.identity-avatar {
     box-shadow: 0 0 18px rgba(133, 232, 157, 0.16);
 }
 
+.confirmation-help-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.help-tip-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
+
+.help-tip-button {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid rgba(255, 203, 107, 0.36);
+    border-radius: 999px;
+    background: rgba(255, 203, 107, 0.08);
+    color: var(--gold);
+    cursor: help;
+    font: inherit;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.68rem;
+    line-height: 1;
+}
+
+.help-tip-button:hover,
+.help-tip-button:focus {
+    border-color: rgba(255, 203, 107, 0.7);
+    background: rgba(255, 203, 107, 0.16);
+    outline: none;
+}
+
+.help-tip-popover {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(270px, 76vw);
+    border: 1px solid rgba(255, 203, 107, 0.24);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: rgba(16, 23, 34, 0.98);
+    box-shadow: var(--shadow);
+    color: rgba(238, 244, 255, 0.9);
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 0.8rem;
+    font-weight: 500;
+    letter-spacing: 0;
+    line-height: 1.35;
+    opacity: 0;
+    pointer-events: none;
+    text-transform: none;
+    transform: translateY(-4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease;
+    visibility: hidden;
+}
+
+.help-tip-wrap:hover .help-tip-popover,
+.help-tip-wrap:focus-within .help-tip-popover,
+.help-tip-wrap.active .help-tip-popover {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+}
+
 .playtest-summary-grid,
 .playtest-analytics-grid,
 .calendar-vote-grid {
@@ -2090,13 +2158,37 @@ img.identity-avatar {
     font-family: "Chakra Petch", sans-serif;
 }
 
+.notify-toggle {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 32px;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+}
+
+.notify-toggle input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--blue);
+}
+
+.notify-toggle span {
+    color: rgba(238, 244, 255, 0.9);
+    font-size: 0.9rem;
+}
+
 .notify-toggle.active {
-    border-color: rgba(126, 200, 255, 0.42);
-    background: rgba(126, 200, 255, 0.14);
     color: var(--blue);
 }
 
-.notify-toggle:hover:not(:disabled),
+.notify-toggle:hover span {
+    color: var(--gold);
+}
+
 .date-admin-actions button:hover:not(:disabled),
 .heatmap-toggle:hover {
     border-color: rgba(255, 203, 107, 0.42);
@@ -2104,7 +2196,11 @@ img.identity-avatar {
     background: rgba(255, 203, 107, 0.1);
 }
 
-.notify-toggle:disabled,
+.notify-toggle:has(input:disabled) {
+    cursor: not-allowed;
+    opacity: 0.52;
+}
+
 .date-admin-actions button:disabled {
     cursor: not-allowed;
     opacity: 0.48;
@@ -2234,27 +2330,6 @@ img.identity-avatar {
     flex-wrap: wrap;
 }
 
-.score-help {
-    display: inline-grid;
-    place-items: center;
-    width: 44px;
-    height: 44px;
-    border: 1px solid rgba(255, 203, 107, 0.34);
-    border-radius: 999px;
-    background: rgba(255, 203, 107, 0.1);
-    color: var(--gold);
-    cursor: help;
-    font-family: "Chakra Petch", sans-serif;
-    font-size: 0.88rem;
-}
-
-.score-help:hover,
-.score-help:focus {
-    border-color: rgba(255, 203, 107, 0.68);
-    background: rgba(255, 203, 107, 0.18);
-    outline: none;
-}
-
 .preference-bars {
     display: grid;
     gap: 8px;
@@ -2346,7 +2421,7 @@ img.identity-avatar {
     align-items: flex-start;
 }
 
-.slot-card-head .date-card-topline > span:not(.confirmation-badge) {
+.slot-card-head .date-card-topline > span:not(.confirmation-help-row):not(.confirmation-badge) {
     display: block;
     color: var(--gold);
     font-size: 0.75rem;

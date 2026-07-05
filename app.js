@@ -60,6 +60,8 @@ const PLAYTEST_STATUS_OPTIONS = [
 const PLAYTEST_COUNT_ORDER = ["available", "preferred", "maybe", "unavailable"];
 const PLAYTEST_MODE_OPTIONS = ["Battle Royale", "Deathmatch", "Either"];
 const PLAYTEST_INTEREST_MIN_SCALE = 10;
+const CONFIRMATION_STATUS_HELP = "Unconfirmed means this is a possible event date. The admin will confirm the event on that date if it will be possible to execute.";
+const BEST_DATE_SCORE_HELP = "Best Date ranks by the strongest overlapping time window first. Preferred = 5, Available = 3, Maybe = 1, Unavailable = 0.";
 
 const PLAYTEST_SEED_USERS = [
     { userId: "sample-luke", username: "Luke", modePreference: "Battle Royale" },
@@ -1365,7 +1367,7 @@ function renderAdminCalendarSlot(playtest, summary, layer) {
             <div class="date-card-topline">
                 <time datetime="${escapeHtml(displaySlot.startAt)}">${escapeHtml(formatSlotTimeRange(displaySlot))}</time>
                 <span class="admin-slot-type">${escapeHtml(layerLabel)}</span>
-                ${renderConfirmationBadge(playtest.id, summary.slot.id)}
+                ${renderConfirmationBadge(playtest.id, summary.slot.id, `admin-${summary.slot.id}`)}
             </div>
             <div class="admin-slot-stats">
                 <span>${summary.availableTotal} available</span>
@@ -1608,7 +1610,7 @@ function renderNextEventCard(summary, playtest) {
         <article class="main-date-card next-event-card">
             <div class="date-card-topline">
                 <span class="main-date-label">Next event</span>
-                ${renderConfirmationBadge(playtest.id, summary.slot.id)}
+                ${renderConfirmationBadge(playtest.id, summary.slot.id, `next-${summary.slot.id}`)}
             </div>
             <strong>${escapeHtml(formatSlotWeekday(scheduledSlot.startAt))}</strong>
             <span>${escapeHtml(formatSlotDay(scheduledSlot.startAt))}</span>
@@ -1690,7 +1692,7 @@ function renderSelectedDateCard(selected, playtest, canVote) {
             <article class="main-date-card selected-date-card">
                 <div class="date-card-topline">
                     <span class="main-date-label">Selected date</span>
-                    <span class="confirmation-badge unconfirmed">Unconfirmed</span>
+                    ${renderConfirmationBadge(playtest.id, null, `selected-${selected.dateKey}`)}
                 </div>
                 <strong>${escapeHtml(formatDateKeyWeekday(selected.dateKey))}</strong>
                 <span>${escapeHtml(formatDateKeyDay(selected.dateKey))}</span>
@@ -1734,7 +1736,7 @@ function renderSelectedDateCard(selected, playtest, canVote) {
         <article class="main-date-card selected-date-card">
             <div class="date-card-topline">
                 <span class="main-date-label">${escapeHtml(tag)}</span>
-                ${renderConfirmationBadge(playtest.id, summary.slot.id)}
+                ${renderConfirmationBadge(playtest.id, summary.slot.id, `selected-${summary.slot.id}`)}
             </div>
             <strong>${escapeHtml(formatSlotWeekday(displaySlot.startAt))}</strong>
             <span>${escapeHtml(formatSlotDay(displaySlot.startAt))}</span>
@@ -1755,18 +1757,17 @@ function renderSelectedDateCard(selected, playtest, canVote) {
 }
 
 function renderBestDateCard(best, second, playtest) {
-    const scoreHelp = "Best Date ranks by the strongest overlapping time window first. Preferred = 5, Available = 3, Maybe = 1, Unavailable = 0.";
     return `
         <article class="best-date-card">
             <div class="date-card-topline">
                 <p class="panel-kicker">${playtest.status === "closed" || playtest.status === "finished" ? "Winner" : "Best Date"}</p>
-                ${renderConfirmationBadge(playtest.id, best.slot.id)}
+                ${renderConfirmationBadge(playtest.id, best.slot.id, `best-${best.slot.id}`)}
             </div>
             <strong>${escapeHtml(formatSlotWeekday(best.slot.startAt))}</strong>
             <span>${escapeHtml(formatSlotDay(best.slot.startAt))} at ${escapeHtml(formatSlotTimeRange(best.slot))}</span>
             <div class="score-row">
                 <div class="score-pill">Overlap ${best.rankScore || best.score}</div>
-                <span class="score-help" tabindex="0" aria-label="${escapeHtml(scoreHelp)}" title="${escapeHtml(scoreHelp)}">?</span>
+                ${renderHelpTipButton("best-date-score", BEST_DATE_SCORE_HELP, "How the Best Date score is calculated")}
             </div>
             ${renderBestTimeSummary(best)}
             <small>Date score ${best.score}</small>
@@ -1775,9 +1776,32 @@ function renderBestDateCard(best, second, playtest) {
     `;
 }
 
-function renderConfirmationBadge(playtestId, slotId) {
+function renderConfirmationBadge(playtestId, slotId, helpKey = "") {
     const confirmed = slotId && isSlotConfirmed(playtestId, slotId);
-    return `<span class="confirmation-badge ${confirmed ? "confirmed" : "unconfirmed"}">${confirmed ? "Confirmed" : "Unconfirmed"}</span>`;
+    const badge = `<span class="confirmation-badge ${confirmed ? "confirmed" : "unconfirmed"}">${confirmed ? "Confirmed" : "Unconfirmed"}</span>`;
+    if (confirmed) return badge;
+    return `
+        <span class="confirmation-help-row">
+            ${badge}
+            ${renderHelpTipButton(`confirmation-${playtestId}-${helpKey || slotId || "date"}`, CONFIRMATION_STATUS_HELP, "What unconfirmed means")}
+        </span>
+    `;
+}
+
+function renderHelpTipButton(id, text, label) {
+    const active = state.playtests.activeHelpTip === id;
+    return `
+        <span class="help-tip-wrap ${active ? "active" : ""}">
+            <button
+                class="help-tip-button"
+                type="button"
+                data-help-tip="${escapeHtml(id)}"
+                aria-label="${escapeHtml(label)}"
+                aria-expanded="${active ? "true" : "false"}"
+            >?</button>
+            <span class="help-tip-popover" role="tooltip">${escapeHtml(text)}</span>
+        </span>
+    `;
 }
 
 function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled) {
@@ -1791,19 +1815,21 @@ function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled) {
     const helperText = authPending
         ? "Checking Discord login..."
         : loginRequired
-            ? "Login with Discord required."
+            ? "Login with Discord required for notification to be toggled."
             : `${count} Discord notification opt-in${count === 1 ? "" : "s"}`;
     return `
         <div class="notify-row">
-            <button
-                class="notify-toggle ${subscribed ? "active" : ""}"
-                type="button"
-                data-notify-toggle="${escapeHtml(key)}"
-                data-calendar-date="${escapeHtml(dateKeyValue || "")}"
-                aria-label="${escapeHtml(`${subscribed ? "Notification enabled" : "Enable notification"} for ${labelContext}`)}"
-                aria-pressed="${subscribed ? "true" : "false"}"
-                ${effectiveDisabled ? "disabled" : ""}
-            >${subscribed ? "Notify me on confirmation" : "Notify me if confirmed"}</button>
+            <label class="notify-toggle ${subscribed ? "active" : ""}">
+                <input
+                    type="checkbox"
+                    data-notify-toggle="${escapeHtml(key)}"
+                    data-calendar-date="${escapeHtml(dateKeyValue || "")}"
+                    aria-label="${escapeHtml(`Notify me on confirmation for ${labelContext}`)}"
+                    ${subscribed ? "checked" : ""}
+                    ${effectiveDisabled ? "disabled" : ""}
+                >
+                <span>Notify me on confirmation</span>
+            </label>
             <small class="${loginRequired && !authPending ? "notify-warning" : ""}">${escapeHtml(helperText)}</small>
         </div>
     `;
@@ -1899,7 +1925,7 @@ function renderPlaytestSlotCard(summary, playtest, canVote, summaries = []) {
                 <div>
                     <div class="date-card-topline">
                         <span>${escapeHtml(summary.slot.label || "Featured date")}</span>
-                        ${renderConfirmationBadge(playtest.id, summary.slot.id)}
+                        ${renderConfirmationBadge(playtest.id, summary.slot.id, `slot-card-${summary.slot.id}`)}
                     </div>
                     <strong>${escapeHtml(formatSlotWeekday(displaySlot.startAt))}</strong>
                     <time datetime="${escapeHtml(displaySlot.startAt)}">${escapeHtml(formatSlotDay(displaySlot.startAt))} - ${escapeHtml(formatSlotTimeRange(displaySlot))}</time>
@@ -2065,6 +2091,14 @@ function renderPlaytestResults(best, second, playtest) {
 }
 
 function handlePlaytestClick(event) {
+    const helpButton = event.target.closest("[data-help-tip]");
+    if (helpButton) {
+        const id = helpButton.dataset.helpTip;
+        state.playtests.activeHelpTip = state.playtests.activeHelpTip === id ? "" : id;
+        render();
+        return;
+    }
+
     const authLoginButton = event.target.closest("[data-auth-login]");
     if (authLoginButton) {
         void signInWithDiscord();
@@ -2117,7 +2151,7 @@ function handlePlaytestClick(event) {
     const notifyButton = event.target.closest("[data-notify-toggle]");
     if (notifyButton) {
         if (!isDiscordLoggedIn()) {
-            state.authMessage = "Login with Discord required.";
+            state.authMessage = "Login with Discord required for notification to be toggled.";
             render();
             return;
         }
@@ -3108,6 +3142,7 @@ function loadPlaytestState() {
             overrides: parsed.overrides && typeof parsed.overrides === "object" ? sanitizePlaytestOverrides(parsed.overrides) : {},
             deletedSlots: parsed.deletedSlots && typeof parsed.deletedSlots === "object" ? sanitizeDeletedSlots(parsed.deletedSlots) : {},
             pendingSlotDelete: null,
+            activeHelpTip: "",
             expandedSlotIds: new Set()
         };
     } catch (error) {
@@ -3161,6 +3196,7 @@ function emptyPlaytestState() {
         deletedSlots: {},
         pendingConfirmation: null,
         pendingSlotDelete: null,
+        activeHelpTip: "",
         expandedSlotIds: new Set()
     };
 }
