@@ -25,7 +25,7 @@ export const config = {
   supabaseServiceRoleKey: required("SUPABASE_SERVICE_ROLE_KEY"),
   defaultAdminChannelId: optional("DEFAULT_ADMIN_CHANNEL_ID"),
   defaultConfirmationChannelId: optional("DEFAULT_CONFIRMATION_CHANNEL_ID"),
-  publicSiteUrl: optional("PUBLIC_SITE_URL", "https://your-site.example/#playtests"),
+  publicSiteUrl: optional("PUBLIC_SITE_URL", "https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/#playtests"),
   pollIntervalMs: numberEnv("POLL_INTERVAL_MS", 15000, 5000),
   startupBackfillMinutes: numberEnv("STARTUP_BACKFILL_MINUTES", 0, 0),
   timeZone: optional("BOT_TIME_ZONE", "Europe/Rome"),

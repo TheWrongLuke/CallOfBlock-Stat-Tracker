@@ -40,6 +40,7 @@ const DEFAULT_SKIN_NAME = "Steve";
 const CHAMPION_ROTATE_MS = 5000;
 const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64, 103, 109, 97, 105, 108, 46, 99, 111, 109];
 const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v1";
+const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
 const DEFAULT_PLAYTEST_VIEWER = {
     userId: "local-preview-user",
     username: "You",
@@ -137,6 +138,7 @@ const state = {
     supabaseKey: "",
     supabaseTable: "cob_stats_exports",
     supabaseRowId: "live",
+    publicSiteUrl: "",
     authClient: null,
     authReady: false,
     authSession: null,
@@ -184,6 +186,7 @@ function setupLiveConfig() {
     state.supabaseKey = params.get("supabaseKey") || window.COB_SUPABASE_KEY || "";
     state.supabaseTable = params.get("supabaseTable") || window.COB_SUPABASE_TABLE || "cob_stats_exports";
     state.supabaseRowId = params.get("supabaseRowId") || window.COB_SUPABASE_ROW_ID || "live";
+    state.publicSiteUrl = params.get("publicSiteUrl") || window.COB_PUBLIC_SITE_URL || "";
     const pollMs = Number(params.get("pollMs") || window.COB_STATS_POLL_MS || DEFAULT_API_POLL_MS);
     state.pollMs = Number.isFinite(pollMs) && pollMs >= 3000 ? pollMs : DEFAULT_API_POLL_MS;
 }
@@ -249,6 +252,7 @@ async function applyAuthSession(session, shouldRender = false) {
 
     updateViewerFromDiscordUser(session.user);
     await syncPlaytestProfile(session.user);
+    consumePlaytestAuthReturn();
     if (shouldRender) render();
 }
 
@@ -260,6 +264,7 @@ async function signInWithDiscord() {
     }
 
     state.authMessage = "";
+    rememberPlaytestAuthReturn();
     const { error } = await state.authClient.auth.signInWithOAuth({
         provider: "discord",
         options: {
@@ -290,12 +295,40 @@ async function signOutDiscord() {
 }
 
 function playtestAuthRedirectUrl() {
-    const url = new URL(window.location.href);
-    url.hash = "playtests";
+    let url;
+    try {
+        url = new URL(state.publicSiteUrl || window.location.href, window.location.origin);
+    } catch (_error) {
+        url = new URL(window.location.href);
+    }
+    url.hash = "";
     for (const key of ["code", "error", "error_code", "error_description"]) {
         url.searchParams.delete(key);
     }
     return url.toString();
+}
+
+function rememberPlaytestAuthReturn() {
+    try {
+        window.localStorage?.setItem(PLAYTEST_AUTH_RETURN_KEY, "playtests");
+    } catch (_error) {
+        // Returning to the public root is still valid if storage is unavailable.
+    }
+}
+
+function consumePlaytestAuthReturn() {
+    try {
+        if (window.localStorage?.getItem(PLAYTEST_AUTH_RETURN_KEY) !== "playtests") return;
+        window.localStorage.removeItem(PLAYTEST_AUTH_RETURN_KEY);
+        state.view = "playtests";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        if (window.location.hash.replace(/^#/, "") !== "playtests") {
+            window.location.hash = "playtests";
+        }
+    } catch (_error) {
+        // Ignore storage issues; the user can still open the playtest view normally.
+    }
 }
 
 function bindStaticEvents() {

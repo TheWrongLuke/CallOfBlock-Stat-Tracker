@@ -87,7 +87,7 @@ async function sendAdminVoteEvent(context, event) {
       { name: "Playtest", value: trimForDiscord(playtest?.title || event.playtest_id), inline: false },
       { name: "Date", value: formatShortRange(slot?.start_datetime, slot?.end_datetime), inline: false },
       { name: "Player time", value: formatShortRange(event.available_start_datetime, event.available_end_datetime), inline: false },
-      { name: "Totals", value: `${event.available_total} available · ${event.preferred_total} preferred · ${event.total_votes} total`, inline: false }
+      { name: "Totals", value: `${event.available_total} available / ${event.preferred_total} preferred / ${event.total_votes} total`, inline: false }
     )
     .setTimestamp(new Date(event.created_at));
 

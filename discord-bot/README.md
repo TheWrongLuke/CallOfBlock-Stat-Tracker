@@ -11,16 +11,25 @@ Current features:
 ## Setup
 
 1. Run the Supabase playtest schema from `../supabase-playtests-schema.sql`.
-2. Create a Discord bot in the Discord Developer Portal.
-3. Enable the bot in your server with permission to view and send messages in the admin and confirmation channels.
-4. Copy `.env.example` to `.env` and fill the values.
-5. Install dependencies:
+2. Create a Discord application in the Discord Developer Portal.
+3. In that app, open **Bot**, create/reset the token, and copy it into `DISCORD_TOKEN`.
+4. Open **OAuth2** and copy the application/client ID into `DISCORD_CLIENT_ID`.
+5. Copy `.env.example` to `.env` and fill the values.
+6. Install dependencies:
 
 ```powershell
 npm.cmd install
 ```
 
-6. Start the bot:
+7. Print the server invite URL:
+
+```powershell
+npm.cmd run invite
+```
+
+Open that URL, choose your Discord server, and authorize the bot. The bot needs access to the private admin-alert channel and the public confirmation channel.
+
+8. Start the bot:
 
 ```powershell
 npm.cmd start
@@ -29,6 +38,8 @@ npm.cmd start
 ## Environment
 
 `DISCORD_TOKEN` is the bot token.
+
+`DISCORD_CLIENT_ID` is the application ID from the Discord Developer Portal. It is used only to generate the invite URL.
 
 `SUPABASE_SERVICE_ROLE_KEY` must be the service-role key, not the public anon key. Keep it only on the machine/server that runs the bot.
 
