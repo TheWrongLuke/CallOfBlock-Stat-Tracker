@@ -43,7 +43,8 @@ const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v1";
 const PLAYTEST_VIEWER = {
     userId: "local-preview-user",
     username: "You",
-    avatarInitials: "YOU"
+    avatarInitials: "YOU",
+    isAdmin: false
 };
 
 const PLAYTEST_STATUS_OPTIONS = [
@@ -425,6 +426,14 @@ function routeTo(route) {
         return;
     }
     if (route === "community-dates") {
+        if (!isPlaytestAdmin()) {
+            state.view = "playtests";
+            state.selectedId = null;
+            state.profilePreviewOpen = false;
+            window.location.hash = "playtests";
+            render();
+            return;
+        }
         state.view = "communityAdmin";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -851,6 +860,16 @@ function renderCommunityAdminPage() {
     const board = document.getElementById("community-admin-board");
     if (!board) return;
 
+    if (!isPlaytestAdmin()) {
+        board.innerHTML = `
+            <section class="playtest-empty">
+                <h3>Admin access required</h3>
+                <p>The community admin calendar is only available after Discord/Supabase admin auth is connected.</p>
+            </section>
+        `;
+        return;
+    }
+
     const playtests = activePlaytests();
     const playtest = activePlaytest(playtests);
     if (!playtest) {
@@ -1073,6 +1092,15 @@ function renderAdminCalendarSlot(playtest, summary, layer) {
     const layerLabel = layer === "event"
         ? (playtest.mainSlotId === summary.slot.id ? "Main event" : "My event")
         : "Community vote";
+    const adminActions = isPlaytestAdmin()
+        ? `
+            <div class="date-admin-actions">
+                <button type="button" data-confirm-date="${escapeHtml(dateKey(summary.slot.startAt))}" data-confirm-slot="${escapeHtml(summary.slot.id)}" aria-label="${escapeHtml(`Confirm ${slotLabel}`)}" ${confirmed || isPastSlot(summary.slot) ? "disabled" : ""}>Confirm</button>
+                <button type="button" data-unconfirm-slot="${escapeHtml(summary.slot.id)}" aria-label="${escapeHtml(`Unconfirm ${slotLabel}`)}" ${confirmed ? "" : "disabled"}>Unconfirm</button>
+                ${renderAdminSlotDeleteControl(playtest, summary)}
+            </div>
+        `
+        : "";
     return `
         <section class="admin-calendar-slot admin-calendar-slot-${escapeHtml(layer)}">
             <div class="date-card-topline">
@@ -1087,11 +1115,7 @@ function renderAdminCalendarSlot(playtest, summary, layer) {
                 <span>Best ${summary.bestTime ? escapeHtml(formatOverlapRange(summary.bestTime)) : "No overlap"}</span>
                 <span>Overlap ${summary.rankScore ?? summary.score}</span>
             </div>
-            <div class="date-admin-actions">
-                <button type="button" data-confirm-date="${escapeHtml(dateKey(summary.slot.startAt))}" data-confirm-slot="${escapeHtml(summary.slot.id)}" aria-label="${escapeHtml(`Confirm ${slotLabel}`)}" ${confirmed || isPastSlot(summary.slot) ? "disabled" : ""}>Confirm</button>
-                <button type="button" data-unconfirm-slot="${escapeHtml(summary.slot.id)}" aria-label="${escapeHtml(`Unconfirm ${slotLabel}`)}" ${confirmed ? "" : "disabled"}>Unconfirm</button>
-                ${renderAdminSlotDeleteControl(playtest, summary)}
-            </div>
+            ${adminActions}
         </section>
     `;
 }
@@ -1190,6 +1214,10 @@ function renderPlaytestPreferences(playtest) {
 function renderPlaytestAdmin(playtest) {
     const container = document.getElementById("playtest-admin");
     if (!container) return;
+    if (!isPlaytestAdmin()) {
+        container.innerHTML = "";
+        return;
+    }
     const isFrozen = Boolean(playtest?.frozen);
     const isClosed = playtest?.status === "closed" || playtest?.status === "finished";
     container.innerHTML = `
@@ -1244,7 +1272,7 @@ function renderPlaytestBoard(playtest) {
         board.innerHTML = `
             <section class="playtest-empty">
                 <h3>No playtest selected</h3>
-                <p>Create one from the admin controls or restore a local draft.</p>
+                <p>${isPlaytestAdmin() ? "Create one from the admin controls or restore a local draft." : "No public playtest is available yet."}</p>
             </section>
         `;
         return;
@@ -1409,7 +1437,7 @@ function renderSelectedDateCard(selected, playtest, canVote) {
                 <small class="selected-date-note">Times use ${escapeHtml(viewerTimeZoneLabel())}.</small>
                 <p class="selected-date-note">${isPast ? "This date has already passed." : "No one has started this date yet. Voting here will create a community date."}</p>
                 ${renderNotificationToggle(playtest.id, null, selected.dateKey, notifyDisabled)}
-                ${renderConfirmationControls(playtest.id, null, selected.dateKey, isPast)}
+                ${isPlaytestAdmin() ? renderConfirmationControls(playtest.id, null, selected.dateKey, isPast) : ""}
                 <div class="vote-row compact">
                     ${PLAYTEST_STATUS_OPTIONS.map((option) => `
                         <button
@@ -1448,7 +1476,7 @@ function renderSelectedDateCard(selected, playtest, canVote) {
             ${renderBestTimeSummary(summary)}
             ${renderVoteTimeFields(summary.slot, userVote, !slotCanVote)}
             ${renderNotificationToggle(playtest.id, summary.slot.id, dateKey(summary.slot.startAt), !slotCanVote)}
-            ${renderConfirmationControls(playtest.id, summary.slot.id, dateKey(summary.slot.startAt), isPastSlot(summary.slot))}
+            ${isPlaytestAdmin() ? renderConfirmationControls(playtest.id, summary.slot.id, dateKey(summary.slot.startAt), isPastSlot(summary.slot)) : ""}
             <div class="vote-row compact">
                 ${PLAYTEST_STATUS_OPTIONS.map((option) => renderVoteButton(option, summary, playtest, slotCanVote)).join("")}
             </div>
@@ -1814,6 +1842,7 @@ function handlePlaytestClick(event) {
 
     const confirmButton = event.target.closest("[data-confirm-date]");
     if (confirmButton) {
+        if (!isPlaytestAdmin()) return;
         const playtest = activePlaytest();
         if (!playtest) return;
         let slotId = confirmButton.dataset.confirmSlot;
@@ -1829,6 +1858,7 @@ function handlePlaytestClick(event) {
 
     const unconfirmButton = event.target.closest("[data-unconfirm-slot]");
     if (unconfirmButton) {
+        if (!isPlaytestAdmin()) return;
         const playtest = activePlaytest();
         if (!playtest) return;
         unconfirmPlaytestSlot(playtest.id, unconfirmButton.dataset.unconfirmSlot);
@@ -1847,6 +1877,7 @@ function handlePlaytestClick(event) {
 
     const adminCalendarFilterButton = event.target.closest("[data-admin-calendar-filter]");
     if (adminCalendarFilterButton) {
+        if (!isPlaytestAdmin()) return;
         toggleAdminCalendarFilter(adminCalendarFilterButton.dataset.adminCalendarFilter);
         savePlaytestState();
         render();
@@ -1855,6 +1886,7 @@ function handlePlaytestClick(event) {
 
     const slotDeleteCancelButton = event.target.closest("[data-admin-cancel-delete-slot]");
     if (slotDeleteCancelButton) {
+        if (!isPlaytestAdmin()) return;
         cancelSlotDeleteConfirm(slotDeleteCancelButton.dataset.adminCancelDeleteSlot);
         render();
         return;
@@ -1862,6 +1894,7 @@ function handlePlaytestClick(event) {
 
     const slotDeleteButton = event.target.closest("[data-admin-delete-slot]");
     if (slotDeleteButton) {
+        if (!isPlaytestAdmin()) return;
         const playtest = activePlaytest();
         if (!playtest) return;
         const slotId = slotDeleteButton.dataset.adminDeleteSlot;
@@ -1898,7 +1931,10 @@ function handlePlaytestClick(event) {
     }
 
     const adminButton = event.target.closest("[data-playtest-admin]");
-    if (adminButton) handlePlaytestAdmin(adminButton.dataset.playtestAdmin);
+    if (adminButton) {
+        if (!isPlaytestAdmin()) return;
+        handlePlaytestAdmin(adminButton.dataset.playtestAdmin);
+    }
 }
 
 function handlePlaytestChange(event) {
@@ -1918,6 +1954,7 @@ function handlePlaytestChange(event) {
 function handlePlaytestSubmit(event) {
     if (event.target.id !== "playtest-create-form") return;
     event.preventDefault();
+    if (!isPlaytestAdmin()) return;
     const form = event.target;
     const data = new FormData(form);
     const mainSlotAt = parsePlaytestDateInput(data.get("mainSlot"));
@@ -1952,6 +1989,7 @@ function handlePlaytestSubmit(event) {
 }
 
 function handlePlaytestAdmin(action) {
+    if (!isPlaytestAdmin()) return;
     const playtest = activePlaytest();
     if (!playtest) return;
     const override = playtestOverride(playtest.id);
@@ -2206,6 +2244,10 @@ function activePlaytest(playtests = activePlaytests()) {
     return playtests.find((playtest) => playtest.id === state.playtests.activeId) || playtests[0] || null;
 }
 
+function isPlaytestAdmin() {
+    return Boolean(PLAYTEST_VIEWER.isAdmin);
+}
+
 function nextEventSummary(playtest, summaries) {
     const now = Date.now();
     const confirmedFuture = summaries
@@ -2251,6 +2293,7 @@ function isFeaturedSlot(slot) {
 }
 
 function openConfirmDialog(playtestId, slotId) {
+    if (!isPlaytestAdmin()) return;
     const playtest = activePlaytests().find((entry) => entry.id === playtestId);
     const summary = playtest ? summarizePlaytestSlots(playtest).find((entry) => entry.slot.id === slotId) : null;
     if (!playtest || !summary) return;
@@ -2269,6 +2312,7 @@ function closeConfirmDialog() {
 }
 
 function submitConfirmDialog(form) {
+    if (!isPlaytestAdmin()) return;
     const pending = state.playtests.pendingConfirmation;
     if (!pending) return;
     const range = normalizeTimeRange(
@@ -2379,6 +2423,7 @@ function confirmedSlotStartValue(playtestId, slot) {
 }
 
 function confirmPlaytestSlot(playtestId, slotId, timeRange = null) {
+    if (!isPlaytestAdmin()) return;
     if (!slotId) return;
     const slot = findPlaytestSlot(playtestId, slotId);
     if (!slot) return;
@@ -2398,6 +2443,7 @@ function confirmPlaytestSlot(playtestId, slotId, timeRange = null) {
 }
 
 function unconfirmPlaytestSlot(playtestId, slotId) {
+    if (!isPlaytestAdmin()) return;
     if (!slotId || !state.playtests.confirmedSlots?.[playtestId]?.[slotId]) return;
     delete state.playtests.confirmedSlots[playtestId][slotId];
     recordAdminSystemEvent(playtestId, slotId, "unconfirmed");
@@ -2440,6 +2486,7 @@ function slotDeletePendingState(playtestId, slotId) {
 }
 
 function startSlotDeleteConfirm(playtestId, slotId) {
+    if (!isPlaytestAdmin()) return;
     const playtest = activePlaytests().find((entry) => entry.id === playtestId);
     if (!canDeletePlaytestSlot(playtest, slotId)) return;
     const requestedAt = Date.now();
@@ -2465,6 +2512,7 @@ function canDeletePlaytestSlot(playtest, slotId) {
 }
 
 function deletePlaytestSlot(playtestId, slotId) {
+    if (!isPlaytestAdmin()) return;
     const playtest = activePlaytests().find((entry) => entry.id === playtestId);
     if (!canDeletePlaytestSlot(playtest, slotId)) return;
     const slot = playtest.slots.find((entry) => entry.id === slotId);
@@ -2686,6 +2734,7 @@ function syncPreferenceToExistingVotes(playtestId, preference) {
 }
 
 function duplicatePlaytest(playtest) {
+    if (!isPlaytestAdmin()) return;
     const id = `local-playtest-${Date.now()}`;
     const slotIdMap = new Map((playtest.slots || []).map((slot, index) => [slot.id, `${id}-slot-${index + 1}`]));
     const clone = {
@@ -2709,6 +2758,7 @@ function duplicatePlaytest(playtest) {
 }
 
 function deletePlaytest(playtestId) {
+    if (!isPlaytestAdmin()) return;
     const before = state.playtests.localPlaytests.length;
     state.playtests.localPlaytests = state.playtests.localPlaytests.filter((playtest) => playtest.id !== playtestId);
     if (state.playtests.localPlaytests.length === before) return;
