@@ -25,8 +25,11 @@ export const config = {
   supabaseServiceRoleKey: required("SUPABASE_SERVICE_ROLE_KEY"),
   defaultAdminChannelId: optional("DEFAULT_ADMIN_CHANNEL_ID"),
   defaultConfirmationChannelId: optional("DEFAULT_CONFIRMATION_CHANNEL_ID"),
+  discordGuildId: optional("DISCORD_GUILD_ID"),
+  discordAdminRoleId: optional("DISCORD_ADMIN_ROLE_ID"),
   publicSiteUrl: optional("PUBLIC_SITE_URL", "https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/#playtests"),
   pollIntervalMs: numberEnv("POLL_INTERVAL_MS", 15000, 5000),
+  adminRoleSyncIntervalMs: numberEnv("ADMIN_ROLE_SYNC_INTERVAL_MS", 60000, 10000),
   startupBackfillMinutes: numberEnv("STARTUP_BACKFILL_MINUTES", 0, 0),
   timeZone: optional("BOT_TIME_ZONE", "Europe/Rome"),
   stateFile: optional("BOT_STATE_FILE", ".bot-state.json")

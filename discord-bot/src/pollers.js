@@ -1,4 +1,4 @@
-import { EmbedBuilder } from "discord.js";
+import { EmbedBuilder, Routes } from "discord.js";
 import { sendChannelMessage } from "./discord-client.js";
 import { discordTimestamp, formatShortRange, formatTimeRange, mentionUser, statusLabel, trimForDiscord } from "./format.js";
 import { maybeSingle } from "./supabase.js";
@@ -7,9 +7,16 @@ import { rememberId, saveState } from "./state-store.js";
 export function startPollers(context) {
   const stopVoteEvents = startLoop("vote events", context.config.pollIntervalMs, () => pollVoteEvents(context), context.logger);
   const stopConfirmations = startLoop("confirmations", context.config.pollIntervalMs, () => pollConfirmations(context), context.logger);
+  const stopAdminRoleSync = context.config.discordGuildId && context.config.discordAdminRoleId
+    ? startLoop("admin role sync", context.config.adminRoleSyncIntervalMs, () => syncAdminRoles(context), context.logger)
+    : null;
+  if (!stopAdminRoleSync) {
+    context.logger.warn("Discord admin role sync is disabled. Set DISCORD_GUILD_ID and DISCORD_ADMIN_ROLE_ID to enable website admins from a Discord role.");
+  }
   return () => {
     stopVoteEvents();
     stopConfirmations();
+    if (stopAdminRoleSync) stopAdminRoleSync();
   };
 }
 
@@ -152,6 +159,54 @@ async function sendConfirmation(context, slot) {
     embeds: [embed],
     allowedMentions: { users: allowedUsers }
   }, logger);
+}
+
+async function syncAdminRoles(context) {
+  const { client, config, supabase, logger } = context;
+  const { data: profiles, error } = await supabase
+    .from("profiles")
+    .select("id, username, discord_id, is_admin")
+    .limit(1000);
+
+  if (error) throw new Error(`load profiles for admin role sync: ${error.message}`);
+  const candidates = (profiles || []).filter((profile) => profile.discord_id);
+  if (!candidates.length) return;
+
+  let checked = 0;
+  let changed = 0;
+  let skipped = 0;
+
+  for (const profile of candidates) {
+    const hasRole = await discordUserHasRole(client, config, profile, logger);
+    if (hasRole === null) {
+      skipped += 1;
+      continue;
+    }
+    checked += 1;
+    if (Boolean(profile.is_admin) === hasRole) continue;
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ is_admin: hasRole })
+      .eq("id", profile.id);
+    if (updateError) throw new Error(`update admin role for ${profile.username || profile.id}: ${updateError.message}`);
+    changed += 1;
+  }
+
+  if (changed || skipped) {
+    logger.info(`Admin role sync checked ${checked} profile(s), updated ${changed}, skipped ${skipped}.`);
+  }
+}
+
+async function discordUserHasRole(client, config, profile, logger) {
+  try {
+    const member = await client.rest.get(Routes.guildMember(config.discordGuildId, profile.discord_id));
+    return Array.isArray(member?.roles) && member.roles.includes(config.discordAdminRoleId);
+  } catch (error) {
+    if (error?.code === 10007 || error?.status === 404) return false;
+    logger.warn(`Could not check admin role for ${profile.username || profile.discord_id}: ${error?.message || error}`);
+    return null;
+  }
 }
 
 async function loadPlaytest(supabase, playtestId) {

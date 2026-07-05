@@ -6,6 +6,7 @@ Current features:
 - Sends a private admin-channel message when a playtest vote event is recorded in Supabase.
 - Sends a public confirmation-channel message when a playtest slot is confirmed.
 - Mentions users who opted into confirmation notifications.
+- Syncs a configured Discord role into website admin access.
 - Persists processed event IDs in `.bot-state.json` so restarts do not resend old alerts.
 
 ## Setup
@@ -46,6 +47,12 @@ npm.cmd start
 `DEFAULT_ADMIN_CHANNEL_ID` is the private channel for vote alerts.
 
 `DEFAULT_CONFIRMATION_CHANNEL_ID` is the public channel for confirmed event notifications. Per-playtest values in Supabase override these defaults when present.
+
+`DISCORD_GUILD_ID` is your Discord server ID. Enable Developer Mode in Discord, right-click the server, then copy the server ID.
+
+`DISCORD_ADMIN_ROLE_ID` is the Discord role that should become website admin. Right-click the role in Server Settings, then copy the role ID. Users must log into the website once before the bot can sync their profile.
+
+`ADMIN_ROLE_SYNC_INTERVAL_MS` controls how often the bot checks Discord roles and updates `profiles.is_admin`.
 
 `STARTUP_BACKFILL_MINUTES=0` means the bot starts from "now" on first run. Increase it if you want the first run to catch recent events.
 

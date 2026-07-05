@@ -61,6 +61,7 @@ const PLAYTEST_STATUS_OPTIONS = [
 const PLAYTEST_COUNT_ORDER = ["available", "preferred", "maybe", "unavailable"];
 const PLAYTEST_MODE_OPTIONS = ["Battle Royale", "Deathmatch", "Either"];
 const PLAYTEST_INTEREST_MIN_SCALE = 10;
+const COMMUNITY_SLOT_ACTIVE_STATUSES = new Set(["available", "preferred", "maybe"]);
 const CONFIRMATION_STATUS_HELP = "Unconfirmed means this is a possible event date. The admin will confirm the event on that date if it will be possible to execute.";
 const BEST_DATE_SCORE_HELP = "Best Date ranks by the strongest overlapping time window first. Preferred = 5, Available = 3, Maybe = 1, Unavailable = 0.";
 
@@ -2306,6 +2307,7 @@ function handlePlaytestAdmin(action) {
         override.frozen = false;
     } else if (action === "reset-votes") {
         delete state.playtests.votes[playtest.id];
+        closeEmptyCommunitySlots();
     }
 
     savePlaytestState();
@@ -2333,6 +2335,7 @@ function setPlaytestVote(playtestId, slotId, status, timeRange = null) {
         availableEndAt: localDateTimeIso(dateKeyValue, normalizedRange.endTime)
     };
     recordAdminVoteEvent(playtestId, slotId, status);
+    closeEmptyCommunitySlots();
     savePlaytestState();
     render();
 }
@@ -2373,6 +2376,33 @@ function collectSlotVotes(playtest, slotId) {
     const localVote = state.playtests.votes?.[playtest.id]?.[slotId];
     if (localVote?.status) byUser.set(PLAYTEST_VIEWER.userId, localVote);
     return [...byUser.values()].sort((a, b) => statusSortValue(a.status) - statusSortValue(b.status) || a.username.localeCompare(b.username));
+}
+
+function closeEmptyCommunitySlots() {
+    let changed = false;
+    for (const [playtestId, slots] of Object.entries(state.playtests.communitySlots || {})) {
+        if (!Array.isArray(slots) || !slots.length) continue;
+        const keptSlots = [];
+        for (const slot of slots) {
+            if (communitySlotHasParticipant(playtestId, slot.id)) {
+                keptSlots.push(slot);
+                continue;
+            }
+            cleanupPlaytestSlotState(playtestId, slot);
+            changed = true;
+        }
+        if (keptSlots.length) {
+            state.playtests.communitySlots[playtestId] = keptSlots;
+        } else {
+            delete state.playtests.communitySlots[playtestId];
+        }
+    }
+    return changed;
+}
+
+function communitySlotHasParticipant(playtestId, slotId) {
+    return collectSlotVotes({ id: playtestId }, slotId)
+        .some((vote) => COMMUNITY_SLOT_ACTIVE_STATUSES.has(vote.status));
 }
 
 function seedVotesForSlot(playtest, slotId) {
@@ -2845,6 +2875,13 @@ function deletePlaytestSlot(playtestId, slotId) {
         };
     }
 
+    cleanupPlaytestSlotState(playtestId, slot);
+    state.playtests.pendingSlotDelete = null;
+}
+
+function cleanupPlaytestSlotState(playtestId, slot) {
+    const slotId = slot?.id;
+    if (!slotId) return;
     if (state.playtests.votes?.[playtestId]) {
         delete state.playtests.votes[playtestId][slotId];
     }
@@ -2861,7 +2898,10 @@ function deletePlaytestSlot(playtestId, slotId) {
     if (state.playtests.pendingConfirmation?.playtestId === playtestId && state.playtests.pendingConfirmation?.slotId === slotId) {
         state.playtests.pendingConfirmation = null;
     }
-    state.playtests.pendingSlotDelete = null;
+    if (state.playtests.pendingSlotDelete?.playtestId === playtestId && state.playtests.pendingSlotDelete?.slotId === slotId) {
+        state.playtests.pendingSlotDelete = null;
+    }
+    state.playtests.expandedSlotIds?.delete(slotId);
 }
 
 function recordAdminVoteEvent(playtestId, slotId, status) {
@@ -3116,6 +3156,7 @@ function loadPlaytestState() {
             activeHelpTip: "",
             expandedSlotIds: new Set()
         };
+        if (closeEmptyCommunitySlots()) savePlaytestState();
     } catch (error) {
         console.error("Failed to load playtest state", error);
         state.playtests = fallback;
