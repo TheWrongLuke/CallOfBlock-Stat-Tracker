@@ -419,3 +419,5 @@ create index if not exists availability_user_idx on public.availability (user_id
 create index if not exists notification_subscriptions_slot_idx on public.playtest_notification_subscriptions (slot_id);
 create index if not exists playtest_vote_events_playtest_idx on public.playtest_vote_events (playtest_id, created_at desc);
 create index if not exists playtests_status_idx on public.playtests (status, created_at);
+
+notify pgrst, 'reload schema';

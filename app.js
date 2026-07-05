@@ -39,7 +39,7 @@ const DEFAULT_API_POLL_MS = 10000;
 const DEFAULT_SKIN_NAME = "Steve";
 const CHAMPION_ROTATE_MS = 5000;
 const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64, 103, 109, 97, 105, 108, 46, 99, 111, 109];
-const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v1";
+const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v2";
 const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
 const DEFAULT_PLAYTEST_VIEWER = {
     userId: "local-preview-user",
@@ -64,70 +64,8 @@ const PLAYTEST_INTEREST_MIN_SCALE = 10;
 const CONFIRMATION_STATUS_HELP = "Unconfirmed means this is a possible event date. The admin will confirm the event on that date if it will be possible to execute.";
 const BEST_DATE_SCORE_HELP = "Best Date ranks by the strongest overlapping time window first. Preferred = 5, Available = 3, Maybe = 1, Unavailable = 0.";
 
-const PLAYTEST_SEED_USERS = [
-    { userId: "sample-luke", username: "Luke", modePreference: "Battle Royale" },
-    { userId: "sample-john", username: "John", modePreference: "Battle Royale" },
-    { userId: "sample-sarah", username: "Sarah", modePreference: "Either" },
-    { userId: "sample-mike", username: "Mike", modePreference: "Deathmatch" },
-    { userId: "sample-alex", username: "Alex", modePreference: "Battle Royale" },
-    { userId: "sample-nova", username: "Nova", modePreference: "Either" },
-    { userId: "sample-echo", username: "Echo", modePreference: "Deathmatch" },
-    { userId: "sample-rin", username: "Rin", modePreference: "Battle Royale" },
-    { userId: "sample-kai", username: "Kai", modePreference: "Either" },
-    { userId: "sample-mira", username: "Mira", modePreference: "Battle Royale" },
-    { userId: "sample-zen", username: "Zen", modePreference: "Deathmatch" },
-    { userId: "sample-ivy", username: "Ivy", modePreference: "Either" },
-    { userId: "sample-jax", username: "Jax", modePreference: "Battle Royale" },
-    { userId: "sample-aria", username: "Aria", modePreference: "Battle Royale" },
-    { userId: "sample-noah", username: "Noah", modePreference: "Either" },
-    { userId: "sample-lia", username: "Lia", modePreference: "Deathmatch" },
-    { userId: "sample-otto", username: "Otto", modePreference: "Battle Royale" },
-    { userId: "sample-vee", username: "Vee", modePreference: "Either" }
-];
-
-const DEFAULT_PLAYTESTS = [
-    {
-        id: "featured-playtest-dates",
-        title: "Featured Playtest Dates",
-        description: "Official planned Call of Block playtest dates. Pick when you can play and what mode you would rather test.",
-        status: "voting",
-        createdBy: "server-admin",
-        createdAt: "2026-07-04T10:00:00Z",
-        mainSlotId: "br18-sat",
-        slots: [
-            { id: "br18-fri", label: "Featured date", startAt: "2026-07-17T20:00:00Z", source: "featured" },
-            { id: "br18-sat", label: "Featured date", startAt: "2026-07-18T20:00:00Z", source: "featured" },
-            { id: "br18-sun", label: "Featured date", startAt: "2026-07-19T20:00:00Z", source: "featured" },
-            { id: "br18-mon", label: "Featured date", startAt: "2026-07-20T19:00:00Z", source: "featured" }
-        ],
-        seedMatrix: {
-            "br18-fri": {
-                available: [1, 2, 3, 5, 8, 11, 15],
-                preferred: [4, 9, 12],
-                maybe: [0, 6, 10, 14],
-                unavailable: [7, 13, 16]
-            },
-            "br18-sat": {
-                available: [1, 3, 5, 6, 8, 10, 11, 13, 15, 17],
-                preferred: [0, 2, 4, 7, 9, 12, 14, 16],
-                maybe: [],
-                unavailable: []
-            },
-            "br18-sun": {
-                available: [0, 2, 4, 6, 9, 12],
-                preferred: [5, 11],
-                maybe: [1, 3, 7, 8, 15],
-                unavailable: [10, 13, 14, 16, 17]
-            },
-            "br18-mon": {
-                available: [3, 6, 10, 15],
-                preferred: [8],
-                maybe: [0, 1, 2, 4, 5, 9, 11],
-                unavailable: [7, 12, 13, 14, 16, 17]
-            }
-        }
-    }
-];
+const PLAYTEST_SEED_USERS = [];
+const DEFAULT_PLAYTESTS = [];
 
 const state = {
     data: null,
