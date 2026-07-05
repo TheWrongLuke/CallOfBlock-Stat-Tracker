@@ -40,12 +40,15 @@ const DEFAULT_SKIN_NAME = "Steve";
 const CHAMPION_ROTATE_MS = 5000;
 const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64, 103, 109, 97, 105, 108, 46, 99, 111, 109];
 const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v1";
-const PLAYTEST_VIEWER = {
+const DEFAULT_PLAYTEST_VIEWER = {
     userId: "local-preview-user",
     username: "You",
     avatarInitials: "YOU",
+    avatarUrl: "",
+    discordId: "",
     isAdmin: false
 };
+const PLAYTEST_VIEWER = { ...DEFAULT_PLAYTEST_VIEWER };
 
 const PLAYTEST_STATUS_OPTIONS = [
     { id: "available", label: "Available", score: 3 },
@@ -132,6 +135,11 @@ const state = {
     supabaseKey: "",
     supabaseTable: "cob_stats_exports",
     supabaseRowId: "live",
+    authClient: null,
+    authReady: false,
+    authSession: null,
+    authProfile: null,
+    authMessage: "",
     pollMs: DEFAULT_API_POLL_MS,
     refreshTimer: null,
     dataSignature: "",
@@ -158,10 +166,12 @@ const state = {
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
+    setupAuthClient();
     loadPlaytestState();
     applyRoute();
     bindStaticEvents();
     startChampionRotation();
+    void initAuth();
     void loadData();
 });
 
@@ -174,6 +184,116 @@ function setupLiveConfig() {
     state.supabaseRowId = params.get("supabaseRowId") || window.COB_SUPABASE_ROW_ID || "live";
     const pollMs = Number(params.get("pollMs") || window.COB_STATS_POLL_MS || DEFAULT_API_POLL_MS);
     state.pollMs = Number.isFinite(pollMs) && pollMs >= 3000 ? pollMs : DEFAULT_API_POLL_MS;
+}
+
+function setupAuthClient() {
+    if (!state.supabaseUrl || !state.supabaseKey) {
+        state.authMessage = "Discord login is not configured.";
+        return;
+    }
+    if (!window.supabase?.createClient) {
+        state.authMessage = "Discord login could not load. Try refreshing the page.";
+        return;
+    }
+
+    state.authClient = window.supabase.createClient(state.supabaseUrl, state.supabaseKey, {
+        auth: {
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: true
+        },
+        global: {
+            headers: {
+                "x-client-info": "call-of-block-stats-site"
+            }
+        }
+    });
+}
+
+async function initAuth() {
+    if (!state.authClient) {
+        state.authReady = true;
+        render();
+        return;
+    }
+
+    try {
+        const { data, error } = await state.authClient.auth.getSession();
+        if (error) throw error;
+        await applyAuthSession(data?.session || null);
+        state.authClient.auth.onAuthStateChange((_event, session) => {
+            void applyAuthSession(session, true);
+        });
+    } catch (error) {
+        console.error("Failed to initialize Discord login", error);
+        state.authReady = true;
+        state.authMessage = "Discord login is unavailable right now.";
+        resetPlaytestViewer();
+        render();
+    }
+}
+
+async function applyAuthSession(session, shouldRender = false) {
+    state.authSession = session || null;
+    state.authReady = true;
+
+    if (!session?.user) {
+        state.authProfile = null;
+        state.authMessage = "";
+        resetPlaytestViewer();
+        if (shouldRender) render();
+        return;
+    }
+
+    updateViewerFromDiscordUser(session.user);
+    await syncPlaytestProfile(session.user);
+    if (shouldRender) render();
+}
+
+async function signInWithDiscord() {
+    if (!state.authClient) {
+        state.authMessage = "Discord login is not configured.";
+        render();
+        return;
+    }
+
+    state.authMessage = "";
+    const { error } = await state.authClient.auth.signInWithOAuth({
+        provider: "discord",
+        options: {
+            redirectTo: playtestAuthRedirectUrl()
+        }
+    });
+    if (error) {
+        console.error("Discord login failed", error);
+        state.authMessage = "Discord login failed. Try again.";
+        render();
+    }
+}
+
+async function signOutDiscord() {
+    if (!state.authClient) return;
+    const { error } = await state.authClient.auth.signOut();
+    if (error) {
+        console.error("Discord sign out failed", error);
+        state.authMessage = "Could not sign out right now.";
+        render();
+        return;
+    }
+    state.authSession = null;
+    state.authProfile = null;
+    state.authMessage = "";
+    resetPlaytestViewer();
+    render();
+}
+
+function playtestAuthRedirectUrl() {
+    const url = new URL(window.location.href);
+    url.hash = "playtests";
+    for (const key of ["code", "error", "error_code", "error_description"]) {
+        url.searchParams.delete(key);
+    }
+    return url.toString();
 }
 
 function bindStaticEvents() {
@@ -540,6 +660,145 @@ async function fetchSupabaseExport() {
         console.error("Failed to load Supabase stats", error);
         return null;
     }
+}
+
+async function syncPlaytestProfile(user) {
+    if (!state.authClient || !user?.id) return null;
+
+    const discordId = discordIdFromUser(user);
+    if (!discordId) {
+        state.authMessage = "Discord login connected, but Discord ID was not returned.";
+        return null;
+    }
+
+    const username = discordUsernameFromUser(user);
+    const avatarUrl = discordAvatarFromUser(user);
+    const profileColumns = "id, discord_id, username, avatar_url, is_admin, banned_from_voting";
+
+    try {
+        const { data: existing, error: selectError } = await state.authClient
+            .from("profiles")
+            .select(profileColumns)
+            .eq("id", user.id)
+            .maybeSingle();
+        if (selectError) throw selectError;
+
+        if (existing) {
+            const { data, error } = await state.authClient
+                .from("profiles")
+                .update({ username, avatar_url: avatarUrl || null })
+                .eq("id", user.id)
+                .select(profileColumns)
+                .single();
+            if (error) throw error;
+            applyPlaytestProfile(data);
+            return data;
+        }
+
+        const { data, error } = await state.authClient
+            .from("profiles")
+            .insert({
+                id: user.id,
+                discord_id: discordId,
+                username,
+                avatar_url: avatarUrl || null
+            })
+            .select(profileColumns)
+            .single();
+        if (error) throw error;
+        applyPlaytestProfile(data);
+        return data;
+    } catch (error) {
+        console.error("Failed to sync Discord profile", error);
+        state.authProfile = null;
+        PLAYTEST_VIEWER.isAdmin = false;
+        state.authMessage = "Discord login worked, but profile sync failed. Check the playtest schema.";
+        return null;
+    }
+}
+
+function applyPlaytestProfile(profile) {
+    state.authProfile = profile || null;
+    if (!profile) return;
+    PLAYTEST_VIEWER.userId = profile.id || PLAYTEST_VIEWER.userId;
+    PLAYTEST_VIEWER.discordId = profile.discord_id || PLAYTEST_VIEWER.discordId;
+    PLAYTEST_VIEWER.username = profile.username || PLAYTEST_VIEWER.username;
+    PLAYTEST_VIEWER.avatarUrl = profile.avatar_url || PLAYTEST_VIEWER.avatarUrl;
+    PLAYTEST_VIEWER.avatarInitials = initialsForName(PLAYTEST_VIEWER.username);
+    PLAYTEST_VIEWER.isAdmin = Boolean(profile.is_admin);
+    state.authMessage = "";
+}
+
+function updateViewerFromDiscordUser(user) {
+    PLAYTEST_VIEWER.userId = user.id || DEFAULT_PLAYTEST_VIEWER.userId;
+    PLAYTEST_VIEWER.discordId = discordIdFromUser(user);
+    PLAYTEST_VIEWER.username = discordUsernameFromUser(user);
+    PLAYTEST_VIEWER.avatarUrl = discordAvatarFromUser(user);
+    PLAYTEST_VIEWER.avatarInitials = initialsForName(PLAYTEST_VIEWER.username);
+    PLAYTEST_VIEWER.isAdmin = false;
+}
+
+function resetPlaytestViewer() {
+    Object.assign(PLAYTEST_VIEWER, DEFAULT_PLAYTEST_VIEWER);
+}
+
+function discordIdentityFromUser(user) {
+    return (user?.identities || []).find((identity) => identity.provider === "discord") || null;
+}
+
+function discordIdFromUser(user) {
+    const identity = discordIdentityFromUser(user);
+    const metadata = user?.user_metadata || {};
+    const identityData = identity?.identity_data || {};
+    return String(
+        identityData.provider_id
+        || identityData.id
+        || identityData.sub
+        || metadata.provider_id
+        || metadata.id
+        || metadata.sub
+        || identity?.identity_id
+        || ""
+    );
+}
+
+function discordUsernameFromUser(user) {
+    const identity = discordIdentityFromUser(user);
+    const metadata = user?.user_metadata || {};
+    const identityData = identity?.identity_data || {};
+    return String(
+        metadata.global_name
+        || metadata.full_name
+        || metadata.name
+        || metadata.user_name
+        || identityData.global_name
+        || identityData.full_name
+        || identityData.name
+        || identityData.user_name
+        || user?.email?.split("@")[0]
+        || "Discord user"
+    );
+}
+
+function discordAvatarFromUser(user) {
+    const identity = discordIdentityFromUser(user);
+    const metadata = user?.user_metadata || {};
+    const identityData = identity?.identity_data || {};
+    return String(
+        metadata.avatar_url
+        || metadata.picture
+        || identityData.avatar_url
+        || identityData.picture
+        || ""
+    );
+}
+
+function initialsForName(value) {
+    const parts = String(value || "You").trim().split(/\s+/).filter(Boolean);
+    const initials = parts.length > 1
+        ? `${parts[0][0] || ""}${parts[1][0] || ""}`
+        : (parts[0] || "You").slice(0, 3);
+    return initials.toUpperCase();
 }
 
 function applyData(data, preview, dataMode) {
@@ -1171,17 +1430,28 @@ function renderPlaytestList(playtests, active) {
 function renderPlaytestIdentity() {
     const container = document.getElementById("playtest-identity");
     if (!container) return;
+    const loggedIn = isDiscordLoggedIn();
+    const authLabel = playtestAuthLabel();
+    const avatar = PLAYTEST_VIEWER.avatarUrl
+        ? `<img class="identity-avatar" src="${escapeHtml(PLAYTEST_VIEWER.avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+        : `<span class="identity-avatar">${escapeHtml(PLAYTEST_VIEWER.avatarInitials)}</span>`;
     container.innerHTML = `
         <section class="playtest-side-block identity-block">
             <p class="panel-kicker">Discord Identity</p>
             <div class="identity-row">
-                <span class="identity-avatar">${escapeHtml(PLAYTEST_VIEWER.avatarInitials)}</span>
+                ${avatar}
                 <div>
                     <strong>${escapeHtml(PLAYTEST_VIEWER.username)}</strong>
-                    <small>Local preview account</small>
+                    <small>${escapeHtml(authLabel)}</small>
                 </div>
             </div>
-            <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Open Discord</a>
+            <div class="identity-actions">
+                ${loggedIn
+                    ? `<button type="button" data-auth-sign-out>Sign out</button>`
+                    : `<button type="button" data-auth-login ${state.authClient && state.authReady ? "" : "disabled"}>Login with Discord</button>`}
+                <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Open Discord</a>
+            </div>
+            ${state.authMessage ? `<p class="identity-status">${escapeHtml(state.authMessage)}</p>` : ""}
         </section>
     `;
 }
@@ -1515,6 +1785,14 @@ function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled) {
     const subscribed = isNotificationSubscribed(playtestId, key);
     const count = slotId ? notificationSubscriberCount(playtestId, slotId) : 0;
     const labelContext = dateKeyValue ? formatDateKeyDay(dateKeyValue) : "this date";
+    const loginRequired = !isDiscordLoggedIn();
+    const authPending = state.authClient && !state.authReady;
+    const effectiveDisabled = disabled || loginRequired || authPending;
+    const helperText = authPending
+        ? "Checking Discord login..."
+        : loginRequired
+            ? "Login with Discord required."
+            : `${count} Discord notification opt-in${count === 1 ? "" : "s"}`;
     return `
         <div class="notify-row">
             <button
@@ -1524,9 +1802,9 @@ function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled) {
                 data-calendar-date="${escapeHtml(dateKeyValue || "")}"
                 aria-label="${escapeHtml(`${subscribed ? "Notification enabled" : "Enable notification"} for ${labelContext}`)}"
                 aria-pressed="${subscribed ? "true" : "false"}"
-                ${disabled ? "disabled" : ""}
+                ${effectiveDisabled ? "disabled" : ""}
             >${subscribed ? "Notify me on confirmation" : "Notify me if confirmed"}</button>
-            <small>${count} Discord notification opt-in${count === 1 ? "" : "s"}</small>
+            <small class="${loginRequired && !authPending ? "notify-warning" : ""}">${escapeHtml(helperText)}</small>
         </div>
     `;
 }
@@ -1787,6 +2065,18 @@ function renderPlaytestResults(best, second, playtest) {
 }
 
 function handlePlaytestClick(event) {
+    const authLoginButton = event.target.closest("[data-auth-login]");
+    if (authLoginButton) {
+        void signInWithDiscord();
+        return;
+    }
+
+    const authSignOutButton = event.target.closest("[data-auth-sign-out]");
+    if (authSignOutButton) {
+        void signOutDiscord();
+        return;
+    }
+
     const selectButton = event.target.closest("[data-playtest-select]");
     if (selectButton) {
         state.playtests.activeId = selectButton.dataset.playtestSelect;
@@ -1826,6 +2116,11 @@ function handlePlaytestClick(event) {
 
     const notifyButton = event.target.closest("[data-notify-toggle]");
     if (notifyButton) {
+        if (!isDiscordLoggedIn()) {
+            state.authMessage = "Login with Discord required.";
+            render();
+            return;
+        }
         const playtest = activePlaytest();
         if (!playtest) return;
         let key = notifyButton.dataset.notifyToggle;
@@ -2248,6 +2543,17 @@ function isPlaytestAdmin() {
     return Boolean(PLAYTEST_VIEWER.isAdmin);
 }
 
+function isDiscordLoggedIn() {
+    return Boolean(state.authSession?.user && PLAYTEST_VIEWER.discordId);
+}
+
+function playtestAuthLabel() {
+    if (!state.authClient) return "Discord login unavailable";
+    if (!state.authReady) return "Checking Discord login...";
+    if (!isDiscordLoggedIn()) return "Login required for Discord notifications";
+    return PLAYTEST_VIEWER.isAdmin ? "Discord connected - Admin" : "Discord connected";
+}
+
 function nextEventSummary(playtest, summaries) {
     const now = Date.now();
     const confirmedFuture = summaries
@@ -2450,18 +2756,22 @@ function unconfirmPlaytestSlot(playtestId, slotId) {
 }
 
 function isNotificationSubscribed(playtestId, key) {
-    return Boolean(key && state.playtests.notificationSubscriptions?.[playtestId]?.[key]);
+    if (!isDiscordLoggedIn()) return false;
+    const subscription = key ? state.playtests.notificationSubscriptions?.[playtestId]?.[key] : null;
+    return Boolean(subscription && subscription.userId === PLAYTEST_VIEWER.userId);
 }
 
 function toggleNotificationSubscription(playtestId, key) {
-    if (!key) return;
+    if (!key || !isDiscordLoggedIn()) return;
     state.playtests.notificationSubscriptions[playtestId] = state.playtests.notificationSubscriptions[playtestId] || {};
-    if (state.playtests.notificationSubscriptions[playtestId][key]) {
+    const existing = state.playtests.notificationSubscriptions[playtestId][key];
+    if (existing?.userId === PLAYTEST_VIEWER.userId) {
         delete state.playtests.notificationSubscriptions[playtestId][key];
     } else {
         state.playtests.notificationSubscriptions[playtestId][key] = {
             userId: PLAYTEST_VIEWER.userId,
             username: PLAYTEST_VIEWER.username,
+            discordId: PLAYTEST_VIEWER.discordId,
             createdAt: new Date().toISOString()
         };
     }

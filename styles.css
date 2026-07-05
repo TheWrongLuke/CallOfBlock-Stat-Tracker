@@ -1414,6 +1414,7 @@ a[aria-disabled="true"] {
 .playtests-hero-actions a,
 .playtests-hero-actions button,
 .identity-block a,
+.identity-block button,
 .admin-action-grid button,
 .playtest-create-form button,
 .slot-expand,
@@ -1432,6 +1433,7 @@ a[aria-disabled="true"] {
 .playtests-hero-actions a,
 .playtests-hero-actions button,
 .identity-block a,
+.identity-block button,
 .admin-action-grid button,
 .playtest-create-form button {
     display: inline-flex;
@@ -1444,6 +1446,7 @@ a[aria-disabled="true"] {
 .playtests-hero-actions a:hover,
 .playtests-hero-actions button:hover,
 .identity-block a:hover,
+.identity-block button:hover:not(:disabled),
 .admin-action-grid button:hover,
 .playtest-create-form button:hover,
 .slot-expand:hover,
@@ -1518,6 +1521,24 @@ a[aria-disabled="true"] {
     margin: 12px 0;
 }
 
+.identity-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.identity-block button:disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+}
+
+.identity-status {
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
 .identity-avatar {
     display: inline-grid;
     place-items: center;
@@ -1529,6 +1550,11 @@ a[aria-disabled="true"] {
     color: var(--blue);
     font-family: "Chakra Petch", sans-serif;
     font-size: 0.82rem;
+    object-fit: cover;
+}
+
+img.identity-avatar {
+    display: block;
 }
 
 .preference-field {
@@ -2044,6 +2070,10 @@ a[aria-disabled="true"] {
 .notify-row small {
     color: var(--muted);
     font-size: 0.78rem;
+}
+
+.notify-row .notify-warning {
+    color: #ffcf8a;
 }
 
 .notify-toggle,

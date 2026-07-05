@@ -262,6 +262,25 @@ alter table public.playtest_notification_subscriptions enable row level security
 alter table public.playtest_vote_events enable row level security;
 alter table public.playtest_bans enable row level security;
 
+grant usage on schema public to anon, authenticated;
+
+revoke all on table public.profiles from anon, authenticated;
+grant select on table public.profiles to anon, authenticated;
+grant insert (id, discord_id, username, avatar_url) on table public.profiles to authenticated;
+grant update (username, avatar_url) on table public.profiles to authenticated;
+
+grant select on table public.playtests to anon, authenticated;
+grant insert, update, delete on table public.playtests to authenticated;
+grant select on table public.playtest_slots to anon, authenticated;
+grant insert, update, delete on table public.playtest_slots to authenticated;
+grant select on table public.availability to anon, authenticated;
+grant insert, update, delete on table public.availability to authenticated;
+grant select, insert, update, delete on table public.playtest_notification_subscriptions to authenticated;
+grant select on table public.playtest_vote_events to authenticated;
+grant select, insert on table public.playtest_vote_events to service_role;
+grant select, insert, update, delete on table public.playtest_bans to authenticated;
+grant all on all tables in schema public to service_role;
+
 drop policy if exists "Profiles are readable" on public.profiles;
 create policy "Profiles are readable"
 on public.profiles for select
