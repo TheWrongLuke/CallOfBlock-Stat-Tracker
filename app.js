@@ -1657,7 +1657,7 @@ function renderPlaytestConfirmationDialog() {
 function renderSelectedDateCard(selected, playtest, canVote) {
     if (!selected.summary) {
         const isPast = isPastDateKey(selected.dateKey);
-        const notifyDisabled = isPast || !canVote;
+        const notifyDisabled = true;
         const defaultTimes = normalizeTimeRange();
         const selectedDateLabel = formatDateKeyDay(selected.dateKey);
         return `
@@ -1680,7 +1680,7 @@ function renderSelectedDateCard(selected, playtest, canVote) {
                 </div>
                 <small class="selected-date-note">Times use ${escapeHtml(viewerTimeZoneLabel())}.</small>
                 <p class="selected-date-note">${isPast ? "This date has already passed." : "No one has started this date yet. Voting here will create a community date."}</p>
-                ${renderNotificationToggle(playtest.id, null, selected.dateKey, notifyDisabled)}
+                ${renderNotificationToggle(playtest.id, null, selected.dateKey, notifyDisabled, "Set availability first to enable confirmation notifications.")}
                 ${isPlaytestAdmin() ? renderConfirmationControls(playtest.id, null, selected.dateKey, isPast) : ""}
                 <div class="vote-row compact">
                     ${PLAYTEST_STATUS_OPTIONS.map((option) => `
@@ -1776,7 +1776,7 @@ function renderHelpTipButton(id, text, label) {
     `;
 }
 
-function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled) {
+function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled, disabledReason = "") {
     const key = slotId || `date:${dateKeyValue}`;
     const subscribed = isNotificationSubscribed(playtestId, key);
     const count = slotId ? notificationSubscriberCount(playtestId, slotId) : 0;
@@ -1788,7 +1788,7 @@ function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled) {
         ? "Checking Discord login..."
         : loginRequired
             ? "Login with Discord required for notification to be toggled."
-            : `${count} Discord notification opt-in${count === 1 ? "" : "s"}`;
+            : disabledReason || `${count} Discord notification opt-in${count === 1 ? "" : "s"}`;
     return `
         <div class="notify-row">
             <label class="notify-toggle ${subscribed ? "active" : ""}">
@@ -2131,9 +2131,9 @@ function handlePlaytestClick(event) {
         if (!playtest) return;
         let key = notifyButton.dataset.notifyToggle;
         if (key.startsWith("date:")) {
-            const slot = ensureCommunitySlot(playtest.id, notifyButton.dataset.calendarDate, selectedCommunityTimeRange());
-            if (!slot) return;
-            key = slot.id;
+            state.authMessage = "Set your availability before enabling confirmation notifications.";
+            render();
+            return;
         }
         toggleNotificationSubscription(playtest.id, key);
         savePlaytestState();

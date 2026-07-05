@@ -1,6 +1,7 @@
 import { EmbedBuilder, Routes } from "discord.js";
 import { sendChannelMessage } from "./discord-client.js";
 import { discordTimestamp, formatShortRange, formatTimeRange, mentionUser, statusLabel, trimForDiscord } from "./format.js";
+import { hasLeaderboardRoleSyncConfig, syncLeaderboardRoles } from "./leaderboard-roles.js";
 import { maybeSingle } from "./supabase.js";
 import { rememberId, saveState } from "./state-store.js";
 
@@ -10,13 +11,20 @@ export function startPollers(context) {
   const stopAdminRoleSync = context.config.discordGuildId && context.config.discordAdminRoleId
     ? startLoop("admin role sync", context.config.adminRoleSyncIntervalMs, () => syncAdminRoles(context), context.logger)
     : null;
+  const stopLeaderboardRoleSync = hasLeaderboardRoleSyncConfig(context.config)
+    ? startLoop("leaderboard role sync", context.config.leaderboardRoleSyncIntervalMs, () => syncLeaderboardRoles(context), context.logger)
+    : null;
   if (!stopAdminRoleSync) {
     context.logger.warn("Discord admin role sync is disabled. Set DISCORD_GUILD_ID and DISCORD_ADMIN_ROLE_ID to enable website admins from a Discord role.");
+  }
+  if (!stopLeaderboardRoleSync) {
+    context.logger.warn("Leaderboard role sync is disabled. Set LEADERBOARD_ROLE_IDS and player bindings, or LEADERBOARD_ROLE_SYNC_CONFIG_PATH.");
   }
   return () => {
     stopVoteEvents();
     stopConfirmations();
     if (stopAdminRoleSync) stopAdminRoleSync();
+    if (stopLeaderboardRoleSync) stopLeaderboardRoleSync();
   };
 }
 

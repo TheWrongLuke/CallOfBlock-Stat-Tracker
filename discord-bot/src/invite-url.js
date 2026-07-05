@@ -11,6 +11,7 @@ if (!clientId) {
 }
 
 const permissions = 1024n // View Channel
+  | 268435456n // Manage Roles
   | 2048n // Send Messages
   | 16384n // Embed Links
   | 65536n; // Read Message History

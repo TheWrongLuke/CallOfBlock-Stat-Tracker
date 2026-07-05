@@ -7,6 +7,7 @@ Current features:
 - Sends a public confirmation-channel message when a playtest slot is confirmed.
 - Mentions users who opted into confirmation notifications.
 - Syncs a configured Discord role into website admin access.
+- Syncs top leaderboard Discord roles from the published Minecraft stats export.
 - Persists processed event IDs in `.bot-state.json` so restarts do not resend old alerts.
 
 ## Setup
@@ -28,7 +29,7 @@ npm.cmd install
 npm.cmd run invite
 ```
 
-Open that URL, choose your Discord server, and authorize the bot. The bot needs access to the private admin-alert channel and the public confirmation channel.
+Open that URL, choose your Discord server, and authorize the bot. The bot needs access to the private admin-alert channel and the public confirmation channel. If leaderboard roles are enabled, the bot also needs `Manage Roles`, and the bot's Discord role must be higher than the roles it manages.
 
 8. Start the bot:
 
@@ -53,6 +54,18 @@ npm.cmd start
 `DISCORD_ADMIN_ROLE_ID` is the Discord role that should become website admin. Right-click the role in Server Settings, then copy the role ID. Users must log into the website once before the bot can sync their profile.
 
 `ADMIN_ROLE_SYNC_INTERVAL_MS` controls how often the bot checks Discord roles and updates `profiles.is_admin`.
+
+`STATS_EXPORT_TABLE` and `STATS_EXPORT_ROW_ID` tell the bot where the published website stats live in Supabase.
+
+`LEADERBOARD_ROLE_SYNC_CONFIG_PATH` can point to the old Minecraft `config/brcontrol/discord_sync.json`. The bot reads `guildId`, `roleIds`, `roleSource`, and `playerBindings` from it, but still uses this bot's `DISCORD_TOKEN`.
+
+`LEADERBOARD_ROLE_IDS` is a comma-separated list of Discord role IDs for first, second, and third place. It overrides role IDs from `LEADERBOARD_ROLE_SYNC_CONFIG_PATH`.
+
+`LEADERBOARD_ROLE_SYNC_MODE` is `battleRoyale` or `deathmatch`. `LEADERBOARD_ROLE_SYNC_SORT` is `wins`, `kills`, or `games`.
+
+`LEADERBOARD_PLAYER_BINDINGS` is optional JSON mapping leaderboard player IDs, Minecraft names, or public `p_...` IDs to Discord user IDs. Example: `{"name:rtxluke":"123","name:ryukai79":"456"}`.
+
+`MINECRAFT_USERCACHE_PATH` lets the bot translate old UUID bindings from `discord_sync.json` into the current `name:<player>` leaderboard IDs.
 
 `STARTUP_BACKFILL_MINUTES=0` means the bot starts from "now" on first run. Increase it if you want the first run to catch recent events.
 
