@@ -6,7 +6,7 @@
     <title>Call of Block Stats</title>
     <link rel="icon" type="image/png" href="./Icon.png">
     <link rel="apple-touch-icon" href="./Icon.png">
-    <link rel="stylesheet" href="./styles.css?v=server-polish-3">
+    <link rel="stylesheet" href="./styles.css?v=server-polish-8">
 </head>
 <body class="home-route">
 <div class="app-shell">
@@ -20,6 +20,7 @@
             <div class="hero-links" aria-label="Server links">
                 <a class="join-link" href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord invite</a>
                 <a class="join-link" href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">YouTube</a>
+                <a class="join-link" href="#playtests">Playtests</a>
                 <a class="join-link" href="#help">Help</a>
                 <span class="server-pill">Server access in Discord</span>
             </div>
@@ -109,6 +110,30 @@
                 <p>Check rankings, player profiles, match history, weapons, maps, headshots, playtime, win rates, and the last completed games from the live server stats.</p>
                 <a href="#view=leaderboards&mode=overall&board=players&sort=wins">Leaderboards</a>
             </article>
+            <article class="info-panel">
+                <span>04</span>
+                <h3>Playtests</h3>
+                <p>Pick the best community match time with transparent availability, preferred dates, mode interest, and a ranked winner.</p>
+                <a href="#playtests">Open scheduler</a>
+            </article>
+        </section>
+
+        <section class="playtest-promo" id="home-playtest-promo">
+            <div>
+                <p class="panel-kicker">Community Playtests</p>
+                <h2>Vote the next session into shape.</h2>
+                <p>
+                    Planned dates are highlighted as featured sessions, while extra community suggestions live on the calendar.
+                    Pick Available, Maybe, Unavailable, or Preferred, then choose whether you would rather test Battle Royale,
+                    Deathmatch, or either mode.
+                </p>
+            </div>
+            <div class="playtest-promo-actions">
+                <a href="#playtests">Open playtest scheduler</a>
+                <span>Calendar voting</span>
+                <span>Best-date score</span>
+                <span>Mode interest</span>
+            </div>
         </section>
 
         <section class="join-section">
@@ -123,7 +148,7 @@
                 </article>
                 <article>
                     <span>Server Access</span>
-                    <strong>Posted in Discord</strong>
+                    <strong>Not public yet</strong>
                 </article>
                 <article>
                     <span>Modpack</span>
@@ -256,7 +281,7 @@
                     <h2 id="leaderboard-title">Loading...</h2>
                     <p class="leaderboard-count" id="leaderboard-count">0 tracked players</p>
                 </div>
-                <div class="tab-row" id="mode-tabs"></div>
+                <div class="tab-row" id="mode-tabs" role="group" aria-label="Leaderboard mode"></div>
             </div>
 
             <div class="toolbar">
@@ -267,7 +292,7 @@
                 </label>
             </div>
 
-            <div class="table-wrap">
+            <div class="table-wrap" tabindex="0" role="region" aria-label="Leaderboard table with sortable columns">
                 <table class="leaderboard-table">
                     <thead>
                     <tr>
@@ -308,6 +333,42 @@
                 </div>
             </div>
         </aside>
+    </main>
+
+    <main class="playtests-view hidden" id="playtests-view">
+        <section class="playtests-hero">
+            <div>
+                <p class="panel-kicker">Community Playtests</p>
+                <h2>Schedule the next Call of Block session.</h2>
+            </div>
+            <div class="playtests-hero-actions">
+                <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord</a>
+                <button type="button" data-route="leaderboard">Stats</button>
+            </div>
+        </section>
+        <section class="playtests-layout">
+            <aside class="playtests-sidebar">
+                <div id="playtest-list"></div>
+                <div id="playtest-identity"></div>
+                <div id="playtest-preferences"></div>
+                <div id="playtest-admin"></div>
+            </aside>
+            <section class="playtest-board" id="playtest-board" aria-live="polite"></section>
+        </section>
+    </main>
+
+    <main class="community-admin-view hidden" id="community-admin-view">
+        <section class="playtests-hero">
+            <div>
+                <p class="panel-kicker">Admin Calendar</p>
+                <h2>Community date overview.</h2>
+            </div>
+            <div class="playtests-hero-actions">
+                <a href="#playtests">Scheduler</a>
+                <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord</a>
+            </div>
+        </section>
+        <section id="community-admin-board" class="community-admin-board" aria-live="polite"></section>
     </main>
 
     <main class="admin-help-view hidden" id="admin-help-view">
@@ -559,6 +620,7 @@
             <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Modrinth</a>
             <a href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">YouTube</a>
             <a href="https://ko-fi.com/J3J17SDR6" target="_blank" rel="noopener noreferrer">Ko-fi</a>
+            <a href="#playtests">Playtests</a>
             <a href="#help">Help</a>
             <button type="button" data-contact-email>Email</button>
         </nav>
@@ -566,6 +628,6 @@
 </div>
 
 <script src="./api-config.js"></script>
-<script src="./app.js?v=admin-help-1" defer></script>
+<script src="./app.js?v=playtests-7" defer></script>
 </body>
 </html>

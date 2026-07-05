@@ -153,6 +153,7 @@ body.home-route::before {
 }
 
 .hero-title-link {
+    min-height: 44px;
     border: 0;
     padding: 0;
     background: transparent;
@@ -191,7 +192,7 @@ body.home-route::before {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 42px;
+    min-height: 44px;
     border: 1px solid rgba(140, 255, 106, 0.34);
     border-radius: 999px;
     padding: 10px 15px;
@@ -204,7 +205,7 @@ body.home-route::before {
 .join-cards > article > a,
 .video-card a {
     justify-self: center;
-    min-height: 34px;
+    min-height: 44px;
     padding: 7px 12px;
     font-size: 0.92rem;
 }
@@ -255,6 +256,7 @@ a[aria-disabled="true"] {
 }
 
 .top-nav button {
+    min-height: 44px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.035);
     color: var(--text);
@@ -826,7 +828,7 @@ a[aria-disabled="true"] {
 
 .info-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 18px;
     padding-bottom: 34px;
 }
@@ -858,6 +860,7 @@ a[aria-disabled="true"] {
 }
 
 .join-section,
+.playtest-promo,
 .video-section,
 .guide-panel,
 .command-help {
@@ -876,6 +879,85 @@ a[aria-disabled="true"] {
     gap: 20px;
     align-items: center;
     padding: clamp(22px, 3vw, 34px);
+}
+
+.playtest-promo {
+    display: grid;
+    grid-template-columns: minmax(0, 0.72fr) minmax(320px, 0.42fr);
+    gap: 18px;
+    align-items: center;
+    padding: clamp(24px, 4vw, 44px);
+    background:
+        linear-gradient(135deg, rgba(126, 200, 255, 0.13), transparent 34%),
+        linear-gradient(180deg, rgba(16, 28, 30, 0.9), rgba(9, 13, 16, 0.96));
+}
+
+.playtest-promo h2 {
+    margin: 8px 0 12px;
+    max-width: 11ch;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: clamp(2.4rem, 5vw, 5.2rem);
+    line-height: 0.9;
+}
+
+.upcoming-event-main {
+    display: grid;
+    align-content: center;
+}
+
+.playtest-promo .upcoming-event-date {
+    margin-bottom: 6px;
+    max-width: 12ch;
+}
+
+.upcoming-event-time {
+    display: block;
+    width: fit-content;
+    margin: 0 0 14px;
+    border: 1px solid rgba(133, 232, 157, 0.24);
+    border-radius: 999px;
+    padding: 7px 11px;
+    background: rgba(133, 232, 157, 0.08);
+    color: var(--green);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: clamp(0.98rem, 1.6vw, 1.28rem);
+}
+
+.playtest-promo p:not(.panel-kicker) {
+    max-width: 70ch;
+    margin: 0;
+    color: rgba(238, 244, 241, 0.76);
+    line-height: 1.6;
+}
+
+.playtest-promo-actions {
+    display: grid;
+    gap: 10px;
+}
+
+.playtest-promo-actions a,
+.playtest-promo-actions span {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 48px;
+    border: 1px solid rgba(140, 255, 106, 0.24);
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: rgba(0, 0, 0, 0.18);
+    color: var(--text);
+    font-family: "Chakra Petch", sans-serif;
+    text-decoration: none;
+}
+
+.playtest-promo-actions a {
+    border-color: rgba(140, 255, 106, 0.46);
+    background: rgba(140, 255, 106, 0.12);
+}
+
+.playtest-promo-actions a:hover {
+    color: var(--gold);
+    border-color: rgba(140, 255, 106, 0.7);
 }
 
 .join-section h2,
@@ -1256,7 +1338,7 @@ a[aria-disabled="true"] {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 34px;
+    min-height: 44px;
     appearance: none;
     border: 1px solid rgba(140, 255, 106, 0.28);
     border-radius: 999px;
@@ -1273,6 +1355,1315 @@ a[aria-disabled="true"] {
 .footer-links button:hover {
     border-color: rgba(140, 255, 106, 0.58);
     color: var(--gold);
+}
+
+.playtests-view,
+.community-admin-view {
+    display: grid;
+    gap: 18px;
+    width: min(1500px, calc(100vw - 32px));
+    margin: 20px auto 0;
+}
+
+.playtests-hero,
+.playtest-side-block,
+.playtest-detail-head,
+.community-admin-summary,
+.community-calendar-panel,
+.main-date-card,
+.best-date-card,
+.preference-summary-card,
+.playtest-slot-card,
+.calendar-card,
+.heatmap-card,
+.results-card,
+.playtest-empty {
+    border: 1px solid var(--line);
+    background: var(--panel-strong);
+    box-shadow: var(--shadow);
+}
+
+.playtests-hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-end;
+    border-radius: var(--radius-lg);
+    padding: clamp(22px, 3vw, 34px);
+    background:
+        linear-gradient(135deg, rgba(126, 200, 255, 0.12), transparent 34%),
+        linear-gradient(180deg, rgba(16, 28, 39, 0.96), rgba(10, 15, 24, 0.98));
+}
+
+.playtests-hero h2 {
+    margin: 8px 0 0;
+    max-width: 12ch;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: clamp(2.3rem, 5vw, 5.4rem);
+    line-height: 0.9;
+}
+
+.playtests-hero-actions,
+.admin-action-grid,
+.vote-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.playtests-hero-actions a,
+.playtests-hero-actions button,
+.identity-block a,
+.admin-action-grid button,
+.playtest-create-form button,
+.slot-expand,
+.vote-button {
+    appearance: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-family: "Chakra Petch", sans-serif;
+    text-decoration: none;
+}
+
+.playtests-hero-actions a,
+.playtests-hero-actions button,
+.identity-block a,
+.admin-action-grid button,
+.playtest-create-form button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 9px 14px;
+}
+
+.playtests-hero-actions a:hover,
+.playtests-hero-actions button:hover,
+.identity-block a:hover,
+.admin-action-grid button:hover,
+.playtest-create-form button:hover,
+.slot-expand:hover,
+.vote-button:hover:not(:disabled) {
+    border-color: rgba(255, 203, 107, 0.42);
+    color: var(--gold);
+    background: rgba(255, 203, 107, 0.11);
+}
+
+.playtests-layout {
+    display: grid;
+    grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+}
+
+.playtests-sidebar {
+    display: grid;
+    gap: 14px;
+    position: sticky;
+    top: 18px;
+}
+
+.playtest-side-block {
+    border-radius: var(--radius-md);
+    padding: 18px;
+}
+
+.playtest-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.playtest-list-item {
+    display: grid;
+    gap: 6px;
+    width: 100%;
+    min-height: 92px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    background: rgba(0, 0, 0, 0.18);
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+}
+
+.playtest-list-item span,
+.playtest-list-item small,
+.identity-row small,
+.muted-line {
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.playtest-list-item strong {
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.06rem;
+}
+
+.playtest-list-item.active {
+    border-color: rgba(255, 203, 107, 0.42);
+    background: linear-gradient(135deg, rgba(255, 203, 107, 0.14), rgba(126, 200, 255, 0.1));
+}
+
+.identity-row {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    margin: 12px 0;
+}
+
+.identity-avatar {
+    display: inline-grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border: 1px solid rgba(126, 200, 255, 0.36);
+    border-radius: 12px;
+    background: rgba(126, 200, 255, 0.12);
+    color: var(--blue);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.82rem;
+}
+
+.preference-field {
+    display: grid;
+    gap: 8px;
+    margin: 14px 0 0;
+    padding: 0;
+    border: 0;
+}
+
+.preference-field legend,
+.playtest-create-form span {
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.preference-field label {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 44px;
+    color: rgba(238, 244, 255, 0.88);
+}
+
+.preference-field input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--gold);
+}
+
+.admin-draft-block summary {
+    cursor: pointer;
+    color: var(--text);
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.admin-action-grid {
+    margin: 14px 0;
+}
+
+.community-admin-board,
+.community-admin-summary,
+.community-calendar-panel,
+.admin-calendar-slot {
+    display: grid;
+    gap: 10px;
+}
+
+.community-admin-summary,
+.community-calendar-panel {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--panel-strong);
+    box-shadow: var(--shadow);
+}
+
+.community-admin-summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+    padding: clamp(20px, 3vw, 30px);
+}
+
+.community-admin-summary h3 {
+    margin: 8px 0;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: clamp(2rem, 4vw, 4rem);
+    line-height: 0.92;
+}
+
+.community-admin-summary p:not(.panel-kicker),
+.admin-calendar-cell small,
+.admin-slot-stats {
+    color: var(--muted);
+}
+
+.community-calendar-panel {
+    padding: 18px;
+}
+
+.admin-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.admin-calendar-cell {
+    min-height: 168px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    display: grid;
+    gap: 8px;
+    align-content: start;
+}
+
+.admin-calendar-cell.empty {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+.admin-calendar-cell.has-community {
+    border-color: rgba(255, 203, 107, 0.28);
+    background: rgba(255, 203, 107, 0.06);
+}
+
+.admin-calendar-cell.has-event {
+    border-color: rgba(126, 200, 255, 0.34);
+    background: rgba(126, 200, 255, 0.06);
+}
+
+.admin-calendar-cell.has-confirmed {
+    border-color: rgba(133, 232, 157, 0.46);
+    background: rgba(133, 232, 157, 0.08);
+}
+
+.admin-calendar-day,
+.admin-slot-stats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.admin-calendar-day strong,
+.admin-calendar-slot time {
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.admin-calendar-day span {
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+.admin-day-availability {
+    display: grid;
+    gap: 4px;
+}
+
+.admin-hour-bar {
+    display: grid;
+    grid-template-columns: repeat(24, minmax(0, 1fr));
+    gap: 1px;
+    min-height: 14px;
+    overflow: hidden;
+    border: 1px solid rgba(133, 232, 157, 0.12);
+    border-radius: 5px;
+    background: #020403;
+}
+
+.admin-hour-segment {
+    display: block;
+    min-width: 0;
+    min-height: 100%;
+    background: rgba(133, 232, 157, 0.03);
+}
+
+.admin-hour-segment.hour-level-1 {
+    background: rgba(36, 255, 76, 0.18);
+}
+
+.admin-hour-segment.hour-level-2 {
+    background: rgba(36, 255, 76, 0.34);
+}
+
+.admin-hour-segment.hour-level-3 {
+    background: rgba(36, 255, 76, 0.5);
+}
+
+.admin-hour-segment.hour-level-4 {
+    background: rgba(36, 255, 76, 0.68);
+}
+
+.admin-hour-segment.hour-level-5 {
+    background: rgba(36, 255, 76, 0.9);
+    box-shadow: 0 0 10px rgba(36, 255, 76, 0.18);
+}
+
+.admin-hour-axis {
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+    color: rgba(190, 202, 218, 0.58);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.56rem;
+    line-height: 1;
+}
+
+.admin-day-peak {
+    color: var(--green);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.7rem;
+}
+
+.admin-calendar-slot {
+    border: 1px solid rgba(238, 244, 255, 0.1);
+    border-radius: 12px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.admin-calendar-slot-event {
+    border-color: rgba(126, 200, 255, 0.2);
+    background: rgba(126, 200, 255, 0.08);
+}
+
+.admin-calendar-slot-community {
+    border-color: rgba(255, 203, 107, 0.18);
+}
+
+.admin-slot-type {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    border: 1px solid rgba(238, 244, 255, 0.12);
+    border-radius: 999px;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(238, 244, 255, 0.78);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+}
+
+.admin-slot-stats {
+    justify-content: flex-start;
+    font-size: 0.78rem;
+}
+
+.playtest-create-form {
+    display: grid;
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.playtest-create-form label {
+    display: grid;
+    gap: 6px;
+}
+
+.playtest-create-form input,
+.playtest-create-form textarea,
+.playtest-create-form select {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--text);
+    font: inherit;
+}
+
+.playtest-create-form textarea {
+    resize: vertical;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.playtest-board {
+    display: grid;
+    gap: 18px;
+    min-width: 0;
+}
+
+.playtest-detail-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+    border-radius: var(--radius-lg);
+    padding: clamp(20px, 3vw, 30px);
+}
+
+.playtest-detail-head h3 {
+    margin: 8px 0 8px;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: clamp(2rem, 4vw, 4rem);
+    line-height: 0.92;
+}
+
+.playtest-detail-head p:not(.panel-kicker) {
+    max-width: 62ch;
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.55;
+}
+
+.playtest-meta-strip {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: min(360px, 100%);
+}
+
+.playtest-meta-strip span,
+.score-pill,
+.confirmation-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    border: 1px solid rgba(126, 200, 255, 0.24);
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: rgba(126, 200, 255, 0.08);
+    color: rgba(238, 244, 255, 0.9);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.86rem;
+}
+
+.date-card-topline {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.date-card-topline .panel-kicker {
+    margin: 0;
+}
+
+.confirmation-badge {
+    min-height: 28px;
+    padding: 5px 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.7rem;
+}
+
+.confirmation-badge.unconfirmed {
+    border-color: rgba(150, 167, 191, 0.25);
+    background: rgba(150, 167, 191, 0.08);
+    color: rgba(190, 202, 218, 0.86);
+}
+
+.confirmation-badge.confirmed {
+    border-color: rgba(133, 232, 157, 0.58);
+    background: rgba(133, 232, 157, 0.18);
+    color: #a8ffb9;
+    box-shadow: 0 0 18px rgba(133, 232, 157, 0.16);
+}
+
+.playtest-summary-grid,
+.playtest-analytics-grid,
+.calendar-vote-grid {
+    display: grid;
+    gap: 14px;
+}
+
+.playtest-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.calendar-vote-grid {
+    grid-template-columns: minmax(360px, 1fr) minmax(300px, 0.74fr);
+}
+
+.playtest-analytics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.main-date-card,
+.best-date-card,
+.preference-summary-card,
+.calendar-card,
+.heatmap-card,
+.results-card,
+.playtest-empty {
+    border-radius: var(--radius-md);
+    padding: 18px;
+}
+
+.main-date-card {
+    display: grid;
+    gap: 10px;
+    background:
+        linear-gradient(135deg, rgba(255, 203, 107, 0.16), transparent 40%),
+        var(--panel-strong);
+}
+
+.main-date-label {
+    width: fit-content;
+    border: 1px solid rgba(255, 203, 107, 0.36);
+    border-radius: 999px;
+    padding: 5px 9px;
+    color: var(--gold);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.main-date-card > strong,
+.best-date-card > strong,
+.preference-summary-card > strong {
+    font-family: "Chakra Petch", sans-serif;
+    font-size: clamp(2rem, 4vw, 3.8rem);
+    line-height: 0.9;
+}
+
+.main-date-card time,
+.main-date-counts,
+.best-date-card span,
+.best-date-card small {
+    color: var(--muted);
+}
+
+.main-date-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.community-time-fields,
+.vote-time-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.vote-time-fields {
+    grid-template-columns: auto minmax(74px, 1fr) minmax(74px, 1fr);
+    align-items: end;
+    border: 1px solid rgba(238, 244, 255, 0.08);
+    border-radius: 12px;
+    padding: 10px;
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.community-time-fields label,
+.vote-time-fields label {
+    display: grid;
+    gap: 5px;
+}
+
+.community-time-fields span,
+.vote-time-fields > span,
+.vote-time-fields small {
+    color: var(--muted);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.vote-time-fields > span {
+    align-self: center;
+    color: var(--blue);
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.community-time-fields input,
+.vote-time-fields input {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text);
+    font: inherit;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.vote-time-fields input:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+.best-date-card,
+.preference-summary-card {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+}
+
+.best-time-line {
+    display: grid;
+    gap: 4px;
+    border: 1px solid rgba(133, 232, 157, 0.18);
+    border-radius: 12px;
+    padding: 10px;
+    background: rgba(133, 232, 157, 0.07);
+}
+
+.best-time-line span,
+.best-time-line small {
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.best-time-line strong {
+    color: var(--green);
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.notify-row {
+    display: grid;
+    gap: 6px;
+}
+
+.notify-row small {
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.notify-toggle,
+.date-admin-actions button,
+.heatmap-toggle {
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.notify-toggle.active {
+    border-color: rgba(126, 200, 255, 0.42);
+    background: rgba(126, 200, 255, 0.14);
+    color: var(--blue);
+}
+
+.notify-toggle:hover:not(:disabled),
+.date-admin-actions button:hover:not(:disabled),
+.heatmap-toggle:hover {
+    border-color: rgba(255, 203, 107, 0.42);
+    color: var(--gold);
+    background: rgba(255, 203, 107, 0.1);
+}
+
+.notify-toggle:disabled,
+.date-admin-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+.date-admin-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.date-admin-actions .slot-delete-button,
+.date-admin-actions .slot-delete-cancel {
+    min-height: 38px;
+    padding: 6px 9px;
+    font-size: 0.76rem;
+}
+
+.date-admin-actions .slot-delete-button {
+    border-color: rgba(255, 127, 114, 0.3);
+    color: #ff9a90;
+    background: rgba(255, 127, 114, 0.08);
+}
+
+.date-admin-actions .slot-delete-button.waiting {
+    border-color: rgba(255, 203, 107, 0.26);
+    color: var(--gold);
+    background: rgba(255, 203, 107, 0.08);
+}
+
+.date-admin-actions .slot-delete-button.danger {
+    border-color: rgba(255, 127, 114, 0.62);
+    color: #ffc3bd;
+    background: rgba(255, 127, 114, 0.18);
+}
+
+.date-admin-actions .slot-delete-cancel {
+    color: var(--muted);
+}
+
+.playtest-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: rgba(3, 6, 9, 0.72);
+    backdrop-filter: blur(10px);
+}
+
+.playtest-confirm-dialog {
+    width: min(100%, 430px);
+    border: 1px solid rgba(238, 244, 255, 0.16);
+    border-radius: 18px;
+    padding: 18px;
+    background:
+        linear-gradient(145deg, rgba(126, 200, 255, 0.13), transparent 40%),
+        linear-gradient(180deg, rgba(16, 28, 30, 0.98), rgba(7, 10, 13, 0.98));
+    box-shadow: 0 26px 80px rgba(0, 0, 0, 0.48);
+    display: grid;
+    gap: 12px;
+}
+
+.playtest-confirm-dialog h3 {
+    margin: 0;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: clamp(1.8rem, 5vw, 2.6rem);
+    line-height: 0.95;
+}
+
+.playtest-confirm-dialog p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.modal-icon-button {
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.confirm-time-note {
+    display: grid;
+    gap: 4px;
+    border: 1px solid rgba(133, 232, 157, 0.18);
+    border-radius: 12px;
+    padding: 10px;
+    background: rgba(133, 232, 157, 0.07);
+}
+
+.confirm-time-note span {
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.confirm-time-note strong {
+    color: var(--green);
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.confirm-time-fields {
+    margin-top: 2px;
+}
+
+.modal-actions {
+    justify-content: flex-end;
+}
+
+.heatmap-toggle {
+    justify-self: start;
+    margin-top: 12px;
+}
+
+.score-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.score-help {
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid rgba(255, 203, 107, 0.34);
+    border-radius: 999px;
+    background: rgba(255, 203, 107, 0.1);
+    color: var(--gold);
+    cursor: help;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.88rem;
+}
+
+.score-help:hover,
+.score-help:focus {
+    border-color: rgba(255, 203, 107, 0.68);
+    background: rgba(255, 203, 107, 0.18);
+    outline: none;
+}
+
+.preference-bars {
+    display: grid;
+    gap: 8px;
+}
+
+.preference-bar-row,
+.heatmap-row {
+    display: grid;
+    grid-template-columns: minmax(84px, 0.8fr) minmax(90px, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+}
+
+.preference-bar-row span,
+.heatmap-row span {
+    color: var(--muted);
+    font-size: 0.86rem;
+}
+
+.preference-bar-row div,
+.heatmap-bar {
+    height: 9px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.preference-bar-row i,
+.heatmap-bar i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--green), var(--gold));
+}
+
+.playtest-lock-note {
+    border: 1px solid rgba(255, 127, 114, 0.28);
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: rgba(255, 127, 114, 0.09);
+    color: rgba(255, 220, 216, 0.9);
+}
+
+.playtest-slot-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.featured-slot-section {
+    display: grid;
+    gap: 12px;
+}
+
+.featured-slot-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: end;
+}
+
+.featured-slot-head p,
+.featured-slot-head span {
+    margin: 0;
+}
+
+.featured-slot-head span,
+.interest-context,
+.selected-date-note {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.playtest-slot-card {
+    display: grid;
+    gap: 14px;
+    border-radius: var(--radius-md);
+    padding: 18px;
+}
+
+.playtest-slot-card.featured-slot {
+    border-color: rgba(255, 203, 107, 0.38);
+}
+
+.slot-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-start;
+}
+
+.slot-card-head .date-card-topline > span:not(.confirmation-badge) {
+    display: block;
+    color: var(--gold);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.slot-card-head strong {
+    display: block;
+    margin: 6px 0 2px;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: clamp(1.5rem, 2.8vw, 2.4rem);
+    line-height: 0.96;
+}
+
+.slot-card-head time {
+    color: var(--muted);
+    font-size: 0.92rem;
+}
+
+.slot-expand {
+    min-width: 68px;
+    min-height: 44px;
+    padding: 9px 12px;
+}
+
+.availability-meter {
+    height: 12px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.availability-meter span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+}
+
+.vote-count-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.vote-count-grid span {
+    min-height: 58px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.16);
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.vote-count-grid strong {
+    display: block;
+    color: var(--text);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.3rem;
+}
+
+.count-available strong,
+.vote-available.active {
+    color: var(--green);
+}
+
+.count-preferred strong,
+.vote-preferred.active {
+    color: var(--gold);
+}
+
+.count-maybe strong,
+.vote-maybe.active {
+    color: #ffd36e;
+}
+
+.count-unavailable strong,
+.vote-unavailable.active {
+    color: var(--red);
+}
+
+.vote-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.vote-row.compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.vote-button {
+    min-height: 44px;
+    padding: 9px 10px;
+    font-size: 0.92rem;
+}
+
+.vote-button.active {
+    border-color: currentColor;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.vote-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+.vote-breakdown {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+}
+
+.vote-breakdown section {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.14);
+}
+
+.vote-breakdown h4 {
+    margin: 0 0 8px;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.vote-breakdown ul {
+    display: grid;
+    gap: 7px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.vote-breakdown li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    color: rgba(238, 244, 255, 0.9);
+}
+
+.vote-breakdown small {
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.calendar-card h4,
+.heatmap-card h4,
+.results-card h4 {
+    margin: 6px 0 14px;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.45rem;
+}
+
+.calendar-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: start;
+}
+
+.admin-calendar-controls {
+    display: grid;
+    justify-items: end;
+    gap: 8px;
+}
+
+.admin-layer-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.admin-layer-toggles button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    border: 1px solid rgba(150, 167, 191, 0.22);
+    border-radius: 999px;
+    padding: 6px 8px 6px 11px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.admin-layer-toggles button.active {
+    border-color: rgba(133, 232, 157, 0.44);
+    background: rgba(133, 232, 157, 0.12);
+    color: var(--text);
+}
+
+.admin-layer-toggles small {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 22px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.24);
+    color: rgba(238, 244, 255, 0.78);
+    font-size: 0.7rem;
+}
+
+.calendar-nav {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.calendar-nav button {
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.calendar-nav button.active,
+.calendar-nav button:hover {
+    border-color: rgba(255, 203, 107, 0.38);
+    color: var(--gold);
+}
+
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.calendar-weekday {
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+.calendar-cell {
+    display: grid;
+    place-items: center;
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(238, 244, 255, 0.78);
+    cursor: pointer;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.calendar-cell small {
+    color: var(--muted);
+    font-size: 0.66rem;
+}
+
+.calendar-cell.empty {
+    border-color: transparent;
+    background: transparent;
+}
+
+.calendar-cell.level-high {
+    background: rgba(133, 232, 157, 0.18);
+    border-color: rgba(133, 232, 157, 0.36);
+}
+
+.calendar-cell.level-medium {
+    background: rgba(255, 203, 107, 0.17);
+    border-color: rgba(255, 203, 107, 0.34);
+}
+
+.calendar-cell.level-low {
+    background: rgba(255, 127, 114, 0.14);
+    border-color: rgba(255, 127, 114, 0.3);
+}
+
+.calendar-cell:hover,
+.calendar-selected {
+    border-color: rgba(126, 200, 255, 0.5);
+    color: var(--text);
+}
+
+.calendar-featured {
+    box-shadow: inset 0 0 0 2px rgba(255, 203, 107, 0.52);
+}
+
+.calendar-confirmed {
+    background: rgba(133, 232, 157, 0.22);
+    border-color: rgba(133, 232, 157, 0.58);
+    box-shadow: inset 0 0 0 2px rgba(133, 232, 157, 0.5);
+}
+
+.calendar-confirmed small {
+    color: #a8ffb9;
+}
+
+.heatmap-list {
+    display: grid;
+    gap: 12px;
+}
+
+.heatmap-row {
+    grid-template-columns: minmax(92px, 0.82fr) minmax(120px, 1fr) 38px;
+}
+
+.heatmap-row strong {
+    display: block;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.heatmap-row small {
+    color: var(--gold);
+    font-family: "Chakra Petch", sans-serif;
+    text-align: right;
+}
+
+.results-card dl {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+}
+
+.results-card div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 8px;
+}
+
+.results-card dt {
+    color: var(--muted);
+}
+
+.results-card dd {
+    margin: 0;
+    color: var(--text);
+    font-family: "Chakra Petch", sans-serif;
+    text-align: right;
 }
 
 .step-list {
@@ -1331,8 +2722,8 @@ a[aria-disabled="true"] {
 }
 
 .profile-close {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     border: 1px solid var(--line);
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.035);
@@ -1362,6 +2753,7 @@ a[aria-disabled="true"] {
 
 .tab-pill,
 .page-button {
+    min-height: 44px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.035);
     color: var(--text);
@@ -1437,6 +2829,7 @@ a[aria-disabled="true"] {
 }
 
 .table-wrap {
+    position: relative;
     overflow: auto;
     overflow-y: hidden;
     max-width: 100%;
@@ -1444,6 +2837,18 @@ a[aria-disabled="true"] {
     border-radius: var(--radius-md);
     border: 1px solid var(--line);
     background: rgba(0, 0, 0, 0.18);
+}
+
+.table-wrap:focus-visible {
+    outline: 2px solid rgba(126, 200, 255, 0.72);
+    outline-offset: 3px;
+}
+
+.table-wrap.table-scrollable {
+    background:
+        linear-gradient(90deg, rgba(7, 14, 24, 0.98), rgba(7, 14, 24, 0)) left / 34px 100% no-repeat,
+        linear-gradient(270deg, rgba(7, 14, 24, 0.98), rgba(7, 14, 24, 0)) right / 46px 100% no-repeat,
+        rgba(0, 0, 0, 0.18);
 }
 
 .leaderboard-table {
@@ -1484,7 +2889,7 @@ a[aria-disabled="true"] {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    min-height: 30px;
+    min-height: 44px;
     border: 0;
     padding: 0;
     background: transparent;
@@ -1545,6 +2950,9 @@ a[aria-disabled="true"] {
 }
 
 .profile-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     color: var(--gold);
     font-size: 0.78rem;
     text-transform: uppercase;
@@ -1967,9 +3375,31 @@ code {
     .landing-intro,
     .info-grid,
     .join-section,
+    .playtest-promo,
     .video-section,
-    .guide-grid {
+    .guide-grid,
+    .community-admin-summary,
+    .playtests-layout,
+    .playtest-detail-head,
+    .playtest-summary-grid,
+    .calendar-vote-grid,
+    .playtest-analytics-grid {
         grid-template-columns: 1fr;
+    }
+
+    .playtests-layout,
+    .playtest-detail-head,
+    .community-admin-summary,
+    .playtests-hero {
+        display: grid;
+    }
+
+    .playtests-sidebar {
+        position: static;
+    }
+
+    .playtest-meta-strip {
+        justify-content: flex-start;
     }
 
     .home-route .hero {
@@ -2026,6 +3456,10 @@ code {
 }
 
 @media (max-width: 700px) {
+    body {
+        padding-bottom: 76px;
+    }
+
     .app-shell {
         width: min(100vw - 16px, 100%);
         margin: 12px auto 0;
@@ -2063,8 +3497,92 @@ code {
     }
 
     .detail-grid,
-    .snapshot-grid {
+    .snapshot-grid,
+    .playtest-slot-grid,
+    .vote-breakdown {
         grid-template-columns: 1fr;
+    }
+
+    .playtests-view,
+    .community-admin-view {
+        width: min(100vw - 16px, 100%);
+        margin-top: 12px;
+    }
+
+    .playtests-hero,
+    .playtest-detail-head,
+    .community-admin-summary,
+    .community-calendar-panel,
+    .main-date-card,
+    .best-date-card,
+    .preference-summary-card,
+    .playtest-slot-card,
+    .calendar-card,
+    .heatmap-card,
+    .results-card {
+        padding: 16px;
+        border-radius: 18px;
+    }
+
+    .playtests-hero h2,
+    .playtest-detail-head h3 {
+        font-size: clamp(2.1rem, 12vw, 3.7rem);
+    }
+
+    .form-grid,
+    .community-time-fields,
+    .vote-time-fields,
+    .vote-row,
+    .vote-row.compact {
+        grid-template-columns: 1fr;
+    }
+
+    .vote-count-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .slot-card-head,
+    .featured-slot-head,
+    .calendar-head,
+    .vote-breakdown li,
+    .results-card div {
+        display: grid;
+    }
+
+    .slot-expand {
+        width: 100%;
+    }
+
+    .preference-bar-row,
+    .heatmap-row {
+        grid-template-columns: 1fr;
+    }
+
+    .heatmap-row small,
+    .results-card dd {
+        text-align: left;
+    }
+
+    .calendar-nav {
+        justify-content: flex-start;
+    }
+
+    .calendar-grid {
+        gap: 4px;
+    }
+
+    .admin-calendar-controls,
+    .admin-layer-toggles {
+        justify-items: start;
+        justify-content: flex-start;
+    }
+
+    .admin-calendar-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-calendar-cell.empty {
+        display: none;
     }
 
     .featured-header {
@@ -2089,10 +3607,11 @@ code {
     }
 
     .tracker-float {
-        top: 10px;
-        right: 10px;
-        min-height: 38px;
-        padding: 8px 13px;
+        top: auto;
+        right: 12px;
+        bottom: 12px;
+        min-height: 48px;
+        padding: 10px 16px;
     }
 
     .home-route .hero-status {
@@ -2103,12 +3622,13 @@ code {
     }
 
     .home-route .tracker-float {
-        top: 182px;
-        right: 10px;
+        top: auto;
+        right: 12px;
+        bottom: 12px;
     }
 
     .home-route.home-scrolled .tracker-float {
-        top: 10px;
+        top: auto;
     }
 
     .home-route .status-card {
@@ -2205,8 +3725,8 @@ code {
 
     .footer-links a,
     .footer-links button {
-        min-height: 32px;
-        padding: 6px 10px;
+        min-height: 44px;
+        padding: 9px 12px;
         font-size: 0.86rem;
     }
 }

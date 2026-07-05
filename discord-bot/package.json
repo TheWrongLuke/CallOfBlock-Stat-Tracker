@@ -1,0 +1,24 @@
+{
+  "name": "call-of-block-discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Discord notifications and admin alerts for Call of Block playtests.",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "check": "node --check src/index.js && node --check src/config.js && node --check src/discord-client.js && node --check src/format.js && node --check src/logger.js && node --check src/pollers.js && node --check src/state-store.js && node --check src/supabase.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.110.0",
+    "discord.js": "14.26.4",
+    "dotenv": "17.4.2"
+  },
+  "overrides": {
+    "undici": "6.27.0"
+  }
+}

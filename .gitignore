@@ -1,3 +1,8 @@
 .env
 .env.*
+!.env.example
+!discord-bot/.env.example
 node_modules/
+.bot-state.json
+discord-bot/.bot-state.json
+discord-bot/logs/

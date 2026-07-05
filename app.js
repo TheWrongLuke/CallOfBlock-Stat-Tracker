@@ -39,6 +39,88 @@ const DEFAULT_API_POLL_MS = 10000;
 const DEFAULT_SKIN_NAME = "Steve";
 const CHAMPION_ROTATE_MS = 5000;
 const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64, 103, 109, 97, 105, 108, 46, 99, 111, 109];
+const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v1";
+const PLAYTEST_VIEWER = {
+    userId: "local-preview-user",
+    username: "You",
+    avatarInitials: "YOU"
+};
+
+const PLAYTEST_STATUS_OPTIONS = [
+    { id: "available", label: "Available", score: 3 },
+    { id: "maybe", label: "Maybe", score: 1 },
+    { id: "unavailable", label: "Unavailable", score: 0 },
+    { id: "preferred", label: "Preferred", score: 5 }
+];
+
+const PLAYTEST_COUNT_ORDER = ["available", "preferred", "maybe", "unavailable"];
+const PLAYTEST_MODE_OPTIONS = ["Battle Royale", "Deathmatch", "Either"];
+const PLAYTEST_INTEREST_MIN_SCALE = 10;
+
+const PLAYTEST_SEED_USERS = [
+    { userId: "sample-luke", username: "Luke", modePreference: "Battle Royale" },
+    { userId: "sample-john", username: "John", modePreference: "Battle Royale" },
+    { userId: "sample-sarah", username: "Sarah", modePreference: "Either" },
+    { userId: "sample-mike", username: "Mike", modePreference: "Deathmatch" },
+    { userId: "sample-alex", username: "Alex", modePreference: "Battle Royale" },
+    { userId: "sample-nova", username: "Nova", modePreference: "Either" },
+    { userId: "sample-echo", username: "Echo", modePreference: "Deathmatch" },
+    { userId: "sample-rin", username: "Rin", modePreference: "Battle Royale" },
+    { userId: "sample-kai", username: "Kai", modePreference: "Either" },
+    { userId: "sample-mira", username: "Mira", modePreference: "Battle Royale" },
+    { userId: "sample-zen", username: "Zen", modePreference: "Deathmatch" },
+    { userId: "sample-ivy", username: "Ivy", modePreference: "Either" },
+    { userId: "sample-jax", username: "Jax", modePreference: "Battle Royale" },
+    { userId: "sample-aria", username: "Aria", modePreference: "Battle Royale" },
+    { userId: "sample-noah", username: "Noah", modePreference: "Either" },
+    { userId: "sample-lia", username: "Lia", modePreference: "Deathmatch" },
+    { userId: "sample-otto", username: "Otto", modePreference: "Battle Royale" },
+    { userId: "sample-vee", username: "Vee", modePreference: "Either" }
+];
+
+const DEFAULT_PLAYTESTS = [
+    {
+        id: "featured-playtest-dates",
+        title: "Featured Playtest Dates",
+        description: "Official planned Call of Block playtest dates. Pick when you can play and what mode you would rather test.",
+        status: "voting",
+        createdBy: "server-admin",
+        createdAt: "2026-07-04T10:00:00Z",
+        mainSlotId: "br18-sat",
+        slots: [
+            { id: "br18-fri", label: "Featured date", startAt: "2026-07-17T20:00:00Z", source: "featured" },
+            { id: "br18-sat", label: "Featured date", startAt: "2026-07-18T20:00:00Z", source: "featured" },
+            { id: "br18-sun", label: "Featured date", startAt: "2026-07-19T20:00:00Z", source: "featured" },
+            { id: "br18-mon", label: "Featured date", startAt: "2026-07-20T19:00:00Z", source: "featured" }
+        ],
+        seedMatrix: {
+            "br18-fri": {
+                available: [1, 2, 3, 5, 8, 11, 15],
+                preferred: [4, 9, 12],
+                maybe: [0, 6, 10, 14],
+                unavailable: [7, 13, 16]
+            },
+            "br18-sat": {
+                available: [1, 3, 5, 6, 8, 10, 11, 13, 15, 17],
+                preferred: [0, 2, 4, 7, 9, 12, 14, 16],
+                maybe: [],
+                unavailable: []
+            },
+            "br18-sun": {
+                available: [0, 2, 4, 6, 9, 12],
+                preferred: [5, 11],
+                maybe: [1, 3, 7, 8, 15],
+                unavailable: [10, 13, 14, 16, 17]
+            },
+            "br18-mon": {
+                available: [3, 6, 10, 15],
+                preferred: [8],
+                maybe: [0, 1, 2, 4, 5, 9, 11],
+                unavailable: [7, 12, 13, 14, 16, 17]
+            }
+        }
+    }
+];
 
 const state = {
     data: null,
@@ -69,11 +151,13 @@ const state = {
     championTimer: null,
     championScrollTimer: null,
     pendingScrollTarget: "",
+    playtests: emptyPlaytestState(),
     cache: emptyCache()
 };
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
+    loadPlaytestState();
     applyRoute();
     bindStaticEvents();
     startChampionRotation();
@@ -93,6 +177,13 @@ function setupLiveConfig() {
 
 function bindStaticEvents() {
     document.addEventListener("click", (event) => {
+        const confirmationClose = event.target.closest("[data-confirm-dialog-close]");
+        if (confirmationClose || event.target.matches("[data-confirm-dialog-backdrop]")) {
+            event.preventDefault();
+            closeConfirmDialog();
+            return;
+        }
+
         const disabledLink = event.target.closest("a[aria-disabled='true']");
         if (disabledLink) {
             event.preventDefault();
@@ -118,6 +209,12 @@ function bindStaticEvents() {
             event.preventDefault();
             openContactEmail();
         }
+    });
+
+    document.addEventListener("submit", (event) => {
+        if (!event.target.matches("[data-confirm-dialog-form]")) return;
+        event.preventDefault();
+        submitConfirmDialog(event.target);
     });
 
     const search = document.getElementById("player-search");
@@ -178,6 +275,18 @@ function bindStaticEvents() {
         }
     });
 
+    const playtestsView = document.getElementById("playtests-view");
+    if (playtestsView) {
+        playtestsView.addEventListener("click", handlePlaytestClick);
+        playtestsView.addEventListener("change", handlePlaytestChange);
+        playtestsView.addEventListener("submit", handlePlaytestSubmit);
+    }
+
+    const communityAdminView = document.getElementById("community-admin-view");
+    if (communityAdminView) {
+        communityAdminView.addEventListener("click", handlePlaytestClick);
+    }
+
     const championCarousel = document.getElementById("champion-carousel");
     championCarousel.addEventListener("scroll", () => {
         window.clearTimeout(state.championScrollTimer);
@@ -226,6 +335,18 @@ function applyRoute() {
     }
     if (route === "admin-help") {
         state.view = "adminHelp";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        return;
+    }
+    if (route === "playtests") {
+        state.view = "playtests";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        return;
+    }
+    if (route === "community-dates") {
+        state.view = "communityAdmin";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
@@ -292,6 +413,22 @@ function routeTo(route) {
         state.selectedId = null;
         state.profilePreviewOpen = false;
         window.location.hash = "admin-help";
+        render();
+        return;
+    }
+    if (route === "playtests") {
+        state.view = "playtests";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        window.location.hash = "playtests";
+        render();
+        return;
+    }
+    if (route === "community-dates") {
+        state.view = "communityAdmin";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        window.location.hash = "community-dates";
         render();
         return;
     }
@@ -521,6 +658,9 @@ function render() {
     renderHeroStatus();
     renderTopNav();
     renderHome();
+    renderPlaytests();
+    renderCommunityAdminPage();
+    renderPlaytestConfirmationDialog();
     renderMainViewTabs();
     renderModeTabs();
     renderSummary();
@@ -534,6 +674,8 @@ function renderRoute() {
     document.body.classList.toggle("home-route", state.view === "home");
     document.getElementById("home-view").classList.toggle("hidden", state.view !== "home");
     document.getElementById("admin-help-view").classList.toggle("hidden", state.view !== "adminHelp");
+    document.getElementById("playtests-view").classList.toggle("hidden", state.view !== "playtests");
+    document.getElementById("community-admin-view").classList.toggle("hidden", state.view !== "communityAdmin");
     const dashboard = document.querySelector(".dashboard");
     dashboard.classList.toggle("hidden", state.view !== "leaderboard");
     dashboard.classList.toggle("profile-closed", state.view === "leaderboard" && !state.profilePreviewOpen);
@@ -561,11 +703,14 @@ function renderTopNav() {
         const onHome = state.view === "home";
         floatingButton.textContent = onHome ? "Tracker" : "Hub";
         floatingButton.dataset.route = onHome ? "leaderboard" : "home";
+        floatingButton.setAttribute("aria-label", onHome ? "Open stats tracker" : "Return to server hub");
+        floatingButton.title = onHome ? "Open stats tracker" : "Return to server hub";
     }
 }
 
 function renderHome() {
     renderHomeLatestMatch();
+    renderHomePlaytestPromo();
     renderFeaturedList("battleRoyale", document.getElementById("featured-battle-royale"));
     renderFeaturedList("deathmatch", document.getElementById("featured-deathmatch"));
     renderChampionControls();
@@ -601,6 +746,52 @@ function renderHomeLatestMatch() {
                 ${winner ? `<span>${escapeHtml(winner)}</span>` : ""}
                 ${score}
             </div>
+        </div>
+    `;
+}
+
+function renderHomePlaytestPromo() {
+    const container = document.getElementById("home-playtest-promo");
+    if (!container) return;
+
+    const upcoming = upcomingConfirmedPlaytestEvent();
+    if (!upcoming) {
+        container.innerHTML = `
+            <div>
+                <p class="panel-kicker">Community Playtests</p>
+                <h2>Vote the next session into shape.</h2>
+                <p>
+                    Planned dates are highlighted as featured sessions, while extra community suggestions live on the calendar.
+                    Pick Available, Maybe, Unavailable, or Preferred, then choose whether you would rather test Battle Royale,
+                    Deathmatch, or either mode.
+                </p>
+            </div>
+            <div class="playtest-promo-actions">
+                <a href="#playtests">Open playtest scheduler</a>
+                <span>Calendar voting</span>
+                <span>Best-date score</span>
+                <span>Mode interest</span>
+            </div>
+        `;
+        return;
+    }
+
+    const scheduledSlot = confirmedDisplaySlot(upcoming.playtest.id, upcoming.summary.slot);
+    container.innerHTML = `
+        <div class="upcoming-event-main">
+            <p class="panel-kicker">Upcoming Playtest</p>
+            <h2 class="upcoming-event-date">${escapeHtml(formatSlotDay(scheduledSlot.startAt))}</h2>
+            <time class="upcoming-event-time" datetime="${escapeHtml(scheduledSlot.startAt)}">${escapeHtml(formatSlotTimeRange(scheduledSlot))}</time>
+            <p>
+                ${escapeHtml(upcoming.playtest.title)} is confirmed for ${escapeHtml(formatSlotWeekday(scheduledSlot.startAt))}.
+                Join the scheduler to see availability, votes, and notification options.
+            </p>
+        </div>
+        <div class="playtest-promo-actions upcoming-event-actions">
+            <a href="#playtests">Open playtest scheduler</a>
+            <span>${escapeHtml(formatSlotWeekday(scheduledSlot.startAt))}</span>
+            <span>${upcoming.summary.availableTotal} available</span>
+            <span>${upcoming.summary.counts.preferred} preferred</span>
         </div>
     `;
 }
@@ -641,6 +832,2163 @@ function renderFeaturedPlayer(player, rank, modeId) {
             </div>
         </a>
     `;
+}
+
+function renderPlaytests() {
+    const root = document.getElementById("playtests-view");
+    if (!root) return;
+
+    const playtests = activePlaytests();
+    const active = activePlaytest(playtests);
+    renderPlaytestList(playtests, active);
+    renderPlaytestIdentity();
+    renderPlaytestPreferences(active);
+    renderPlaytestAdmin(active);
+    renderPlaytestBoard(active);
+}
+
+function renderCommunityAdminPage() {
+    const board = document.getElementById("community-admin-board");
+    if (!board) return;
+
+    const playtests = activePlaytests();
+    const playtest = activePlaytest(playtests);
+    if (!playtest) {
+        board.innerHTML = `
+            <section class="playtest-empty">
+                <h3>No playtest selected</h3>
+                <p>Create one from the scheduler admin controls first.</p>
+            </section>
+        `;
+        return;
+    }
+
+    const summaries = summarizePlaytestSlots(playtest);
+    const communitySummaries = summaries
+        .filter((summary) => !isFeaturedSlot(summary.slot))
+        .sort((a, b) => dateValue(a.slot.startAt) - dateValue(b.slot.startAt) || b.score - a.score);
+    const eventSummaries = summaries
+        .filter((summary) => isFeaturedSlot(summary.slot))
+        .sort((a, b) => dateValue(a.slot.startAt) - dateValue(b.slot.startAt) || b.score - a.score);
+    const confirmedCount = [...communitySummaries, ...eventSummaries].filter((summary) => isSlotConfirmed(playtest.id, summary.slot.id)).length;
+    const filters = adminCalendarFilters();
+
+    board.innerHTML = `
+        <section class="community-admin-summary">
+            <div>
+                <p class="panel-kicker">${escapeHtml(playtest.title)}</p>
+                <h3>Admin Calendar</h3>
+                <p>${escapeHtml(`${communitySummaries.length} community vote date${communitySummaries.length === 1 ? "" : "s"} and ${eventSummaries.length} planned event${eventSummaries.length === 1 ? "" : "s"} collected. Times are shown in ${viewerTimeZoneLabel()}.`)}</p>
+            </div>
+            <div class="playtest-meta-strip">
+                <span>${communitySummaries.length} community</span>
+                <span>${eventSummaries.length} planned</span>
+                <span>${confirmedCount} confirmed</span>
+                <span>${summariesTotalVoters([...communitySummaries, ...eventSummaries])} voters</span>
+            </div>
+        </section>
+        ${renderCommunityAdminCalendar(playtest, communitySummaries, eventSummaries, filters)}
+    `;
+}
+
+function renderCommunityAdminCalendar(playtest, communitySummaries, eventSummaries = [], filters = adminCalendarFilters()) {
+    const monthDate = calendarMonthDate(playtest);
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const first = new Date(year, month, 1, 12, 0, 0);
+    const blankCells = (first.getDay() + 6) % 7;
+    const dayCount = new Date(year, month + 1, 0).getDate();
+    const summariesByDay = new Map();
+
+    for (const summary of communitySummaries) {
+        const key = dateKey(summary.slot.startAt);
+        if (!summariesByDay.has(key)) summariesByDay.set(key, []);
+        summariesByDay.get(key).push(summary);
+    }
+
+    const eventsByDay = new Map();
+    for (const summary of eventSummaries) {
+        const key = dateKey(summary.slot.startAt);
+        if (!eventsByDay.has(key)) eventsByDay.set(key, []);
+        eventsByDay.get(key).push(summary);
+    }
+
+    const cells = [];
+    let visibleCommunityCount = 0;
+    let visibleEventCount = 0;
+    for (let index = 0; index < blankCells; index++) cells.push(`<span class="admin-calendar-cell empty"></span>`);
+    for (let day = 1; day <= dayCount; day++) {
+        const dayDate = new Date(year, month, day, 12, 0, 0);
+        const dayKey = dateKey(dayDate);
+        const dayCommunitySummaries = filters.community ? summariesByDay.get(dayKey) || [] : [];
+        const dayEventSummaries = filters.events ? eventsByDay.get(dayKey) || [] : [];
+        const visibleSummaries = [...dayEventSummaries, ...dayCommunitySummaries];
+        visibleCommunityCount += dayCommunitySummaries.length;
+        visibleEventCount += dayEventSummaries.length;
+        const hasConfirmed = visibleSummaries.some((summary) => isSlotConfirmed(playtest.id, summary.slot.id));
+        cells.push(`
+            <article class="admin-calendar-cell ${dayCommunitySummaries.length ? "has-community" : ""} ${dayEventSummaries.length ? "has-event" : ""} ${hasConfirmed ? "has-confirmed" : ""}">
+                <div class="admin-calendar-day">
+                    <strong>${day}</strong>
+                    <span>${escapeHtml(formatDateKeyWeekday(dayKey).slice(0, 3))}</span>
+                </div>
+                ${visibleSummaries.length ? renderAdminDayAvailabilityBar(dayKey, visibleSummaries) : ""}
+                ${visibleSummaries.length === 0
+                    ? `<small>${filters.community || filters.events ? "No shown dates" : "Layers hidden"}</small>`
+                    : [
+                        ...dayEventSummaries.map((summary) => renderAdminCalendarSlot(playtest, summary, "event")),
+                        ...dayCommunitySummaries.map((summary) => renderAdminCalendarSlot(playtest, summary, "community"))
+                    ].join("")}
+            </article>
+        `);
+    }
+
+    return `
+        <section class="community-calendar-panel">
+            <div class="calendar-head">
+                <div>
+                    <p class="panel-kicker">Community Calendar</p>
+                    <h4>${escapeHtml(formatMonthLabel(monthDate))}</h4>
+                </div>
+                <div class="admin-calendar-controls">
+                    ${renderAdminCalendarLayerToggles(filters, communitySummaries.length, eventSummaries.length)}
+                    <div class="calendar-nav">
+                        <button type="button" data-playtest-month="0" class="${state.playtests.calendarMonthOffset === 0 ? "active" : ""}" aria-pressed="${state.playtests.calendarMonthOffset === 0 ? "true" : "false"}" aria-label="${escapeHtml(`Show ${formatMonthLabel(baseCalendarMonthDate(playtest))}`)}">${escapeHtml(formatMonthLabel(baseCalendarMonthDate(playtest)).split(" ")[0])}</button>
+                        <button type="button" data-playtest-month="1" class="${state.playtests.calendarMonthOffset === 1 ? "active" : ""}" aria-pressed="${state.playtests.calendarMonthOffset === 1 ? "true" : "false"}" aria-label="${escapeHtml(`Show ${formatMonthLabel(new Date(baseCalendarMonthDate(playtest).getFullYear(), baseCalendarMonthDate(playtest).getMonth() + 1, 1, 12, 0, 0))}`)}">Next</button>
+                    </div>
+                </div>
+            </div>
+            <div class="admin-calendar-grid">
+                ${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => `<span class="calendar-weekday">${day}</span>`).join("")}
+                ${cells.join("")}
+            </div>
+            ${renderAdminCalendarEmptyNote(monthDate, filters, visibleCommunityCount, visibleEventCount)}
+        </section>
+    `;
+}
+
+function renderAdminCalendarLayerToggles(filters, communityCount, eventCount) {
+    const options = [
+        { id: "community", label: "Community votes", count: communityCount },
+        { id: "events", label: "My events", count: eventCount }
+    ];
+
+    return `
+        <div class="admin-layer-toggles" role="group" aria-label="Calendar layers">
+            ${options.map((option) => {
+                const active = Boolean(filters[option.id]);
+                return `
+                    <button
+                        type="button"
+                        class="${active ? "active" : ""}"
+                        data-admin-calendar-filter="${escapeHtml(option.id)}"
+                        aria-pressed="${active ? "true" : "false"}"
+                        aria-label="${escapeHtml(`${active ? "Hide" : "Show"} ${option.label.toLowerCase()} on the calendar`)}"
+                    >
+                        <span>${escapeHtml(option.label)}</span>
+                        <small>${option.count}</small>
+                    </button>
+                `;
+            }).join("")}
+        </div>
+    `;
+}
+
+function renderAdminCalendarEmptyNote(monthDate, filters, visibleCommunityCount, visibleEventCount) {
+    if (!filters.community && !filters.events) {
+        return `<p class="mode-empty admin-month-empty">Community votes and planned events are hidden.</p>`;
+    }
+    if (visibleCommunityCount + visibleEventCount > 0) return "";
+
+    const visibleLayers = [
+        filters.community ? "community votes" : "",
+        filters.events ? "planned events" : ""
+    ].filter(Boolean).join(" or ");
+    return `<p class="mode-empty admin-month-empty">No ${escapeHtml(visibleLayers)} in ${escapeHtml(formatMonthLabel(monthDate))}.</p>`;
+}
+
+function renderAdminDayAvailabilityBar(dayKey, daySummaries) {
+    const segments = adminDayAvailabilitySegments(dayKey, daySummaries);
+    const peak = segments.reduce((best, segment) => {
+        if (!best || segment.count > best.count) return segment;
+        return best;
+    }, null);
+    const peakText = peak?.count
+        ? `Peak ${peak.label} - ${peak.count} ${peak.count === 1 ? "person" : "people"}`
+        : "No availability";
+
+    return `
+        <div class="admin-day-availability" aria-label="${escapeHtml(peakText)}">
+            <div class="admin-hour-bar">
+                ${segments.map((segment) => `
+                    <span
+                        class="admin-hour-segment hour-level-${segment.level}"
+                        title="${escapeHtml(`${segment.label} - ${segment.nextLabel}: ${segment.count} ${segment.count === 1 ? "person" : "people"}`)}"
+                    ></span>
+                `).join("")}
+            </div>
+            <div class="admin-hour-axis" aria-hidden="true">
+                <span>00</span>
+                <span>06</span>
+                <span>12</span>
+                <span>18</span>
+                <span>24</span>
+            </div>
+            <small class="admin-day-peak">${escapeHtml(peakText)}</small>
+        </div>
+    `;
+}
+
+function adminDayAvailabilitySegments(dayKey, daySummaries) {
+    return Array.from({ length: 24 }, (_, hour) => {
+        const start = localDateFromKey(dayKey, minutesToTime(hour * 60)).getTime();
+        const end = hour === 23
+            ? localDateFromKey(nextLocalDateKey(dayKey), "00:00").getTime()
+            : localDateFromKey(dayKey, minutesToTime((hour + 1) * 60)).getTime();
+        const voters = new Set();
+
+        for (const summary of daySummaries) {
+            for (const vote of summary.votes || []) {
+                const interval = voteAvailabilityInterval(summary.slot, vote);
+                if (!interval || interval.start >= end || interval.end <= start) continue;
+                voters.add(vote.userId || vote.username);
+            }
+        }
+
+        const count = voters.size;
+        return {
+            hour,
+            count,
+            level: count === 0 ? 0 : Math.min(5, count),
+            label: minutesToTime(hour * 60),
+            nextLabel: hour === 23 ? "24:00" : minutesToTime((hour + 1) * 60)
+        };
+    });
+}
+
+function renderAdminCalendarSlot(playtest, summary, layer) {
+    const confirmed = isSlotConfirmed(playtest.id, summary.slot.id);
+    const displaySlot = confirmedDisplaySlot(playtest.id, summary.slot);
+    const slotLabel = `${formatSlotShortRange(displaySlot)} ${formatSlotTimeRange(displaySlot)}`;
+    const layerLabel = layer === "event"
+        ? (playtest.mainSlotId === summary.slot.id ? "Main event" : "My event")
+        : "Community vote";
+    return `
+        <section class="admin-calendar-slot admin-calendar-slot-${escapeHtml(layer)}">
+            <div class="date-card-topline">
+                <time datetime="${escapeHtml(displaySlot.startAt)}">${escapeHtml(formatSlotTimeRange(displaySlot))}</time>
+                <span class="admin-slot-type">${escapeHtml(layerLabel)}</span>
+                ${renderConfirmationBadge(playtest.id, summary.slot.id)}
+            </div>
+            <div class="admin-slot-stats">
+                <span>${summary.availableTotal} available</span>
+                <span>${summary.counts.preferred} preferred</span>
+                <span>${summary.counts.maybe} maybe</span>
+                <span>Best ${summary.bestTime ? escapeHtml(formatOverlapRange(summary.bestTime)) : "No overlap"}</span>
+                <span>Overlap ${summary.rankScore ?? summary.score}</span>
+            </div>
+            <div class="date-admin-actions">
+                <button type="button" data-confirm-date="${escapeHtml(dateKey(summary.slot.startAt))}" data-confirm-slot="${escapeHtml(summary.slot.id)}" aria-label="${escapeHtml(`Confirm ${slotLabel}`)}" ${confirmed || isPastSlot(summary.slot) ? "disabled" : ""}>Confirm</button>
+                <button type="button" data-unconfirm-slot="${escapeHtml(summary.slot.id)}" aria-label="${escapeHtml(`Unconfirm ${slotLabel}`)}" ${confirmed ? "" : "disabled"}>Unconfirm</button>
+                ${renderAdminSlotDeleteControl(playtest, summary)}
+            </div>
+        </section>
+    `;
+}
+
+function renderAdminSlotDeleteControl(playtest, summary) {
+    const slotId = summary.slot.id;
+    const pending = slotDeletePendingState(playtest.id, slotId);
+    const canDelete = canDeletePlaytestSlot(playtest, slotId);
+    const slotLabel = `${formatSlotShortRange(summary.slot)} ${formatSlotTimeRange(summary.slot)}`;
+    if (!canDelete) {
+        return `<button class="slot-delete-button" type="button" disabled title="Keep at least one date in a playtest." aria-label="${escapeHtml(`Delete ${slotLabel}`)}">Delete</button>`;
+    }
+    if (!pending.pending) {
+        return `<button class="slot-delete-button" type="button" data-admin-delete-slot="${escapeHtml(slotId)}" aria-label="${escapeHtml(`Delete ${slotLabel}`)}">Delete</button>`;
+    }
+    if (!pending.ready) {
+        return `<button class="slot-delete-button waiting" type="button" disabled aria-label="${escapeHtml(`Wait before deleting ${slotLabel}`)}">Wait ${pending.remainingSeconds}s</button>
+            <button class="slot-delete-cancel" type="button" data-admin-cancel-delete-slot="${escapeHtml(slotId)}" aria-label="${escapeHtml(`Cancel deleting ${slotLabel}`)}">Cancel</button>`;
+    }
+    return `<button class="slot-delete-button danger" type="button" data-admin-delete-slot="${escapeHtml(slotId)}" aria-label="${escapeHtml(`Confirm delete ${slotLabel}`)}">Confirm delete</button>
+        <button class="slot-delete-cancel" type="button" data-admin-cancel-delete-slot="${escapeHtml(slotId)}" aria-label="${escapeHtml(`Cancel deleting ${slotLabel}`)}">Cancel</button>`;
+}
+
+function renderPlaytestList(playtests, active) {
+    const container = document.getElementById("playtest-list");
+    if (!container) return;
+    if (playtests.length === 0) {
+        container.innerHTML = `<section class="playtest-side-block"><p class="mode-empty">No active playtests.</p></section>`;
+        return;
+    }
+
+    container.innerHTML = `
+        <section class="playtest-side-block">
+            <p class="panel-kicker">Featured Plans</p>
+            <div class="playtest-list">
+                ${playtests.map((playtest) => {
+                    const summaries = summarizePlaytestSlots(playtest);
+                    const best = bestPlaytestSlots(summaries)[0];
+                    const selected = active?.id === playtest.id;
+                    return `
+                        <button class="playtest-list-item ${selected ? "active" : ""}" type="button" data-playtest-select="${escapeHtml(playtest.id)}" aria-pressed="${selected ? "true" : "false"}" aria-label="${escapeHtml(`${playtest.title}${selected ? ", selected" : ""}`)}">
+                            <span>${escapeHtml(playtestStatusLabel(playtest))}</span>
+                            <strong>${escapeHtml(playtest.title)}</strong>
+                            <small>${best ? `${escapeHtml(formatSlotShortRange(best.slot))} - Score ${best.score}` : "No slots"}</small>
+                        </button>
+                    `;
+                }).join("")}
+            </div>
+        </section>
+    `;
+}
+
+function renderPlaytestIdentity() {
+    const container = document.getElementById("playtest-identity");
+    if (!container) return;
+    container.innerHTML = `
+        <section class="playtest-side-block identity-block">
+            <p class="panel-kicker">Discord Identity</p>
+            <div class="identity-row">
+                <span class="identity-avatar">${escapeHtml(PLAYTEST_VIEWER.avatarInitials)}</span>
+                <div>
+                    <strong>${escapeHtml(PLAYTEST_VIEWER.username)}</strong>
+                    <small>Local preview account</small>
+                </div>
+            </div>
+            <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Open Discord</a>
+        </section>
+    `;
+}
+
+function renderPlaytestPreferences(playtest) {
+    const container = document.getElementById("playtest-preferences");
+    if (!container) return;
+    if (!playtest) {
+        container.innerHTML = "";
+        return;
+    }
+
+    const preference = playtestPreference(playtest.id);
+    container.innerHTML = `
+        <section class="playtest-side-block">
+            <p class="panel-kicker">Session Preference</p>
+            <fieldset class="preference-field">
+                <legend>Mode</legend>
+                ${PLAYTEST_MODE_OPTIONS.map((mode) => `
+                    <label>
+                        <input type="radio" name="playtest-mode" value="${escapeHtml(mode)}" ${preference.modePreference === mode ? "checked" : ""}>
+                        <span>${escapeHtml(mode)}</span>
+                    </label>
+                `).join("")}
+            </fieldset>
+        </section>
+    `;
+}
+
+function renderPlaytestAdmin(playtest) {
+    const container = document.getElementById("playtest-admin");
+    if (!container) return;
+    const isFrozen = Boolean(playtest?.frozen);
+    const isClosed = playtest?.status === "closed" || playtest?.status === "finished";
+    container.innerHTML = `
+        <section class="playtest-side-block admin-draft-block">
+            <details>
+                <summary>Admin controls</summary>
+                ${playtest ? `
+                    <div class="admin-action-grid">
+                        <button type="button" data-route="community-dates">Community calendar</button>
+                        <button type="button" data-playtest-admin="duplicate">Duplicate</button>
+                        <button type="button" data-playtest-admin="${isClosed ? "reopen" : "close"}">${isClosed ? "Reopen" : "Close voting"}</button>
+                        <button type="button" data-playtest-admin="${isFrozen ? "unfreeze" : "freeze"}">${isFrozen ? "Unfreeze" : "Freeze votes"}</button>
+                        <button type="button" data-playtest-admin="reset-votes">Reset my votes</button>
+                    </div>
+                ` : ""}
+                <form class="playtest-create-form" id="playtest-create-form">
+                    <label>
+                        <span>Title</span>
+                        <input name="title" type="text" placeholder="Battle Royale Playtest" required>
+                    </label>
+                    <label>
+                        <span>Description</span>
+                        <textarea name="description" rows="3" placeholder="Focus for this test"></textarea>
+                    </label>
+                    <label>
+                        <span>First featured date</span>
+                        <input name="mainSlot" type="datetime-local" required>
+                    </label>
+                    <label>
+                        <span>Other featured dates</span>
+                        <textarea name="alternativeSlots" rows="4" placeholder="2026-07-17T20:00&#10;2026-07-19T20:00"></textarea>
+                    </label>
+                    <label>
+                        <span>Status</span>
+                        <select name="status">
+                            <option value="voting">Voting</option>
+                            <option value="upcoming">Upcoming</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                    </label>
+                    <button type="submit">Create playtest</button>
+                </form>
+            </details>
+        </section>
+    `;
+}
+
+function renderPlaytestBoard(playtest) {
+    const board = document.getElementById("playtest-board");
+    if (!board) return;
+    if (!playtest) {
+        board.innerHTML = `
+            <section class="playtest-empty">
+                <h3>No playtest selected</h3>
+                <p>Create one from the admin controls or restore a local draft.</p>
+            </section>
+        `;
+        return;
+    }
+
+    const summaries = summarizePlaytestSlots(playtest);
+    const ranked = bestPlaytestSlots(summaries);
+    const best = ranked[0];
+    const second = ranked[1];
+    const canVote = canVoteOnPlaytest(playtest);
+    const lockedReason = playtestLockReason(playtest);
+    const selected = selectedCalendarDateInfo(playtest, summaries, best);
+    const featuredSummaries = summaries.filter((summary) => isFeaturedSlot(summary.slot));
+    const nextEvent = nextEventSummary(playtest, summaries);
+
+    board.innerHTML = `
+        <section class="playtest-detail-head">
+            <div>
+                <p class="panel-kicker">${escapeHtml(playtestStatusLabel(playtest))}</p>
+                <h3>${escapeHtml(playtest.title)}</h3>
+                <p>${escapeHtml(playtest.description || "Community playtest")}</p>
+            </div>
+            <div class="playtest-meta-strip">
+                <span>${escapeHtml(summariesTotalVoters(summaries))} voters</span>
+                <span>${featuredSummaries.length} featured dates</span>
+                <span>${summaries.length - featuredSummaries.length} community dates</span>
+            </div>
+        </section>
+
+        <section class="playtest-summary-grid">
+            ${nextEvent ? renderNextEventCard(nextEvent, playtest) : ""}
+            ${best ? renderBestDateCard(best, second, playtest) : ""}
+            ${best ? renderPreferenceSummary(best, "Best date") : ""}
+        </section>
+
+        ${lockedReason ? `<div class="playtest-lock-note">${escapeHtml(lockedReason)}</div>` : ""}
+
+        <section class="featured-slot-section">
+            <div class="featured-slot-head">
+                <p class="panel-kicker">Featured Dates</p>
+                <span>Your planned dates appear here. Community-picked dates stay in the calendar.</span>
+            </div>
+            <div class="playtest-slot-grid">
+                ${featuredSummaries.map((summary) => renderPlaytestSlotCard(summary, playtest, canVote, summaries)).join("")}
+            </div>
+        </section>
+
+        <section class="calendar-vote-grid">
+            ${renderPlaytestCalendar(playtest, summaries)}
+            ${renderSelectedDateCard(selected, playtest, canVote)}
+        </section>
+
+        <section class="playtest-analytics-grid">
+            ${renderPlaytestHeatmap(ranked)}
+            ${renderPlaytestResults(best, second, playtest)}
+        </section>
+    `;
+}
+
+function renderNextEventCard(summary, playtest) {
+    const scheduledSlot = confirmedDisplaySlot(playtest.id, summary.slot);
+    return `
+        <article class="main-date-card next-event-card">
+            <div class="date-card-topline">
+                <span class="main-date-label">Next event</span>
+                ${renderConfirmationBadge(playtest.id, summary.slot.id)}
+            </div>
+            <strong>${escapeHtml(formatSlotWeekday(scheduledSlot.startAt))}</strong>
+            <span>${escapeHtml(formatSlotDay(scheduledSlot.startAt))}</span>
+            <time datetime="${escapeHtml(scheduledSlot.startAt)}">${escapeHtml(formatSlotTimeRange(scheduledSlot))}</time>
+            <div class="main-date-counts">
+                <span>${summary.availableTotal} available</span>
+                <span>${summary.counts.preferred} preferred</span>
+            </div>
+            <p class="selected-date-note">This is the confirmed scheduled playtest date.</p>
+        </article>
+    `;
+}
+
+function renderPlaytestConfirmationDialog() {
+    let host = document.getElementById("playtest-confirmation-host");
+    if (!host) {
+        host = document.createElement("div");
+        host.id = "playtest-confirmation-host";
+        document.body.appendChild(host);
+    }
+
+    const pending = state.playtests.pendingConfirmation;
+    if (!pending) {
+        host.innerHTML = "";
+        return;
+    }
+
+    const playtest = activePlaytests().find((entry) => entry.id === pending.playtestId);
+    const summaries = playtest ? summarizePlaytestSlots(playtest) : [];
+    const summary = summaries.find((entry) => entry.slot.id === pending.slotId);
+    if (!playtest || !summary) {
+        state.playtests.pendingConfirmation = null;
+        host.innerHTML = "";
+        return;
+    }
+
+    const range = normalizeTimeRange(pending.startTime, pending.endTime);
+    const bestText = summary.bestTime ? formatOverlapRange(summary.bestTime) : "No shared best time yet";
+    host.innerHTML = `
+        <div class="playtest-modal-backdrop" data-confirm-dialog-backdrop>
+            <form class="playtest-confirm-dialog" data-confirm-dialog-form>
+                <div class="date-card-topline">
+                    <p class="panel-kicker">Confirm Event</p>
+                    <button type="button" class="modal-icon-button" data-confirm-dialog-close aria-label="Close confirmation dialog">x</button>
+                </div>
+                <h3>${escapeHtml(formatSlotWeekday(summary.slot.startAt))}</h3>
+                <p>${escapeHtml(formatSlotDay(summary.slot.startAt))}</p>
+                <div class="confirm-time-note">
+                    <span>Best time</span>
+                    <strong>${escapeHtml(bestText)}</strong>
+                </div>
+                <div class="community-time-fields confirm-time-fields">
+                    <label>
+                        <span>Start</span>
+                        <input type="text" name="confirm-start" value="${escapeHtml(range.startTime)}" placeholder="20:00" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" data-confirm-start required>
+                    </label>
+                    <label>
+                        <span>End</span>
+                        <input type="text" name="confirm-end" value="${escapeHtml(range.endTime)}" placeholder="22:00" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" data-confirm-end required>
+                    </label>
+                </div>
+                <small class="selected-date-note">Times use ${escapeHtml(viewerTimeZoneLabel())}. You can move the final session earlier or later before confirming.</small>
+                <div class="date-admin-actions modal-actions">
+                    <button type="button" data-confirm-dialog-close>Cancel</button>
+                    <button type="submit">Confirm event</button>
+                </div>
+            </form>
+        </div>
+    `;
+}
+
+function renderSelectedDateCard(selected, playtest, canVote) {
+    if (!selected.summary) {
+        const isPast = isPastDateKey(selected.dateKey);
+        const notifyDisabled = isPast || !canVote;
+        const defaultTimes = normalizeTimeRange();
+        const selectedDateLabel = formatDateKeyDay(selected.dateKey);
+        return `
+            <article class="main-date-card selected-date-card">
+                <div class="date-card-topline">
+                    <span class="main-date-label">Selected date</span>
+                    <span class="confirmation-badge unconfirmed">Unconfirmed</span>
+                </div>
+                <strong>${escapeHtml(formatDateKeyWeekday(selected.dateKey))}</strong>
+                <span>${escapeHtml(formatDateKeyDay(selected.dateKey))}</span>
+                <div class="community-time-fields">
+                    <label>
+                        <span>Start</span>
+                        <input type="text" value="${escapeHtml(defaultTimes.startTime)}" placeholder="20:00" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" data-community-start aria-label="${escapeHtml(`Start time for ${selectedDateLabel}`)}">
+                    </label>
+                    <label>
+                        <span>End</span>
+                        <input type="text" value="${escapeHtml(defaultTimes.endTime)}" placeholder="22:00" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" data-community-end aria-label="${escapeHtml(`End time for ${selectedDateLabel}`)}">
+                    </label>
+                </div>
+                <small class="selected-date-note">Times use ${escapeHtml(viewerTimeZoneLabel())}.</small>
+                <p class="selected-date-note">${isPast ? "This date has already passed." : "No one has started this date yet. Voting here will create a community date."}</p>
+                ${renderNotificationToggle(playtest.id, null, selected.dateKey, notifyDisabled)}
+                ${renderConfirmationControls(playtest.id, null, selected.dateKey, isPast)}
+                <div class="vote-row compact">
+                    ${PLAYTEST_STATUS_OPTIONS.map((option) => `
+                        <button
+                            class="vote-button vote-${escapeHtml(option.id)}"
+                            type="button"
+                            data-playtest-calendar-vote="${escapeHtml(option.id)}"
+                            data-calendar-date="${escapeHtml(selected.dateKey)}"
+                            aria-label="${escapeHtml(`${option.label} for ${formatDateKeyDay(selected.dateKey)}`)}"
+                            aria-pressed="false"
+                            ${canVote && !isPast ? "" : "disabled"}
+                        >${escapeHtml(option.label)}</button>
+                    `).join("")}
+                </div>
+            </article>
+        `;
+    }
+
+    const summary = selected.summary;
+    const displaySlot = confirmedDisplaySlot(playtest.id, summary.slot);
+    const tag = isFeaturedSlot(summary.slot) ? "Featured date" : "Community date";
+    const slotCanVote = canVote && !isPastSlot(summary.slot);
+    const userVote = state.playtests.votes?.[playtest.id]?.[summary.slot.id];
+    return `
+        <article class="main-date-card selected-date-card">
+            <div class="date-card-topline">
+                <span class="main-date-label">${escapeHtml(tag)}</span>
+                ${renderConfirmationBadge(playtest.id, summary.slot.id)}
+            </div>
+            <strong>${escapeHtml(formatSlotWeekday(displaySlot.startAt))}</strong>
+            <span>${escapeHtml(formatSlotDay(displaySlot.startAt))}</span>
+            <time datetime="${escapeHtml(displaySlot.startAt)}">${escapeHtml(formatSlotTimeRange(displaySlot))}</time>
+            <div class="main-date-counts">
+                <span>${summary.availableTotal} available</span>
+                <span>${summary.counts.preferred} preferred</span>
+            </div>
+            ${renderBestTimeSummary(summary)}
+            ${renderVoteTimeFields(summary.slot, userVote, !slotCanVote)}
+            ${renderNotificationToggle(playtest.id, summary.slot.id, dateKey(summary.slot.startAt), !slotCanVote)}
+            ${renderConfirmationControls(playtest.id, summary.slot.id, dateKey(summary.slot.startAt), isPastSlot(summary.slot))}
+            <div class="vote-row compact">
+                ${PLAYTEST_STATUS_OPTIONS.map((option) => renderVoteButton(option, summary, playtest, slotCanVote)).join("")}
+            </div>
+        </article>
+    `;
+}
+
+function renderBestDateCard(best, second, playtest) {
+    const scoreHelp = "Best Date ranks by the strongest overlapping time window first. Preferred = 5, Available = 3, Maybe = 1, Unavailable = 0.";
+    return `
+        <article class="best-date-card">
+            <div class="date-card-topline">
+                <p class="panel-kicker">${playtest.status === "closed" || playtest.status === "finished" ? "Winner" : "Best Date"}</p>
+                ${renderConfirmationBadge(playtest.id, best.slot.id)}
+            </div>
+            <strong>${escapeHtml(formatSlotWeekday(best.slot.startAt))}</strong>
+            <span>${escapeHtml(formatSlotDay(best.slot.startAt))} at ${escapeHtml(formatSlotTimeRange(best.slot))}</span>
+            <div class="score-row">
+                <div class="score-pill">Overlap ${best.rankScore || best.score}</div>
+                <span class="score-help" tabindex="0" aria-label="${escapeHtml(scoreHelp)}" title="${escapeHtml(scoreHelp)}">?</span>
+            </div>
+            ${renderBestTimeSummary(best)}
+            <small>Date score ${best.score}</small>
+            ${second ? `<small>Second: ${escapeHtml(formatSlotShortRange(second.slot))}, overlap ${second.rankScore || second.score}</small>` : ""}
+        </article>
+    `;
+}
+
+function renderConfirmationBadge(playtestId, slotId) {
+    const confirmed = slotId && isSlotConfirmed(playtestId, slotId);
+    return `<span class="confirmation-badge ${confirmed ? "confirmed" : "unconfirmed"}">${confirmed ? "Confirmed" : "Unconfirmed"}</span>`;
+}
+
+function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled) {
+    const key = slotId || `date:${dateKeyValue}`;
+    const subscribed = isNotificationSubscribed(playtestId, key);
+    const count = slotId ? notificationSubscriberCount(playtestId, slotId) : 0;
+    const labelContext = dateKeyValue ? formatDateKeyDay(dateKeyValue) : "this date";
+    return `
+        <div class="notify-row">
+            <button
+                class="notify-toggle ${subscribed ? "active" : ""}"
+                type="button"
+                data-notify-toggle="${escapeHtml(key)}"
+                data-calendar-date="${escapeHtml(dateKeyValue || "")}"
+                aria-label="${escapeHtml(`${subscribed ? "Notification enabled" : "Enable notification"} for ${labelContext}`)}"
+                aria-pressed="${subscribed ? "true" : "false"}"
+                ${disabled ? "disabled" : ""}
+            >${subscribed ? "Notify me on confirmation" : "Notify me if confirmed"}</button>
+            <small>${count} Discord notification opt-in${count === 1 ? "" : "s"}</small>
+        </div>
+    `;
+}
+
+function renderConfirmationControls(playtestId, slotId, dateKeyValue, disabled) {
+    const confirmed = slotId && isSlotConfirmed(playtestId, slotId);
+    const labelContext = dateKeyValue ? formatDateKeyDay(dateKeyValue) : "this date";
+    return `
+        <div class="date-admin-actions">
+            <button
+                type="button"
+                data-confirm-date="${escapeHtml(dateKeyValue || "")}"
+                data-confirm-slot="${escapeHtml(slotId || "")}"
+                aria-label="${escapeHtml(`Confirm ${labelContext}`)}"
+                ${disabled || confirmed ? "disabled" : ""}
+            >Confirm date</button>
+            <button
+                type="button"
+                data-unconfirm-slot="${escapeHtml(slotId || "")}"
+                aria-label="${escapeHtml(`Unconfirm ${labelContext}`)}"
+                ${!slotId || !confirmed ? "disabled" : ""}
+            >Unconfirm</button>
+        </div>
+    `;
+}
+
+function renderPreferenceSummary(summary, contextLabel) {
+    const modes = tallyPreferences(summary.availableVoters, "modePreference");
+    return `
+        <article class="preference-summary-card">
+            <p class="panel-kicker">Session Interest</p>
+            <span class="interest-context">${escapeHtml(contextLabel)} - ${escapeHtml(formatSlotShortRange(summary.slot))}</span>
+            <strong>${summary.availableTotal} available</strong>
+            <div class="preference-bars">
+                ${renderPreferenceBars(modes, "No mode votes yet")}
+            </div>
+        </article>
+    `;
+}
+
+function renderPreferenceBars(entries, emptyText) {
+    if (entries.length === 0) return `<span class="muted-line">${escapeHtml(emptyText)}</span>`;
+    const max = Math.max(PLAYTEST_INTEREST_MIN_SCALE, ...entries.map((entry) => entry.count));
+    return entries.slice(0, 4).map((entry) => `
+        <div class="preference-bar-row">
+            <span>${escapeHtml(entry.label)}</span>
+            <div><i style="width: ${Math.max(8, Math.round((entry.count / max) * 100))}%"></i></div>
+            <strong>${entry.count}</strong>
+        </div>
+    `).join("");
+}
+
+function renderVoteTimeFields(slot, userVote, disabled) {
+    const range = voteInputRangeForSlot(slot, userVote);
+    const slotLabel = formatSlotShortRange(slot);
+    return `
+        <div class="vote-time-fields" data-vote-time-slot="${escapeHtml(slot.id)}">
+            <span>Your time</span>
+            <label>
+                <small>Start</small>
+                <input type="text" value="${escapeHtml(range.startTime)}" placeholder="20:00" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" data-vote-start aria-label="${escapeHtml(`Start time for ${slotLabel}`)}" ${disabled ? "disabled" : ""}>
+            </label>
+            <label>
+                <small>End</small>
+                <input type="text" value="${escapeHtml(range.endTime)}" placeholder="22:00" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" data-vote-end aria-label="${escapeHtml(`End time for ${slotLabel}`)}" ${disabled ? "disabled" : ""}>
+            </label>
+        </div>
+    `;
+}
+
+function renderBestTimeSummary(summary) {
+    if (!summary.bestTime) return `<p class="best-time-line muted-line">No shared time yet</p>`;
+    return `
+        <div class="best-time-line">
+            <span>Best time</span>
+            <strong>${escapeHtml(formatOverlapRange(summary.bestTime))}</strong>
+            <small>${escapeHtml(overlapPeopleText(summary.bestTime))}</small>
+        </div>
+    `;
+}
+
+function renderPlaytestSlotCard(summary, playtest, canVote, summaries = []) {
+    const expanded = state.playtests.expandedSlotIds.has(summary.slot.id);
+    const maxAvailable = Math.max(PLAYTEST_INTEREST_MIN_SCALE, ...summaries.map((item) => item.availableTotal));
+    const fill = Math.min(100, Math.round((summary.availableTotal / maxAvailable) * 100));
+    const slotCanVote = canVote && !isPastSlot(summary.slot);
+    const userVote = state.playtests.votes?.[playtest.id]?.[summary.slot.id];
+    const displaySlot = confirmedDisplaySlot(playtest.id, summary.slot);
+    return `
+        <article class="playtest-slot-card ${isFeaturedSlot(summary.slot) ? "featured-slot" : ""}">
+            <div class="slot-card-head">
+                <div>
+                    <div class="date-card-topline">
+                        <span>${escapeHtml(summary.slot.label || "Featured date")}</span>
+                        ${renderConfirmationBadge(playtest.id, summary.slot.id)}
+                    </div>
+                    <strong>${escapeHtml(formatSlotWeekday(displaySlot.startAt))}</strong>
+                    <time datetime="${escapeHtml(displaySlot.startAt)}">${escapeHtml(formatSlotDay(displaySlot.startAt))} - ${escapeHtml(formatSlotTimeRange(displaySlot))}</time>
+                </div>
+                <button class="slot-expand" type="button" data-playtest-expand="${escapeHtml(summary.slot.id)}" aria-expanded="${expanded ? "true" : "false"}" aria-label="${escapeHtml(`${expanded ? "Hide" : "Show"} votes for ${formatSlotShortRange(displaySlot)}`)}">${expanded ? "Hide" : "Votes"}</button>
+            </div>
+            <div class="availability-meter"><span style="width: ${fill}%"></span></div>
+            <div class="vote-count-grid">
+                ${PLAYTEST_COUNT_ORDER.map((status) => `
+                    <span class="count-${escapeHtml(status)}">
+                        <strong>${status === "available" ? summary.availableTotal : summary.counts[status]}</strong>
+                        ${escapeHtml(statusLabel(status))}
+                    </span>
+                `).join("")}
+            </div>
+            ${renderBestTimeSummary(summary)}
+            ${renderVoteTimeFields(summary.slot, userVote, !slotCanVote)}
+            <div class="vote-row">
+                ${PLAYTEST_STATUS_OPTIONS.map((option) => renderVoteButton(option, summary, playtest, slotCanVote)).join("")}
+            </div>
+            ${expanded ? renderVoteBreakdown(summary) : ""}
+        </article>
+    `;
+}
+
+function renderVoteButton(option, summary, playtest, canVote) {
+    const userVote = state.playtests.votes?.[playtest.id]?.[summary.slot.id];
+    const active = userVote?.status === option.id;
+    const slotLabel = formatSlotShortRange(summary.slot);
+    return `
+        <button
+            class="vote-button vote-${escapeHtml(option.id)} ${active ? "active" : ""}"
+            type="button"
+            data-playtest-vote="${escapeHtml(option.id)}"
+            data-slot-id="${escapeHtml(summary.slot.id)}"
+            aria-label="${escapeHtml(`${option.label} for ${slotLabel}${active ? ", selected" : ""}`)}"
+            aria-pressed="${active ? "true" : "false"}"
+            ${canVote ? "" : "disabled"}
+        >${escapeHtml(option.label)}</button>
+    `;
+}
+
+function renderVoteBreakdown(summary) {
+    return `
+        <div class="vote-breakdown">
+            ${PLAYTEST_COUNT_ORDER.map((status) => {
+                const voters = summary.votersByStatus[status] || [];
+                return `
+                    <section>
+                        <h4>${escapeHtml(statusLabel(status))} (${status === "available" ? summary.counts.available : voters.length})</h4>
+                        ${voters.length === 0
+                            ? `<p class="mode-empty">No voters</p>`
+                            : `<ul>${voters.map((vote) => `
+                                <li>
+                                    <span>${escapeHtml(vote.username)}</span>
+                                    <small>${["available", "preferred", "maybe"].includes(vote.status) ? `${escapeHtml(formatVoteTimeRange(summary.slot, vote))} - ` : ""}Updated ${escapeHtml(formatRelativeTime(vote.updatedAt))}</small>
+                                </li>
+                            `).join("")}</ul>`}
+                    </section>
+                `;
+            }).join("")}
+        </div>
+    `;
+}
+
+function renderPlaytestCalendar(playtest, summaries) {
+    const monthDate = calendarMonthDate(playtest);
+    const baseMonthDate = baseCalendarMonthDate(playtest);
+    const nextMonthDate = new Date(baseMonthDate.getFullYear(), baseMonthDate.getMonth() + 1, 1, 12, 0, 0);
+    const year = monthDate.getFullYear();
+    const month = monthDate.getMonth();
+    const first = new Date(year, month, 1, 12, 0, 0);
+    const blankCells = (first.getDay() + 6) % 7;
+    const dayCount = new Date(year, month + 1, 0).getDate();
+    const maxScore = Math.max(...summaries.map((summary) => summary.score), 1);
+    const summariesByDay = new Map(summaries.map((summary) => [dateKey(summary.slot.startAt), summary]));
+    const selectedKey = selectedDateKey(playtest, summaries);
+    const cells = [];
+    for (let index = 0; index < blankCells; index++) cells.push(`<span class="calendar-cell empty"></span>`);
+    for (let day = 1; day <= dayCount; day++) {
+        const dayDate = new Date(year, month, day, 12, 0, 0);
+        const dayKey = dateKey(dayDate);
+        const summary = summariesByDay.get(dayKey);
+        const ratio = summary ? summary.score / maxScore : 0;
+        const level = ratio >= 0.74 ? "high" : ratio >= 0.44 ? "medium" : summary ? "low" : "none";
+        const isFeatured = summary && isFeaturedSlot(summary.slot);
+        const isConfirmed = summary && isSlotConfirmed(playtest.id, summary.slot.id);
+        const isSelected = dayKey === selectedKey;
+        const title = summary
+            ? `${formatSlotDay(summary.slot.startAt)}: ${isConfirmed ? "confirmed" : "unconfirmed"}, ${summary.availableTotal} available, best time ${summary.bestTime ? formatOverlapRange(summary.bestTime) : "not found"}, ${summary.counts.preferred} preferred, ${summary.counts.maybe} maybe, ${summary.counts.unavailable} unavailable`
+            : `${formatDateKeyDay(dayKey)}: no votes yet`;
+        const ariaLabel = `${title}. ${isSelected ? "Selected date" : "Select date"}`;
+        cells.push(`
+            <button class="calendar-cell level-${level} ${isFeatured ? "calendar-featured" : ""} ${isConfirmed ? "calendar-confirmed" : ""} ${isSelected ? "calendar-selected" : ""}" type="button" data-calendar-date="${escapeHtml(dayKey)}" title="${escapeHtml(title)}" aria-label="${escapeHtml(ariaLabel)}" aria-pressed="${isSelected ? "true" : "false"}">
+                <strong>${day}</strong>
+                ${summary ? `<small aria-hidden="true">${isConfirmed ? "OK" : summary.availableTotal}</small>` : ""}
+            </button>
+        `);
+    }
+
+    return `
+        <article class="calendar-card">
+            <div class="calendar-head">
+                <div>
+                    <p class="panel-kicker">Calendar</p>
+                    <h4>${escapeHtml(formatMonthLabel(monthDate))}</h4>
+                </div>
+                <div class="calendar-nav">
+                    <button type="button" data-playtest-month="0" class="${state.playtests.calendarMonthOffset === 0 ? "active" : ""}" aria-pressed="${state.playtests.calendarMonthOffset === 0 ? "true" : "false"}" aria-label="${escapeHtml(`Show ${formatMonthLabel(baseMonthDate)}`)}">${escapeHtml(formatMonthLabel(baseMonthDate).split(" ")[0])}</button>
+                    <button type="button" data-playtest-month="1" class="${state.playtests.calendarMonthOffset === 1 ? "active" : ""}" aria-pressed="${state.playtests.calendarMonthOffset === 1 ? "true" : "false"}" aria-label="${escapeHtml(`Show ${formatMonthLabel(nextMonthDate)}`)}">Next</button>
+                </div>
+            </div>
+            <div class="calendar-grid">
+                ${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => `<span class="calendar-weekday">${day}</span>`).join("")}
+                ${cells.join("")}
+            </div>
+        </article>
+    `;
+}
+
+function renderPlaytestHeatmap(ranked) {
+    const expanded = Boolean(state.playtests.heatmapExpanded);
+    const visibleRows = expanded ? ranked : ranked.slice(0, 5);
+    const maxScore = Math.max(...ranked.map((summary) => summary.rankScore || summary.score), 1);
+    return `
+        <article class="heatmap-card">
+            <p class="panel-kicker">Heatmap</p>
+            <h4>Best availability</h4>
+            <div class="heatmap-list">
+                ${visibleRows.map((summary) => `
+                    <div class="heatmap-row">
+                        <div>
+                            <strong>${escapeHtml(formatSlotWeekday(summary.slot.startAt))}</strong>
+                            <span>${escapeHtml(summary.bestTime ? formatOverlapRange(summary.bestTime) : formatSlotTimeRange(summary.slot))} - ${summary.total} votes</span>
+                        </div>
+                        <div class="heatmap-bar"><i style="width: ${Math.max(6, Math.round(((summary.rankScore || summary.score) / maxScore) * 100))}%"></i></div>
+                        <small>${summary.rankScore || summary.score}</small>
+                    </div>
+                `).join("")}
+            </div>
+            ${ranked.length > 5 ? `<button class="heatmap-toggle" type="button" data-heatmap-toggle>${expanded ? "LESS" : "MORE"}</button>` : ""}
+        </article>
+    `;
+}
+
+function renderPlaytestResults(best, second, playtest) {
+    if (!best) return "";
+    return `
+        <article class="results-card">
+            <p class="panel-kicker">${playtest.status === "closed" || playtest.status === "finished" ? "Results" : "Best Date Detail"}</p>
+            <h4>${escapeHtml(formatSlotWeekday(best.slot.startAt))}</h4>
+            <dl>
+                <div><dt>Pool time</dt><dd>${escapeHtml(formatSlotShortRange(best.slot))}</dd></div>
+                <div><dt>Best time</dt><dd>${escapeHtml(best.bestTime ? formatOverlapRange(best.bestTime) : "No shared time yet")}</dd></div>
+                <div><dt>Overlap</dt><dd>${best.rankScore || best.score}</dd></div>
+                <div><dt>Participants</dt><dd>${best.availableTotal}</dd></div>
+                <div><dt>Preferred</dt><dd>${best.counts.preferred}</dd></div>
+                <div><dt>Maybe</dt><dd>${best.counts.maybe}</dd></div>
+                ${second ? `<div><dt>Second</dt><dd>${escapeHtml(formatSlotShortRange(second.slot))}</dd></div>` : ""}
+            </dl>
+        </article>
+    `;
+}
+
+function handlePlaytestClick(event) {
+    const selectButton = event.target.closest("[data-playtest-select]");
+    if (selectButton) {
+        state.playtests.activeId = selectButton.dataset.playtestSelect;
+        savePlaytestState();
+        render();
+        return;
+    }
+
+    const voteButton = event.target.closest("[data-playtest-vote]");
+    if (voteButton) {
+        const playtest = activePlaytest();
+        if (!playtest || !canVoteOnPlaytest(playtest)) return;
+        const slot = playtest.slots.find((entry) => entry.id === voteButton.dataset.slotId);
+        setPlaytestVote(playtest.id, voteButton.dataset.slotId, voteButton.dataset.playtestVote, voteTimeRangeForButton(voteButton, slot));
+        return;
+    }
+
+    const calendarVoteButton = event.target.closest("[data-playtest-calendar-vote]");
+    if (calendarVoteButton) {
+        const playtest = activePlaytest();
+        if (!playtest || !canVoteOnPlaytest(playtest)) return;
+        const slot = ensureCommunitySlot(playtest.id, calendarVoteButton.dataset.calendarDate, selectedCommunityTimeRange());
+        if (!slot) return;
+        setPlaytestVote(playtest.id, slot.id, calendarVoteButton.dataset.playtestCalendarVote, selectedCommunityTimeRange());
+        return;
+    }
+
+    const calendarButton = event.target.closest("[data-calendar-date]");
+    if (calendarButton && !calendarButton.matches("[data-notify-toggle]") && !calendarButton.matches("[data-playtest-calendar-vote]")) {
+        const playtest = activePlaytest();
+        if (!playtest) return;
+        state.playtests.selectedCalendarDates[playtest.id] = calendarButton.dataset.calendarDate;
+        savePlaytestState();
+        render();
+        return;
+    }
+
+    const notifyButton = event.target.closest("[data-notify-toggle]");
+    if (notifyButton) {
+        const playtest = activePlaytest();
+        if (!playtest) return;
+        let key = notifyButton.dataset.notifyToggle;
+        if (key.startsWith("date:")) {
+            const slot = ensureCommunitySlot(playtest.id, notifyButton.dataset.calendarDate, selectedCommunityTimeRange());
+            if (!slot) return;
+            key = slot.id;
+        }
+        toggleNotificationSubscription(playtest.id, key);
+        savePlaytestState();
+        render();
+        return;
+    }
+
+    const confirmButton = event.target.closest("[data-confirm-date]");
+    if (confirmButton) {
+        const playtest = activePlaytest();
+        if (!playtest) return;
+        let slotId = confirmButton.dataset.confirmSlot;
+        if (!slotId) {
+            const slot = ensureCommunitySlot(playtest.id, confirmButton.dataset.confirmDate, selectedCommunityTimeRange());
+            if (!slot) return;
+            slotId = slot.id;
+        }
+        openConfirmDialog(playtest.id, slotId);
+        render();
+        return;
+    }
+
+    const unconfirmButton = event.target.closest("[data-unconfirm-slot]");
+    if (unconfirmButton) {
+        const playtest = activePlaytest();
+        if (!playtest) return;
+        unconfirmPlaytestSlot(playtest.id, unconfirmButton.dataset.unconfirmSlot);
+        savePlaytestState();
+        render();
+        return;
+    }
+
+    const monthButton = event.target.closest("[data-playtest-month]");
+    if (monthButton) {
+        state.playtests.calendarMonthOffset = monthButton.dataset.playtestMonth === "1" ? 1 : 0;
+        savePlaytestState();
+        render();
+        return;
+    }
+
+    const adminCalendarFilterButton = event.target.closest("[data-admin-calendar-filter]");
+    if (adminCalendarFilterButton) {
+        toggleAdminCalendarFilter(adminCalendarFilterButton.dataset.adminCalendarFilter);
+        savePlaytestState();
+        render();
+        return;
+    }
+
+    const slotDeleteCancelButton = event.target.closest("[data-admin-cancel-delete-slot]");
+    if (slotDeleteCancelButton) {
+        cancelSlotDeleteConfirm(slotDeleteCancelButton.dataset.adminCancelDeleteSlot);
+        render();
+        return;
+    }
+
+    const slotDeleteButton = event.target.closest("[data-admin-delete-slot]");
+    if (slotDeleteButton) {
+        const playtest = activePlaytest();
+        if (!playtest) return;
+        const slotId = slotDeleteButton.dataset.adminDeleteSlot;
+        const pending = slotDeletePendingState(playtest.id, slotId);
+        if (!pending.pending || !pending.ready) {
+            startSlotDeleteConfirm(playtest.id, slotId);
+            render();
+            return;
+        }
+        deletePlaytestSlot(playtest.id, slotId);
+        savePlaytestState();
+        render();
+        return;
+    }
+
+    const expandButton = event.target.closest("[data-playtest-expand]");
+    if (expandButton) {
+        const slotId = expandButton.dataset.playtestExpand;
+        if (state.playtests.expandedSlotIds.has(slotId)) {
+            state.playtests.expandedSlotIds.delete(slotId);
+        } else {
+            state.playtests.expandedSlotIds.add(slotId);
+        }
+        render();
+        return;
+    }
+
+    const heatmapButton = event.target.closest("[data-heatmap-toggle]");
+    if (heatmapButton) {
+        state.playtests.heatmapExpanded = !state.playtests.heatmapExpanded;
+        savePlaytestState();
+        render();
+        return;
+    }
+
+    const adminButton = event.target.closest("[data-playtest-admin]");
+    if (adminButton) handlePlaytestAdmin(adminButton.dataset.playtestAdmin);
+}
+
+function handlePlaytestChange(event) {
+    const active = activePlaytest();
+    if (!active) return;
+    if (event.target.name === "playtest-mode") {
+        const preference = playtestPreference(active.id);
+        preference.modePreference = PLAYTEST_MODE_OPTIONS.includes(event.target.value) ? event.target.value : "Either";
+        state.playtests.preferences[active.id] = preference;
+        syncPreferenceToExistingVotes(active.id, preference);
+        savePlaytestState();
+        render();
+        return;
+    }
+}
+
+function handlePlaytestSubmit(event) {
+    if (event.target.id !== "playtest-create-form") return;
+    event.preventDefault();
+    const form = event.target;
+    const data = new FormData(form);
+    const mainSlotAt = parsePlaytestDateInput(data.get("mainSlot"));
+    if (!mainSlotAt) return;
+
+    const id = `local-playtest-${Date.now()}`;
+    const alternatives = String(data.get("alternativeSlots") || "")
+        .split(/\r?\n/)
+        .map((value) => parsePlaytestDateInput(value.trim()))
+        .filter(Boolean);
+    const slots = [
+        { id: `${id}-main`, label: "Featured date", startAt: mainSlotAt, source: "featured" },
+        ...alternatives.map((startAt, index) => ({ id: `${id}-alt-${index + 1}`, label: `Featured date ${index + 2}`, startAt, source: "featured" }))
+    ];
+
+    const playtest = {
+        id,
+        title: String(data.get("title") || "Community Playtest").trim() || "Community Playtest",
+        description: String(data.get("description") || "").trim(),
+        status: ["upcoming", "voting", "closed"].includes(data.get("status")) ? data.get("status") : "voting",
+        createdBy: PLAYTEST_VIEWER.userId,
+        createdAt: new Date().toISOString(),
+        mainSlotId: `${id}-main`,
+        slots
+    };
+
+    state.playtests.localPlaytests.push(playtest);
+    state.playtests.activeId = id;
+    savePlaytestState();
+    form.reset();
+    render();
+}
+
+function handlePlaytestAdmin(action) {
+    const playtest = activePlaytest();
+    if (!playtest) return;
+    const override = playtestOverride(playtest.id);
+
+    if (action === "duplicate") {
+        duplicatePlaytest(playtest);
+    } else if (action === "close") {
+        override.status = "closed";
+    } else if (action === "reopen") {
+        override.status = "voting";
+    } else if (action === "freeze") {
+        override.frozen = true;
+    } else if (action === "unfreeze") {
+        override.frozen = false;
+    } else if (action === "reset-votes") {
+        delete state.playtests.votes[playtest.id];
+    }
+
+    savePlaytestState();
+    render();
+}
+
+function setPlaytestVote(playtestId, slotId, status, timeRange = null) {
+    if (!PLAYTEST_STATUS_OPTIONS.some((option) => option.id === status)) return;
+    const preference = playtestPreference(playtestId);
+    const slot = findPlaytestSlot(playtestId, slotId);
+    const normalizedRange = timeRange
+        ? normalizeTimeRange(timeRange.startTime || timeRange.start, timeRange.endTime || timeRange.end)
+        : defaultVoteTimeRangeForSlot(slot);
+    const dateKeyValue = dateKey(slot?.startAt || new Date());
+    state.playtests.votes[playtestId] = state.playtests.votes[playtestId] || {};
+    state.playtests.votes[playtestId][slotId] = {
+        userId: PLAYTEST_VIEWER.userId,
+        username: PLAYTEST_VIEWER.username,
+        status,
+        updatedAt: new Date().toISOString(),
+        modePreference: preference.modePreference,
+        startTime: normalizedRange.startTime,
+        endTime: normalizedRange.endTime,
+        availableStartAt: localDateTimeIso(dateKeyValue, normalizedRange.startTime),
+        availableEndAt: localDateTimeIso(dateKeyValue, normalizedRange.endTime)
+    };
+    recordAdminVoteEvent(playtestId, slotId, status);
+    savePlaytestState();
+    render();
+}
+
+function summarizePlaytestSlots(playtest) {
+    return (playtest?.slots || []).map((slot) => {
+        const votes = collectSlotVotes(playtest, slot.id);
+        const votersByStatus = {
+            available: votes.filter((vote) => vote.status === "available"),
+            preferred: votes.filter((vote) => vote.status === "preferred"),
+            maybe: votes.filter((vote) => vote.status === "maybe"),
+            unavailable: votes.filter((vote) => vote.status === "unavailable")
+        };
+        const counts = Object.fromEntries(Object.entries(votersByStatus).map(([status, voters]) => [status, voters.length]));
+        const availableVoters = [...votersByStatus.available, ...votersByStatus.preferred];
+        const score = counts.available * 3 + counts.preferred * 5 + counts.maybe;
+        const bestTime = bestVoteOverlap(slot, votes);
+        return {
+            slot,
+            votes,
+            votersByStatus,
+            counts,
+            availableVoters,
+            availableTotal: availableVoters.length,
+            total: votes.length,
+            score,
+            bestTime,
+            rankScore: bestTime?.score || score
+        };
+    });
+}
+
+function collectSlotVotes(playtest, slotId) {
+    const byUser = new Map();
+    for (const vote of seedVotesForSlot(playtest, slotId)) {
+        byUser.set(vote.userId, vote);
+    }
+    const localVote = state.playtests.votes?.[playtest.id]?.[slotId];
+    if (localVote?.status) byUser.set(PLAYTEST_VIEWER.userId, localVote);
+    return [...byUser.values()].sort((a, b) => statusSortValue(a.status) - statusSortValue(b.status) || a.username.localeCompare(b.username));
+}
+
+function seedVotesForSlot(playtest, slotId) {
+    const matrix = playtest?.seedMatrix?.[slotId];
+    if (!matrix) return [];
+    const votes = [];
+    for (const status of PLAYTEST_COUNT_ORDER) {
+        for (const userIndex of matrix[status] || []) {
+            const user = PLAYTEST_SEED_USERS[userIndex];
+            if (!user) continue;
+            votes.push({
+                userId: user.userId,
+                username: user.username,
+                status,
+                updatedAt: seedUpdatedAt(userIndex),
+                modePreference: user.modePreference
+            });
+        }
+    }
+    return votes;
+}
+
+function bestVoteOverlap(slot, votes) {
+    const intervals = votes
+        .map((vote) => voteAvailabilityInterval(slot, vote))
+        .filter(Boolean);
+    if (intervals.length === 0) return null;
+
+    const eventGroups = new Map();
+    for (const interval of intervals) {
+        if (!eventGroups.has(interval.start)) eventGroups.set(interval.start, []);
+        if (!eventGroups.has(interval.end)) eventGroups.set(interval.end, []);
+        eventGroups.get(interval.start).push({ type: 1, status: interval.status });
+        eventGroups.get(interval.end).push({ type: -1, status: interval.status });
+    }
+
+    const times = [...eventGroups.keys()].sort((a, b) => a - b);
+    const active = { available: 0, preferred: 0, maybe: 0 };
+    let best = null;
+
+    for (let index = 0; index < times.length; index++) {
+        const time = times[index];
+        for (const event of eventGroups.get(time)) {
+            active[event.status] = Math.max(0, (active[event.status] || 0) + event.type);
+        }
+
+        const nextTime = times[index + 1];
+        if (!nextTime || nextTime <= time) continue;
+
+        const score = active.available * statusWeight("available")
+            + active.preferred * statusWeight("preferred")
+            + active.maybe * statusWeight("maybe");
+        if (score <= 0) continue;
+
+        const candidate = {
+            start: time,
+            end: nextTime,
+            startAt: new Date(time).toISOString(),
+            endAt: new Date(nextTime).toISOString(),
+            score,
+            availableTotal: active.available + active.preferred,
+            preferredTotal: active.preferred,
+            maybeTotal: active.maybe,
+            total: active.available + active.preferred + active.maybe,
+            durationMinutes: Math.max(0, Math.round((nextTime - time) / 60000))
+        };
+
+        if (isBetterOverlap(candidate, best)) best = candidate;
+    }
+
+    return best;
+}
+
+function voteAvailabilityInterval(slot, vote) {
+    if (!["available", "preferred", "maybe"].includes(vote?.status)) return null;
+    let start = dateValue(vote.availableStartAt);
+    let end = dateValue(vote.availableEndAt);
+
+    if (!start || !end || end <= start) {
+        const range = voteInputRangeForSlot(slot, vote);
+        const key = dateKey(slot?.startAt || new Date());
+        start = dateValue(localDateTimeIso(key, range.startTime));
+        end = dateValue(localDateTimeIso(key, range.endTime));
+    }
+
+    if (!start || !end || end <= start) return null;
+    return {
+        start,
+        end,
+        status: vote.status
+    };
+}
+
+function isBetterOverlap(candidate, best) {
+    if (!best) return true;
+    if (candidate.score !== best.score) return candidate.score > best.score;
+    if (candidate.availableTotal !== best.availableTotal) return candidate.availableTotal > best.availableTotal;
+    if (candidate.total !== best.total) return candidate.total > best.total;
+    if (candidate.durationMinutes !== best.durationMinutes) return candidate.durationMinutes > best.durationMinutes;
+    return candidate.start < best.start;
+}
+
+function statusWeight(status) {
+    return PLAYTEST_STATUS_OPTIONS.find((option) => option.id === status)?.score || 0;
+}
+
+function bestPlaytestSlots(summaries) {
+    return [...summaries].sort((a, b) => {
+        const rankScore = (b.rankScore || 0) - (a.rankScore || 0);
+        if (rankScore) return rankScore;
+        const overlapAvailable = (b.bestTime?.availableTotal || 0) - (a.bestTime?.availableTotal || 0);
+        if (overlapAvailable) return overlapAvailable;
+        const score = b.score - a.score;
+        if (score) return score;
+        const available = b.availableTotal - a.availableTotal;
+        if (available) return available;
+        return dateValue(a.slot.startAt) - dateValue(b.slot.startAt);
+    });
+}
+
+function summariesTotalVoters(summaries) {
+    const voters = new Set();
+    for (const summary of summaries) {
+        for (const vote of summary.votes) voters.add(vote.userId);
+    }
+    return voters.size;
+}
+
+function tallyPreferences(voters, property) {
+    const counts = new Map();
+    for (const vote of voters) {
+        const label = vote[property] || "Either";
+        counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return [...counts.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function canVoteOnPlaytest(playtest) {
+    if (!playtest) return false;
+    if (playtest.frozen) return false;
+    if (playtest.status !== "voting") return false;
+    return true;
+}
+
+function playtestLockReason(playtest) {
+    if (!playtest) return "";
+    if (playtest.frozen) return "Votes are frozen for this playtest.";
+    if (playtest.status === "closed") return "Voting is closed.";
+    if (playtest.status === "finished") return "This playtest is finished.";
+    if (playtest.status === "upcoming") return "Voting has not opened yet.";
+    return "";
+}
+
+function activePlaytests() {
+    const playtests = [
+        ...DEFAULT_PLAYTESTS,
+        ...(Array.isArray(state.playtests.localPlaytests) ? state.playtests.localPlaytests : [])
+    ].map(applyPlaytestOverride).filter((playtest) => !playtest.archived);
+
+    if (!playtests.some((playtest) => playtest.id === state.playtests.activeId)) {
+        state.playtests.activeId = playtests[0]?.id || "";
+    }
+    return playtests;
+}
+
+function activePlaytest(playtests = activePlaytests()) {
+    return playtests.find((playtest) => playtest.id === state.playtests.activeId) || playtests[0] || null;
+}
+
+function nextEventSummary(playtest, summaries) {
+    const now = Date.now();
+    const confirmedFuture = summaries
+        .filter((summary) => isSlotConfirmed(playtest.id, summary.slot.id) && confirmedSlotStartValue(playtest.id, summary.slot) >= now)
+        .sort((a, b) => confirmedSlotStartValue(playtest.id, a.slot) - confirmedSlotStartValue(playtest.id, b.slot));
+    return confirmedFuture[0] || null;
+}
+
+function upcomingConfirmedPlaytestEvent() {
+    const events = [];
+    for (const playtest of activePlaytests()) {
+        const summaries = summarizePlaytestSlots(playtest);
+        const next = nextEventSummary(playtest, summaries);
+        if (next) {
+            events.push({
+                playtest,
+                summary: next,
+                startsAt: confirmedSlotStartValue(playtest.id, next.slot)
+            });
+        }
+    }
+    events.sort((a, b) => a.startsAt - b.startsAt);
+    return events[0] || null;
+}
+
+function selectedCalendarDateInfo(playtest, summaries, fallbackSummary) {
+    const key = selectedDateKey(playtest, summaries, fallbackSummary);
+    return {
+        dateKey: key,
+        summary: summaries.find((summary) => dateKey(summary.slot.startAt) === key) || null
+    };
+}
+
+function selectedDateKey(playtest, summaries, fallbackSummary = null) {
+    const stored = state.playtests.selectedCalendarDates?.[playtest.id];
+    if (stored) return stored;
+    const fallback = fallbackSummary || bestPlaytestSlots(summaries)[0] || summaries[0];
+    return fallback ? dateKey(fallback.slot.startAt) : dateKey(new Date().toISOString());
+}
+
+function isFeaturedSlot(slot) {
+    return slot?.source !== "community";
+}
+
+function openConfirmDialog(playtestId, slotId) {
+    const playtest = activePlaytests().find((entry) => entry.id === playtestId);
+    const summary = playtest ? summarizePlaytestSlots(playtest).find((entry) => entry.slot.id === slotId) : null;
+    if (!playtest || !summary) return;
+    const range = confirmationDefaultTimeRange(playtestId, summary);
+    state.playtests.pendingConfirmation = {
+        playtestId,
+        slotId,
+        startTime: range.startTime,
+        endTime: range.endTime
+    };
+}
+
+function closeConfirmDialog() {
+    state.playtests.pendingConfirmation = null;
+    render();
+}
+
+function submitConfirmDialog(form) {
+    const pending = state.playtests.pendingConfirmation;
+    if (!pending) return;
+    const range = normalizeTimeRange(
+        form.querySelector("[data-confirm-start]")?.value,
+        form.querySelector("[data-confirm-end]")?.value
+    );
+    confirmPlaytestSlot(pending.playtestId, pending.slotId, range);
+    state.playtests.pendingConfirmation = null;
+    savePlaytestState();
+    render();
+}
+
+function confirmationDefaultTimeRange(playtestId, summary) {
+    const existing = confirmationForSlot(playtestId, summary.slot.id);
+    if (existing?.startAt && existing?.endAt) {
+        return normalizeTimeRange(localTimeKey(existing.startAt), localTimeKey(existing.endAt));
+    }
+    if (summary.bestTime?.startAt && summary.bestTime?.endAt) {
+        return normalizeTimeRange(localTimeKey(summary.bestTime.startAt), localTimeKey(summary.bestTime.endAt));
+    }
+    return defaultVoteTimeRangeForSlot(summary.slot);
+}
+
+function selectedCommunityTimeRange() {
+    const container = document.querySelector(".selected-date-card .community-time-fields");
+    return normalizeTimeRange(
+        container?.querySelector("[data-community-start]")?.value,
+        container?.querySelector("[data-community-end]")?.value
+    );
+}
+
+function voteTimeRangeForButton(button, slot) {
+    const container = button.closest(".selected-date-card, .playtest-slot-card");
+    const fields = container?.querySelector("[data-vote-time-slot]");
+    const fallback = defaultVoteTimeRangeForSlot(slot);
+    return normalizeTimeRange(
+        fields?.querySelector("[data-vote-start]")?.value || fallback.startTime,
+        fields?.querySelector("[data-vote-end]")?.value || fallback.endTime
+    );
+}
+
+function defaultVoteTimeRangeForSlot(slot) {
+    const startTime = localTimeKey(slot?.startAt) || "20:00";
+    const startMinutes = timeToMinutes(startTime);
+    const endTime = slot?.endAt
+        ? localTimeKey(slot.endAt)
+        : minutesToTime(Math.min(1439, (startMinutes === null ? 1200 : startMinutes) + 120));
+    return normalizeTimeRange(startTime, endTime);
+}
+
+function voteInputRangeForSlot(slot, vote) {
+    if (vote?.startTime && vote?.endTime) return normalizeTimeRange(vote.startTime, vote.endTime);
+    if (vote?.availableStartAt && vote?.availableEndAt) {
+        return normalizeTimeRange(localTimeKey(vote.availableStartAt), localTimeKey(vote.availableEndAt));
+    }
+    return defaultVoteTimeRangeForSlot(slot);
+}
+
+function findPlaytestSlot(playtestId, slotId) {
+    const playtest = activePlaytests().find((entry) => entry.id === playtestId);
+    return playtest?.slots?.find((slot) => slot.id === slotId) || null;
+}
+
+function ensureCommunitySlot(playtestId, selectedKey, timeRange = normalizeTimeRange()) {
+    if (!selectedKey || isPastDateKey(selectedKey)) return null;
+    state.playtests.communitySlots[playtestId] = state.playtests.communitySlots[playtestId] || [];
+    const existing = state.playtests.communitySlots[playtestId].find((slot) => dateKey(slot.startAt) === selectedKey);
+    if (existing) return existing;
+    const normalizedRange = normalizeTimeRange(timeRange.startTime, timeRange.endTime);
+    const slot = {
+        id: `community-${playtestId}-${selectedKey}`,
+        label: "Community date",
+        startAt: localDateTimeIso(selectedKey, normalizedRange.startTime),
+        endAt: localDateTimeIso(selectedKey, normalizedRange.endTime),
+        source: "community"
+    };
+    state.playtests.communitySlots[playtestId].push(slot);
+    state.playtests.selectedCalendarDates[playtestId] = selectedKey;
+    return slot;
+}
+
+function confirmedSlotId(playtestId) {
+    const confirmations = state.playtests.confirmedSlots?.[playtestId] || {};
+    return Object.keys(confirmations)[0] || "";
+}
+
+function confirmationForSlot(playtestId, slotId) {
+    return slotId ? state.playtests.confirmedSlots?.[playtestId]?.[slotId] || null : null;
+}
+
+function isSlotConfirmed(playtestId, slotId) {
+    return Boolean(slotId && state.playtests.confirmedSlots?.[playtestId]?.[slotId]);
+}
+
+function confirmedDisplaySlot(playtestId, slot) {
+    const confirmation = confirmationForSlot(playtestId, slot?.id);
+    if (!slot || !confirmation?.startAt || !confirmation?.endAt) return slot;
+    return {
+        ...slot,
+        startAt: confirmation.startAt,
+        endAt: confirmation.endAt
+    };
+}
+
+function confirmedSlotStartValue(playtestId, slot) {
+    const confirmation = confirmationForSlot(playtestId, slot?.id);
+    return dateValue(confirmation?.startAt || slot?.startAt);
+}
+
+function confirmPlaytestSlot(playtestId, slotId, timeRange = null) {
+    if (!slotId) return;
+    const slot = findPlaytestSlot(playtestId, slotId);
+    if (!slot) return;
+    const normalizedRange = timeRange
+        ? normalizeTimeRange(timeRange.startTime, timeRange.endTime)
+        : confirmationDefaultTimeRange(playtestId, { slot });
+    const key = dateKey(slot.startAt);
+    state.playtests.confirmedSlots[playtestId] = {
+        [slotId]: {
+            confirmedAt: new Date().toISOString(),
+            confirmedBy: PLAYTEST_VIEWER.userId,
+            startAt: localDateTimeIso(key, normalizedRange.startTime),
+            endAt: localDateTimeIso(key, normalizedRange.endTime)
+        }
+    };
+    recordAdminSystemEvent(playtestId, slotId, "confirmed");
+}
+
+function unconfirmPlaytestSlot(playtestId, slotId) {
+    if (!slotId || !state.playtests.confirmedSlots?.[playtestId]?.[slotId]) return;
+    delete state.playtests.confirmedSlots[playtestId][slotId];
+    recordAdminSystemEvent(playtestId, slotId, "unconfirmed");
+}
+
+function isNotificationSubscribed(playtestId, key) {
+    return Boolean(key && state.playtests.notificationSubscriptions?.[playtestId]?.[key]);
+}
+
+function toggleNotificationSubscription(playtestId, key) {
+    if (!key) return;
+    state.playtests.notificationSubscriptions[playtestId] = state.playtests.notificationSubscriptions[playtestId] || {};
+    if (state.playtests.notificationSubscriptions[playtestId][key]) {
+        delete state.playtests.notificationSubscriptions[playtestId][key];
+    } else {
+        state.playtests.notificationSubscriptions[playtestId][key] = {
+            userId: PLAYTEST_VIEWER.userId,
+            username: PLAYTEST_VIEWER.username,
+            createdAt: new Date().toISOString()
+        };
+    }
+}
+
+function notificationSubscriberCount(playtestId, slotId) {
+    return state.playtests.notificationSubscriptions?.[playtestId]?.[slotId] ? 1 : 0;
+}
+
+function slotDeletePendingState(playtestId, slotId) {
+    const pending = state.playtests.pendingSlotDelete;
+    if (!pending || pending.playtestId !== playtestId || pending.slotId !== slotId) {
+        return { pending: false, ready: false, remainingSeconds: 0 };
+    }
+    const elapsed = Date.now() - pending.requestedAt;
+    const remainingMs = Math.max(0, 3000 - elapsed);
+    return {
+        pending: true,
+        ready: remainingMs <= 0,
+        remainingSeconds: Math.max(1, Math.ceil(remainingMs / 1000))
+    };
+}
+
+function startSlotDeleteConfirm(playtestId, slotId) {
+    const playtest = activePlaytests().find((entry) => entry.id === playtestId);
+    if (!canDeletePlaytestSlot(playtest, slotId)) return;
+    const requestedAt = Date.now();
+    state.playtests.pendingSlotDelete = { playtestId, slotId, requestedAt };
+    window.setTimeout(() => {
+        const pending = state.playtests.pendingSlotDelete;
+        if (pending?.playtestId === playtestId && pending?.slotId === slotId && pending.requestedAt === requestedAt) {
+            render();
+        }
+    }, 3050);
+}
+
+function cancelSlotDeleteConfirm(slotId) {
+    if (!state.playtests.pendingSlotDelete) return;
+    if (!slotId || state.playtests.pendingSlotDelete.slotId === slotId) {
+        state.playtests.pendingSlotDelete = null;
+    }
+}
+
+function canDeletePlaytestSlot(playtest, slotId) {
+    const slots = playtest?.slots || [];
+    return Boolean(slotId && slots.some((slot) => slot.id === slotId) && slots.length > 1);
+}
+
+function deletePlaytestSlot(playtestId, slotId) {
+    const playtest = activePlaytests().find((entry) => entry.id === playtestId);
+    if (!canDeletePlaytestSlot(playtest, slotId)) return;
+    const slot = playtest.slots.find((entry) => entry.id === slotId);
+    if (!slot) return;
+
+    recordAdminSystemEvent(playtestId, slotId, "deleted");
+
+    if (slot.source === "community") {
+        state.playtests.communitySlots[playtestId] = (state.playtests.communitySlots?.[playtestId] || []).filter((entry) => entry.id !== slotId);
+    } else {
+        state.playtests.deletedSlots[playtestId] = state.playtests.deletedSlots[playtestId] || {};
+        state.playtests.deletedSlots[playtestId][slotId] = {
+            deletedAt: new Date().toISOString(),
+            deletedBy: PLAYTEST_VIEWER.userId
+        };
+    }
+
+    if (state.playtests.votes?.[playtestId]) {
+        delete state.playtests.votes[playtestId][slotId];
+    }
+    if (state.playtests.confirmedSlots?.[playtestId]) {
+        delete state.playtests.confirmedSlots[playtestId][slotId];
+    }
+    if (state.playtests.notificationSubscriptions?.[playtestId]) {
+        delete state.playtests.notificationSubscriptions[playtestId][slotId];
+        delete state.playtests.notificationSubscriptions[playtestId][`date:${dateKey(slot.startAt)}`];
+    }
+    if (state.playtests.selectedCalendarDates?.[playtestId] === dateKey(slot.startAt)) {
+        delete state.playtests.selectedCalendarDates[playtestId];
+    }
+    if (state.playtests.pendingConfirmation?.playtestId === playtestId && state.playtests.pendingConfirmation?.slotId === slotId) {
+        state.playtests.pendingConfirmation = null;
+    }
+    state.playtests.pendingSlotDelete = null;
+}
+
+function recordAdminVoteEvent(playtestId, slotId, status) {
+    const playtest = activePlaytests().find((entry) => entry.id === playtestId);
+    if (!playtest) return;
+    const summary = summarizePlaytestSlots(playtest).find((entry) => entry.slot.id === slotId);
+    if (!summary) return;
+    state.playtests.adminVoteEvents.unshift({
+        id: `vote-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        type: "vote",
+        playtestId,
+        slotId,
+        slotStartAt: summary.slot.startAt,
+        username: PLAYTEST_VIEWER.username,
+        status,
+        availableTotal: summary.availableTotal,
+        preferredTotal: summary.counts.preferred,
+        totalVotes: summary.total,
+        createdAt: new Date().toISOString()
+    });
+    state.playtests.adminVoteEvents = state.playtests.adminVoteEvents.slice(0, 40);
+}
+
+function recordAdminSystemEvent(playtestId, slotId, action) {
+    const playtest = activePlaytests().find((entry) => entry.id === playtestId);
+    const slot = playtest?.slots?.find((entry) => entry.id === slotId);
+    if (!slot) return;
+    state.playtests.adminVoteEvents.unshift({
+        id: `${action}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        type: action,
+        playtestId,
+        slotId,
+        slotStartAt: slot.startAt,
+        username: "Admin",
+        status: action,
+        availableTotal: 0,
+        preferredTotal: 0,
+        totalVotes: 0,
+        createdAt: new Date().toISOString()
+    });
+    state.playtests.adminVoteEvents = state.playtests.adminVoteEvents.slice(0, 40);
+}
+
+function baseCalendarMonthDate(playtest) {
+    const firstSlot = [...(playtest?.slots || [])].sort((a, b) => dateValue(a.startAt) - dateValue(b.startAt))[0];
+    const base = new Date(firstSlot?.startAt || Date.now());
+    return new Date(base.getFullYear(), base.getMonth(), 1, 12, 0, 0);
+}
+
+function calendarMonthDate(playtest) {
+    const base = baseCalendarMonthDate(playtest);
+    return new Date(base.getFullYear(), base.getMonth() + (state.playtests.calendarMonthOffset || 0), 1, 12, 0, 0);
+}
+
+function isPastSlot(slot) {
+    return dateValue(slot?.startAt) < Date.now();
+}
+
+function isPastDateKey(key) {
+    return localDateFromKey(key, "23:59").getTime() < Date.now();
+}
+
+function dateKey(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    const validDate = Number.isNaN(date.getTime()) ? new Date() : date;
+    return localDateKey(validDate);
+}
+
+function localDateKey(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function nextLocalDateKey(key) {
+    const date = localDateFromKey(key, "12:00");
+    date.setDate(date.getDate() + 1);
+    return localDateKey(date);
+}
+
+function localDateFromKey(key, time = "20:00") {
+    const dateMatch = String(key || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const timeParts = parseTimeParts(time) || parseTimeParts("20:00");
+    if (!dateMatch) {
+        const fallback = new Date();
+        fallback.setHours(timeParts.hours, timeParts.minutes, 0, 0);
+        return fallback;
+    }
+    return new Date(
+        Number(dateMatch[1]),
+        Number(dateMatch[2]) - 1,
+        Number(dateMatch[3]),
+        timeParts.hours,
+        timeParts.minutes,
+        0,
+        0
+    );
+}
+
+function localDateTimeIso(key, time) {
+    return localDateFromKey(key, time).toISOString();
+}
+
+function localTimeKey(value) {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function parseTimeParts(value) {
+    const match = String(value || "").trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    if (!match) return null;
+    return {
+        hours: Number(match[1]),
+        minutes: Number(match[2])
+    };
+}
+
+function timeToMinutes(value) {
+    const parts = parseTimeParts(value);
+    return parts ? parts.hours * 60 + parts.minutes : null;
+}
+
+function minutesToTime(minutes) {
+    const safeMinutes = Math.max(0, Math.min(1439, minutes));
+    const hours = String(Math.floor(safeMinutes / 60)).padStart(2, "0");
+    const mins = String(safeMinutes % 60).padStart(2, "0");
+    return `${hours}:${mins}`;
+}
+
+function normalizeTimeRange(startTime = "20:00", endTime = "22:00") {
+    let startMinutes = timeToMinutes(startTime);
+    if (startMinutes === null) startMinutes = timeToMinutes("20:00");
+    let endMinutes = timeToMinutes(endTime);
+    if (endMinutes === null || endMinutes <= startMinutes) {
+        endMinutes = Math.min(1439, startMinutes + 120);
+    }
+    if (endMinutes <= startMinutes) {
+        startMinutes = Math.max(0, endMinutes - 60);
+    }
+    return {
+        startTime: minutesToTime(startMinutes),
+        endTime: minutesToTime(endMinutes)
+    };
+}
+
+function applyPlaytestOverride(playtest) {
+    const override = state.playtests.overrides?.[playtest.id] || {};
+    const deletedSlots = state.playtests.deletedSlots?.[playtest.id] || {};
+    const playtestSlots = (playtest.slots || []).filter((slot) => !deletedSlots[slot.id]);
+    const communitySlots = (state.playtests.communitySlots?.[playtest.id] || []).filter((slot) => !deletedSlots[slot.id]);
+    return { ...playtest, ...override, slots: [...playtestSlots, ...communitySlots] };
+}
+
+function playtestOverride(playtestId) {
+    state.playtests.overrides[playtestId] = state.playtests.overrides[playtestId] || {};
+    return state.playtests.overrides[playtestId];
+}
+
+function adminCalendarFilters() {
+    state.playtests.adminCalendarFilters = sanitizeAdminCalendarFilters(state.playtests.adminCalendarFilters);
+    return state.playtests.adminCalendarFilters;
+}
+
+function toggleAdminCalendarFilter(filterId) {
+    if (!["community", "events"].includes(filterId)) return;
+    const filters = adminCalendarFilters();
+    filters[filterId] = !filters[filterId];
+}
+
+function playtestPreference(playtestId) {
+    const preference = state.playtests.preferences?.[playtestId] || {};
+    return {
+        modePreference: PLAYTEST_MODE_OPTIONS.includes(preference.modePreference) ? preference.modePreference : "Either"
+    };
+}
+
+function syncPreferenceToExistingVotes(playtestId, preference) {
+    const votes = state.playtests.votes?.[playtestId] || {};
+    Object.values(votes).forEach((vote) => {
+        vote.modePreference = preference.modePreference;
+        vote.updatedAt = new Date().toISOString();
+    });
+}
+
+function duplicatePlaytest(playtest) {
+    const id = `local-playtest-${Date.now()}`;
+    const slotIdMap = new Map((playtest.slots || []).map((slot, index) => [slot.id, `${id}-slot-${index + 1}`]));
+    const clone = {
+        id,
+        title: `${playtest.title} Copy`,
+        description: playtest.description,
+        status: "voting",
+        createdBy: PLAYTEST_VIEWER.userId,
+        createdAt: new Date().toISOString(),
+        mainSlotId: slotIdMap.get(playtest.mainSlotId) || `${id}-slot-1`,
+        slots: (playtest.slots || []).map((slot, index) => ({
+            id: slotIdMap.get(slot.id) || `${id}-slot-${index + 1}`,
+            label: slot.label,
+            startAt: slot.startAt,
+            endAt: slot.endAt || "",
+            source: "featured"
+        }))
+    };
+    state.playtests.localPlaytests.push(clone);
+    state.playtests.activeId = id;
+}
+
+function deletePlaytest(playtestId) {
+    const before = state.playtests.localPlaytests.length;
+    state.playtests.localPlaytests = state.playtests.localPlaytests.filter((playtest) => playtest.id !== playtestId);
+    if (state.playtests.localPlaytests.length === before) return;
+    delete state.playtests.votes[playtestId];
+    delete state.playtests.preferences[playtestId];
+    delete state.playtests.confirmedSlots[playtestId];
+    delete state.playtests.notificationSubscriptions[playtestId];
+    delete state.playtests.deletedSlots[playtestId];
+    state.playtests.adminVoteEvents = state.playtests.adminVoteEvents.filter((event) => event.playtestId !== playtestId);
+    const next = activePlaytests()[0];
+    state.playtests.activeId = next?.id || "";
+}
+
+function loadPlaytestState() {
+    const fallback = emptyPlaytestState();
+    try {
+        const raw = window.localStorage?.getItem(PLAYTEST_STORAGE_KEY);
+        if (!raw) {
+            state.playtests = fallback;
+            return;
+        }
+        const parsed = JSON.parse(raw);
+        state.playtests = {
+            ...fallback,
+            activeId: typeof parsed.activeId === "string" ? parsed.activeId : fallback.activeId,
+            votes: parsed.votes && typeof parsed.votes === "object" ? parsed.votes : {},
+            preferences: parsed.preferences && typeof parsed.preferences === "object" ? parsed.preferences : {},
+            localPlaytests: Array.isArray(parsed.localPlaytests) ? parsed.localPlaytests.map(sanitizeLocalPlaytest).filter(Boolean) : [],
+            communitySlots: parsed.communitySlots && typeof parsed.communitySlots === "object" ? sanitizeCommunitySlots(parsed.communitySlots) : {},
+            selectedCalendarDates: parsed.selectedCalendarDates && typeof parsed.selectedCalendarDates === "object" ? parsed.selectedCalendarDates : {},
+            calendarMonthOffset: parsed.calendarMonthOffset === 1 ? 1 : 0,
+            heatmapExpanded: Boolean(parsed.heatmapExpanded),
+            adminCalendarFilters: sanitizeAdminCalendarFilters(parsed.adminCalendarFilters),
+            confirmedSlots: parsed.confirmedSlots && typeof parsed.confirmedSlots === "object" ? parsed.confirmedSlots : {},
+            notificationSubscriptions: parsed.notificationSubscriptions && typeof parsed.notificationSubscriptions === "object" ? parsed.notificationSubscriptions : {},
+            adminVoteEvents: Array.isArray(parsed.adminVoteEvents) ? parsed.adminVoteEvents.slice(0, 40) : [],
+            overrides: parsed.overrides && typeof parsed.overrides === "object" ? sanitizePlaytestOverrides(parsed.overrides) : {},
+            deletedSlots: parsed.deletedSlots && typeof parsed.deletedSlots === "object" ? sanitizeDeletedSlots(parsed.deletedSlots) : {},
+            pendingSlotDelete: null,
+            expandedSlotIds: new Set()
+        };
+    } catch (error) {
+        console.error("Failed to load playtest state", error);
+        state.playtests = fallback;
+    }
+}
+
+function savePlaytestState() {
+    try {
+        const payload = {
+            activeId: state.playtests.activeId,
+            votes: state.playtests.votes,
+            preferences: state.playtests.preferences,
+            localPlaytests: state.playtests.localPlaytests,
+            communitySlots: state.playtests.communitySlots,
+            selectedCalendarDates: state.playtests.selectedCalendarDates,
+            calendarMonthOffset: state.playtests.calendarMonthOffset,
+            heatmapExpanded: state.playtests.heatmapExpanded,
+            adminCalendarFilters: adminCalendarFilters(),
+            confirmedSlots: state.playtests.confirmedSlots,
+            notificationSubscriptions: state.playtests.notificationSubscriptions,
+            adminVoteEvents: state.playtests.adminVoteEvents,
+            overrides: state.playtests.overrides,
+            deletedSlots: state.playtests.deletedSlots
+        };
+        window.localStorage?.setItem(PLAYTEST_STORAGE_KEY, JSON.stringify(payload));
+    } catch (error) {
+        console.error("Failed to save playtest state", error);
+    }
+}
+
+function emptyPlaytestState() {
+    return {
+        activeId: DEFAULT_PLAYTESTS[0]?.id || "",
+        votes: {},
+        preferences: {},
+        localPlaytests: [],
+        communitySlots: {},
+        selectedCalendarDates: {},
+        calendarMonthOffset: 0,
+        heatmapExpanded: false,
+        adminCalendarFilters: {
+            community: true,
+            events: true
+        },
+        confirmedSlots: {},
+        notificationSubscriptions: {},
+        adminVoteEvents: [],
+        overrides: {},
+        deletedSlots: {},
+        pendingConfirmation: null,
+        pendingSlotDelete: null,
+        expandedSlotIds: new Set()
+    };
+}
+
+function sanitizeLocalPlaytest(playtest) {
+    if (!playtest || typeof playtest !== "object" || typeof playtest.id !== "string") return null;
+    const slots = Array.isArray(playtest.slots)
+        ? playtest.slots.filter((slot) => slot?.id && slot?.startAt).map((slot) => ({
+            id: String(slot.id),
+            label: String(slot.label || "Alternative"),
+            startAt: String(slot.startAt),
+            endAt: slot.endAt ? String(slot.endAt) : ""
+        }))
+        : [];
+    if (slots.length === 0) return null;
+    return {
+        id: playtest.id,
+        title: String(playtest.title || "Community Playtest"),
+        description: String(playtest.description || ""),
+        status: ["upcoming", "voting", "closed", "finished"].includes(playtest.status) ? playtest.status : "voting",
+        createdBy: String(playtest.createdBy || PLAYTEST_VIEWER.userId),
+        createdAt: String(playtest.createdAt || new Date().toISOString()),
+        mainSlotId: slots.some((slot) => slot.id === playtest.mainSlotId) ? playtest.mainSlotId : slots[0].id,
+        slots
+    };
+}
+
+function sanitizeCommunitySlots(value) {
+    return Object.fromEntries(Object.entries(value).map(([playtestId, slots]) => [
+        playtestId,
+        Array.isArray(slots)
+            ? slots.filter((slot) => slot?.id && slot?.startAt).map((slot) => ({
+                id: String(slot.id),
+                label: "Community date",
+                startAt: String(slot.startAt),
+                endAt: slot.endAt ? String(slot.endAt) : "",
+                source: "community"
+            }))
+            : []
+    ]));
+}
+
+function sanitizeAdminCalendarFilters(value) {
+    const filters = value && typeof value === "object" ? value : {};
+    return {
+        community: filters.community !== false,
+        events: filters.events !== false
+    };
+}
+
+function sanitizePlaytestOverrides(value) {
+    const defaultIds = new Set(DEFAULT_PLAYTESTS.map((playtest) => playtest.id));
+    return Object.fromEntries(Object.entries(value).map(([playtestId, override]) => {
+        const safeOverride = override && typeof override === "object" ? { ...override } : {};
+        if (defaultIds.has(playtestId)) delete safeOverride.archived;
+        return [playtestId, safeOverride];
+    }));
+}
+
+function sanitizeDeletedSlots(value) {
+    return Object.fromEntries(Object.entries(value).map(([playtestId, slots]) => [
+        playtestId,
+        slots && typeof slots === "object"
+            ? Object.fromEntries(Object.entries(slots).map(([slotId, entry]) => [
+                slotId,
+                {
+                    deletedAt: String(entry?.deletedAt || new Date().toISOString()),
+                    deletedBy: String(entry?.deletedBy || PLAYTEST_VIEWER.userId)
+                }
+            ]))
+            : {}
+    ]));
+}
+
+function parsePlaytestDateInput(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString();
+}
+
+function seedUpdatedAt(index) {
+    const minutes = 4 + (number(index) * 7) % 84;
+    return new Date(Date.now() - minutes * 60000).toISOString();
+}
+
+function statusSortValue(status) {
+    const index = PLAYTEST_COUNT_ORDER.indexOf(status);
+    return index === -1 ? 99 : index;
+}
+
+function statusLabel(status) {
+    return PLAYTEST_STATUS_OPTIONS.find((option) => option.id === status)?.label || status;
+}
+
+function playtestStatusLabel(playtest) {
+    if (playtest?.frozen) return "Frozen";
+    const status = String(playtest?.status || "upcoming");
+    return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function formatSlotWeekday(value) {
+    return formatLocalDate(value, { weekday: "long" });
+}
+
+function formatSlotDay(value) {
+    return formatLocalDate(value, { day: "numeric", month: "long" });
+}
+
+function formatSlotTime(value) {
+    return formatLocalDate(value, { hour: "2-digit", minute: "2-digit", hour12: false, timeZoneName: "short" });
+}
+
+function formatSlotShort(value) {
+    return formatLocalDate(value, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZoneName: "short" });
+}
+
+function formatSlotTimeRange(slot) {
+    if (!slot?.endAt) return formatSlotTime(slot?.startAt);
+    if (dateKey(slot.startAt) !== dateKey(slot.endAt)) {
+        return `${formatSlotTime(slot.startAt)} - ${formatSlotShort(slot.endAt)}`;
+    }
+    return `${formatSlotTime(slot.startAt)} - ${formatSlotTime(slot.endAt)}`;
+}
+
+function formatSlotShortRange(slot) {
+    if (!slot?.endAt) return formatSlotShort(slot?.startAt);
+    if (dateKey(slot.startAt) !== dateKey(slot.endAt)) {
+        return `${formatSlotShort(slot.startAt)} - ${formatSlotShort(slot.endAt)}`;
+    }
+    return `${formatSlotShort(slot.startAt)} - ${formatSlotTime(slot.endAt)}`;
+}
+
+function formatOverlapRange(overlap) {
+    if (!overlap) return "No shared time";
+    if (dateKey(overlap.startAt) !== dateKey(overlap.endAt)) {
+        return `${formatSlotShort(overlap.startAt)} - ${formatSlotShort(overlap.endAt)}`;
+    }
+    return `${formatSlotTime(overlap.startAt)} - ${formatSlotTime(overlap.endAt)}`;
+}
+
+function formatVoteTimeRange(slot, vote) {
+    const interval = voteAvailabilityInterval(slot, vote);
+    if (!interval) return "No time";
+    return formatOverlapRange({
+        startAt: new Date(interval.start).toISOString(),
+        endAt: new Date(interval.end).toISOString()
+    });
+}
+
+function overlapPeopleText(overlap) {
+    if (!overlap) return "No voters overlap yet";
+    const available = `${overlap.availableTotal} ${overlap.availableTotal === 1 ? "person" : "people"} can meet`;
+    const maybe = overlap.maybeTotal ? `, ${overlap.maybeTotal} maybe` : "";
+    return `${available}${maybe}`;
+}
+
+function formatDateKeyWeekday(value) {
+    return formatLocalDate(localDateFromKey(value), { weekday: "long" });
+}
+
+function formatDateKeyDay(value) {
+    return formatLocalDate(localDateFromKey(value), { day: "numeric", month: "long" });
+}
+
+function formatMonthLabel(value) {
+    return formatLocalDate(value, { month: "long", year: "numeric" });
+}
+
+function formatLocalDate(value, options) {
+    if (!value) return "TBD";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString(undefined, options).replace("24:", "00:");
+}
+
+function formatRelativeTime(value) {
+    const time = dateValue(value);
+    if (!time) return "recently";
+    const diffSeconds = Math.max(0, Math.round((Date.now() - time) / 1000));
+    if (diffSeconds < 60) return "just now";
+    const minutes = Math.round(diffSeconds / 60);
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} hr ago`;
+    const days = Math.round(hours / 24);
+    return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 function renderChampionControls() {
@@ -759,6 +3107,7 @@ function renderMainViewTabs() {
             render();
         });
         button.classList.add("tab-pill");
+        button.setAttribute("aria-label", `${label} stat view${state.mainView === viewId ? ", selected" : ""}`);
         container.appendChild(button);
     }
 }
@@ -774,6 +3123,7 @@ function renderModeTabs() {
             render();
         });
         button.classList.add("tab-pill");
+        button.setAttribute("aria-label", `${MODE_LABELS[modeId]} mode${state.mode === modeId ? ", selected" : ""}`);
         container.appendChild(button);
     }
     const title = state.mainView === "players"
@@ -787,14 +3137,24 @@ function renderModeTabs() {
 function renderSortHeaders() {
     document.querySelectorAll("[data-sort]").forEach((button) => {
         const active = button.dataset.sort === state.sort;
+        const direction = active ? state.sortDirection : "desc";
+        const currentDirection = state.sortDirection === "desc" ? "descending" : "ascending";
+        const nextDirection = direction === "desc" ? "ascending" : "descending";
+        const label = SORT_LABELS[button.dataset.sort] || button.textContent.trim();
         button.classList.toggle("active", active);
-        button.setAttribute("aria-sort", active ? (state.sortDirection === "desc" ? "descending" : "ascending") : "none");
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+        button.setAttribute("aria-label", active
+            ? `${label}, sorted ${currentDirection}. Activate to sort ${nextDirection}.`
+            : `${label}, not sorted. Activate to sort descending.`);
+        const header = button.closest("th");
+        if (header) header.setAttribute("aria-sort", active ? currentDirection : "none");
     });
 
     document.querySelectorAll("[data-sort-indicator]").forEach((indicator) => {
         indicator.textContent = indicator.dataset.sortIndicator === state.sort
             ? (state.sortDirection === "desc" ? "v" : "^")
             : "";
+        indicator.setAttribute("aria-hidden", "true");
     });
 }
 
@@ -840,12 +3200,17 @@ function renderTable() {
         empty.querySelector("h3").textContent = emptyStateText();
         empty.classList.remove("hidden");
         wrap.classList.add("hidden");
+        wrap.classList.remove("table-scrollable");
         renderPagination(0, 0);
         return;
     }
 
     empty.classList.add("hidden");
     wrap.classList.remove("hidden");
+    wrap.setAttribute("aria-label", `${document.getElementById("leaderboard-title").textContent} table with sortable columns`);
+    window.requestAnimationFrame(() => {
+        wrap.classList.toggle("table-scrollable", wrap.scrollWidth > wrap.clientWidth + 4);
+    });
 
     const start = (state.page - 1) * state.pageSize;
     const pageRows = rows.slice(start, start + state.pageSize);
@@ -874,7 +3239,7 @@ function renderTable() {
             <td>
                 <div class="player-name">
                     <strong>${escapeHtml(player.name)}</strong>
-                    <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview">Profile</a>
+                    <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview" aria-label="${escapeHtml(`Open ${player.name} profile`)}">Profile</a>
                 </div>
             </td>
             <td>${stats.wins}</td>
@@ -894,17 +3259,18 @@ function renderTable() {
 }
 
 function renderTableHead() {
+    const sortColumn = (sort, label = SORT_LABELS[sort]) => `<th>${renderSortButton(sort, label)}</th>`;
     if (state.mainView === "weapons") {
         return `
             <tr>
                 <th>#</th>
                 <th>Weapon</th>
-                <th><button class="sort-header" type="button" data-sort="kills">Kills <span data-sort-indicator="kills"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="hits">Hits <span data-sort-indicator="hits"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="headshotRate">HS% <span data-sort-indicator="headshotRate"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="headshotKills">HS Kills <span data-sort-indicator="headshotKills"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="utilityKills">Utility <span data-sort-indicator="utilityKills"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="vehicleKills">Vehicle <span data-sort-indicator="vehicleKills"></span></button></th>
+                ${sortColumn("kills")}
+                ${sortColumn("hits")}
+                ${sortColumn("headshotRate")}
+                ${sortColumn("headshotKills")}
+                ${sortColumn("utilityKills", "Utility")}
+                ${sortColumn("vehicleKills", "Vehicle")}
             </tr>
         `;
     }
@@ -914,13 +3280,13 @@ function renderTableHead() {
             <tr>
                 <th>#</th>
                 <th>Map</th>
-                <th><button class="sort-header" type="button" data-sort="games">Games <span data-sort-indicator="games"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="kills">Kills <span data-sort-indicator="kills"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="avgKills">Avg K <span data-sort-indicator="avgKills"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="deaths">Deaths <span data-sort-indicator="deaths"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="kdRatio">KD <span data-sort-indicator="kdRatio"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="headshotRate">HS% <span data-sort-indicator="headshotRate"></span></button></th>
-                <th><button class="sort-header" type="button" data-sort="playtimeSeconds">Playtime <span data-sort-indicator="playtimeSeconds"></span></button></th>
+                ${sortColumn("games")}
+                ${sortColumn("kills")}
+                ${sortColumn("avgKills", "Avg K")}
+                ${sortColumn("deaths")}
+                ${sortColumn("kdRatio")}
+                ${sortColumn("headshotRate")}
+                ${sortColumn("playtimeSeconds")}
             </tr>
         `;
     }
@@ -929,17 +3295,23 @@ function renderTableHead() {
         <tr>
             <th>#</th>
             <th>Player</th>
-            <th><button class="sort-header" type="button" data-sort="wins">Wins <span data-sort-indicator="wins"></span></button></th>
-            <th><button class="sort-header" type="button" data-sort="kills">Kills <span data-sort-indicator="kills"></span></button></th>
-            <th><button class="sort-header" type="button" data-sort="games">Games <span data-sort-indicator="games"></span></button></th>
-            <th><button class="sort-header" type="button" data-sort="deaths">Deaths <span data-sort-indicator="deaths"></span></button></th>
-            <th><button class="sort-header" type="button" data-sort="winRate">Win Rate <span data-sort-indicator="winRate"></span></button></th>
-            <th><button class="sort-header" type="button" data-sort="avgKills">Avg K <span data-sort-indicator="avgKills"></span></button></th>
-            <th><button class="sort-header" type="button" data-sort="playtimeSeconds">Playtime <span data-sort-indicator="playtimeSeconds"></span></button></th>
-            <th><button class="sort-header" type="button" data-sort="headshotRate">HS% <span data-sort-indicator="headshotRate"></span></button></th>
-            <th><button class="sort-header" type="button" data-sort="kdRatio">KD <span data-sort-indicator="kdRatio"></span></button></th>
+            ${sortColumn("wins")}
+            ${sortColumn("kills")}
+            ${sortColumn("games")}
+            ${sortColumn("deaths")}
+            ${sortColumn("winRate")}
+            ${sortColumn("avgKills", "Avg K")}
+            ${sortColumn("playtimeSeconds")}
+            ${sortColumn("headshotRate")}
+            ${sortColumn("kdRatio")}
         </tr>
     `;
+}
+
+function renderSortButton(sort, visibleLabel = SORT_LABELS[sort]) {
+    const safeSort = escapeHtml(sort);
+    const label = visibleLabel || SORT_LABELS[sort] || sort;
+    return `<button class="sort-header" type="button" data-sort="${safeSort}">${escapeHtml(label)} <span aria-hidden="true" data-sort-indicator="${safeSort}"></span></button>`;
 }
 
 function renderWeaponLeaderboardRow(entry, rank) {
@@ -1001,21 +3373,25 @@ function renderPagination(totalRows, totalPages) {
     right.appendChild(createPageButton("Prev", state.page > 1, () => {
         state.page -= 1;
         render();
-    }));
+    }, "Previous leaderboard page"));
 
     for (const page of pageWindow(totalPages, state.page, 5)) {
         const button = createPageButton(String(page), true, () => {
             state.page = page;
             render();
-        });
-        if (page === state.page) button.classList.add("active");
+        }, `Go to leaderboard page ${page}`);
+        if (page === state.page) {
+            button.classList.add("active");
+            button.setAttribute("aria-current", "page");
+            button.setAttribute("aria-label", `Leaderboard page ${page}, current page`);
+        }
         right.appendChild(button);
     }
 
     right.appendChild(createPageButton("Next", state.page < totalPages, () => {
         state.page += 1;
         render();
-    }));
+    }, "Next leaderboard page"));
 
     container.appendChild(left);
     container.appendChild(right);
@@ -1074,9 +3450,12 @@ function renderPlayerDetail() {
 function renderPlayerTabs() {
     return `
         <nav class="player-tabs" aria-label="Player sections">
-            ${Object.entries(PLAYER_TABS).map(([id, label]) => `
-                <button class="tab-pill ${state.playerTab === id ? "active" : ""}" type="button" data-player-tab="${escapeHtml(id)}">${escapeHtml(label)}</button>
-            `).join("")}
+            ${Object.entries(PLAYER_TABS).map(([id, label]) => {
+                const active = state.playerTab === id;
+                return `
+                    <button class="tab-pill ${active ? "active" : ""}" type="button" data-player-tab="${escapeHtml(id)}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(`${label} player section${active ? ", selected" : ""}`)}">${escapeHtml(label)}</button>
+                `;
+            }).join("")}
         </nav>
     `;
 }
@@ -1200,9 +3579,12 @@ function renderHistoryTab(profile) {
                 <span>Local time: ${escapeHtml(viewerTimeZoneLabel())}</span>
             </div>
             <div class="history-filters">
-                ${Object.entries(MODE_LABELS).map(([id, label]) => `
-                    <button class="tab-pill ${state.historyFilter === id ? "active" : ""}" type="button" data-history-filter="${escapeHtml(id)}">${escapeHtml(label)}</button>
-                `).join("")}
+                ${Object.entries(MODE_LABELS).map(([id, label]) => {
+                    const active = state.historyFilter === id;
+                    return `
+                        <button class="tab-pill ${active ? "active" : ""}" type="button" data-history-filter="${escapeHtml(id)}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(`${label} match history${active ? ", selected" : ""}`)}">${escapeHtml(label)}</button>
+                    `;
+                }).join("")}
             </div>
             ${renderHistoryList(filteredHistory(profile, state.historyFilter), { expandable: true })}
         </section>
@@ -1758,16 +4140,18 @@ function createPill(label, active, onClick) {
     button.type = "button";
     button.textContent = label;
     if (active) button.classList.add("active");
+    button.setAttribute("aria-pressed", active ? "true" : "false");
     button.addEventListener("click", onClick);
     return button;
 }
 
-function createPageButton(label, enabled, onClick) {
+function createPageButton(label, enabled, onClick, ariaLabel = "") {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "page-button";
     button.textContent = label;
     button.disabled = !enabled;
+    if (ariaLabel) button.setAttribute("aria-label", ariaLabel);
     if (enabled) button.addEventListener("click", onClick);
     return button;
 }
