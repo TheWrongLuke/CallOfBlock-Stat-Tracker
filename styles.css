@@ -3739,10 +3739,28 @@ img.identity-avatar {
 .badge-picker label {
     display: grid;
     gap: 5px;
+    position: relative;
 }
 
 .badge-picker label.locked {
     opacity: 0.48;
+}
+
+.badge-picker label.badge-new::after {
+    content: "";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #ff4d5f;
+    box-shadow: 0 0 0 3px rgba(255, 77, 95, 0.16);
+}
+
+.badge-picker label.badge-new:hover::after,
+.badge-picker label.badge-new:focus-within::after {
+    opacity: 0;
 }
 
 .badge-picker input,
@@ -3765,9 +3783,26 @@ img.identity-avatar {
     gap: 10px;
 }
 
+.mission-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    align-items: flex-start;
+}
+
+.mission-head > strong {
+    border: 1px solid rgba(255, 203, 107, 0.3);
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: rgba(255, 203, 107, 0.1);
+    color: var(--gold);
+    font-family: "Chakra Petch", sans-serif;
+    white-space: nowrap;
+}
+
 .mission-row {
     display: grid;
-    grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.7fr) auto;
+    grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.7fr) auto auto;
     gap: 12px;
     align-items: center;
     border: 1px solid var(--line);
@@ -3789,6 +3824,21 @@ img.identity-avatar {
 .mission-row span,
 .mission-row small {
     color: var(--muted);
+}
+
+.mission-row .mission-xp {
+    border-radius: 999px;
+    padding: 6px 9px;
+    background: rgba(126, 200, 255, 0.1);
+    color: rgba(238, 244, 255, 0.82);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+.mission-row.complete .mission-xp {
+    background: rgba(133, 232, 157, 0.14);
+    color: var(--green);
 }
 
 .mission-progress {
