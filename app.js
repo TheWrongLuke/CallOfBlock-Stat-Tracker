@@ -49,10 +49,17 @@ const PROFILE_ACCOUNT_COLUMNS = [
     "minecraft_player_id",
     "avatar_source",
     "custom_avatar_url",
+    "custom_background_url",
+    "custom_icon_url",
     "profile_background",
     "pfp_border",
+    "selected_profile_icon",
     "selected_badges",
-    "unlocked_badges"
+    "unlocked_badges",
+    "unlocked_backgrounds",
+    "unlocked_pfp_borders",
+    "unlocked_icons",
+    "xp"
 ];
 const PROFILE_SELECT_COLUMNS = `${PROFILE_BASE_COLUMNS}, ${PROFILE_ACCOUNT_COLUMNS.join(", ")}`;
 const PROFILE_MEDIA_BUCKET = "profile-media";
@@ -67,17 +74,18 @@ const AVATAR_SOURCE_OPTIONS = [
     { id: "custom", label: "Custom upload" }
 ];
 const PROFILE_BACKGROUNDS = [
-    { id: "default", label: "Default" },
-    { id: "br", label: "Battle Royale" },
-    { id: "dm", label: "Deathmatch" },
-    { id: "night", label: "Night Ops" }
+    { id: "default", label: "Default", unlock: "default" },
+    { id: "br", label: "Battle Royale", unlock: "br_winner" },
+    { id: "dm", label: "Deathmatch", unlock: "dm_winner" },
+    { id: "night", label: "Night Ops", unlock: "veteran" },
+    { id: "custom", label: "Custom PNG", unlock: "custom" }
 ];
 const PFP_BORDERS = [
-    { id: "none", label: "None" },
-    { id: "gold", label: "Gold" },
-    { id: "green", label: "Green" },
-    { id: "blue", label: "Blue" },
-    { id: "red", label: "Red" }
+    { id: "none", label: "None", unlock: "default" },
+    { id: "gold", label: "Gold", unlock: "first_win" },
+    { id: "green", label: "Green", unlock: "linked" },
+    { id: "blue", label: "Blue", unlock: "dm_winner" },
+    { id: "red", label: "Red", unlock: "br_winner" }
 ];
 const BADGE_CATALOG = [
     { id: "linked", label: "Linked", description: "Discord and Minecraft account paired.", test: ({ linked }) => linked },
@@ -1372,7 +1380,7 @@ function renderAccountPage() {
         : `<p class="account-warning">Run the updated Supabase schema to unlock profile customization and Minecraft linking on the website.</p>`;
 
     body.innerHTML = `
-        <section class="account-hero ${profileBackgroundClass(account)}">
+        <section class="account-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)}>
             <div class="account-hero-main">
                 <span class="account-avatar-large ${avatarFrameClass(account)}">
                     <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
@@ -1457,8 +1465,8 @@ function renderAccountStatsPanel(profile, overall) {
 
 function renderAccountCustomizeForm(account, badgeState) {
     const avatarSource = cleanAvatarSource(account.avatar_source);
-    const background = cleanProfileBackground(account.profile_background);
-    const border = cleanPfpBorder(account.pfp_border);
+    const background = cleanProfileBackground(account.profile_background, account, badgeState);
+    const border = cleanPfpBorder(account.pfp_border, account, badgeState);
     const selectedIds = selectedAccountBadgeIds(account, badgeState.unlockedIds);
 
     return `
@@ -1487,17 +1495,28 @@ function renderAccountCustomizeForm(account, badgeState) {
                 <input name="avatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
                 <small>Max 1 MB. Stored in Supabase profile media.</small>
             </label>
+            <label>
+                <span>Custom background PNG</span>
+                <input name="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+                <small>Max 1 MB. Select Custom PNG after uploading.</small>
+            </label>
             <div class="account-form-grid">
                 <label>
                     <span>Background</span>
                     <select name="profileBackground">
-                        ${PROFILE_BACKGROUNDS.map((option) => `<option value="${escapeHtml(option.id)}" ${background === option.id ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+                        ${PROFILE_BACKGROUNDS.map((option) => {
+                            const unlocked = profileBackgroundUnlocked(option.id, account, badgeState);
+                            return `<option value="${escapeHtml(option.id)}" ${background === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(unlocked ? option.label : `${option.label} - locked`)}</option>`;
+                        }).join("")}
                     </select>
                 </label>
                 <label>
                     <span>PFP border</span>
                     <select name="pfpBorder">
-                        ${PFP_BORDERS.map((option) => `<option value="${escapeHtml(option.id)}" ${border === option.id ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+                        ${PFP_BORDERS.map((option) => {
+                            const unlocked = pfpBorderUnlocked(option.id, account, badgeState);
+                            return `<option value="${escapeHtml(option.id)}" ${border === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(unlocked ? option.label : `${option.label} - locked`)}</option>`;
+                        }).join("")}
                     </select>
                 </label>
             </div>
@@ -2063,19 +2082,20 @@ function renderPlaytestAdmin(playtest) {
     }
     const isFrozen = Boolean(playtest?.frozen);
     const isClosed = playtest?.status === "closed" || playtest?.status === "finished";
+    const noPlaytest = !playtest;
     container.innerHTML = `
         <section class="playtest-side-block admin-draft-block">
             <details>
                 <summary>Admin controls</summary>
-                ${playtest ? `
-                    <div class="admin-action-grid">
-                        <button type="button" data-route="community-dates">Community calendar</button>
-                        <button type="button" data-playtest-admin="duplicate">Duplicate</button>
-                        <button type="button" data-playtest-admin="${isClosed ? "reopen" : "close"}">${isClosed ? "Reopen" : "Close voting"}</button>
-                        <button type="button" data-playtest-admin="${isFrozen ? "unfreeze" : "freeze"}">${isFrozen ? "Unfreeze" : "Freeze votes"}</button>
-                        <button type="button" data-playtest-admin="reset-votes">Reset my votes</button>
-                    </div>
-                ` : ""}
+                <div class="admin-action-grid">
+                    <button type="button" data-route="community-dates">Community calendar</button>
+                    <button type="button" data-playtest-admin="reload">Reload calendar</button>
+                    <button type="button" data-playtest-admin="duplicate" ${noPlaytest ? "disabled" : ""}>Duplicate</button>
+                    <button type="button" data-playtest-admin="${isClosed ? "reopen" : "close"}" ${noPlaytest ? "disabled" : ""}>${isClosed ? "Reopen" : "Close voting"}</button>
+                    <button type="button" data-playtest-admin="${isFrozen ? "unfreeze" : "freeze"}" ${noPlaytest ? "disabled" : ""}>${isFrozen ? "Unfreeze" : "Freeze votes"}</button>
+                    <button type="button" data-playtest-admin="reset-votes" ${noPlaytest ? "disabled" : ""}>Reset my votes</button>
+                </div>
+                ${noPlaytest ? `<p class="mode-empty">Create the first public playtest to enable date-specific admin actions.</p>` : ""}
                 <form class="playtest-create-form" id="playtest-create-form">
                     <label>
                         <span>Title</span>
@@ -2120,6 +2140,7 @@ function renderPlaytestBoard(playtest) {
                 <h3>No playtest selected</h3>
                 <p>${escapeHtml(emptyText)}</p>
             </section>
+            ${renderEmptyPublicPlaytestTools()}
         `;
         return;
     }
@@ -2174,6 +2195,41 @@ function renderPlaytestBoard(playtest) {
         <section class="playtest-analytics-grid">
             ${renderPlaytestHeatmap(ranked)}
             ${renderPlaytestResults(best, second, playtest)}
+        </section>
+    `;
+}
+
+function renderEmptyPublicPlaytestTools() {
+    const monthDate = new Date();
+    return `
+        <section class="calendar-vote-grid public-tools-empty">
+            <article class="calendar-card">
+                <div class="calendar-head">
+                    <div>
+                        <p class="panel-kicker">Public Calendar</p>
+                        <h4>${escapeHtml(formatMonthLabel(monthDate))}</h4>
+                    </div>
+                    <div class="calendar-nav">
+                        <button type="button" disabled>${escapeHtml(formatMonthLabel(monthDate).split(" ")[0])}</button>
+                        <button type="button" disabled>Next</button>
+                    </div>
+                </div>
+                <div class="calendar-grid">
+                    ${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => `<span class="calendar-weekday">${day}</span>`).join("")}
+                    <span class="calendar-empty-message">Community date voting opens after the first public playtest is created.</span>
+                </div>
+            </article>
+            <article class="main-date-card selected-date-card">
+                <div class="date-card-topline">
+                    <span class="main-date-label">Community tools</span>
+                    ${renderConfirmationBadge("empty", null, "empty-public-tools")}
+                </div>
+                <strong>No public event yet</strong>
+                <p class="selected-date-note">Players will be able to pick a date, set availability, and toggle Discord confirmation notifications here once an admin creates the event.</p>
+                <div class="vote-row compact">
+                    ${PLAYTEST_STATUS_OPTIONS.map((option) => `<button class="vote-button vote-${escapeHtml(option.id)}" type="button" disabled>${escapeHtml(option.label)}</button>`).join("")}
+                </div>
+            </article>
         </section>
     `;
 }
@@ -2953,6 +3009,10 @@ async function createRemotePlaytest(data, mainSlotAt, alternatives) {
 
 async function handlePlaytestAdmin(action) {
     if (!isPlaytestAdmin()) return;
+    if (action === "reload") {
+        await loadRemotePlaytests({ silent: false });
+        return;
+    }
     const playtest = activePlaytest();
     if (!playtest) return;
 
@@ -4806,15 +4866,28 @@ async function submitAccountForm(form) {
         let customAvatarUrl = state.authProfile?.custom_avatar_url || "";
         const file = formData.get("avatarFile");
         if (file instanceof File && file.size > 0) {
-            customAvatarUrl = await uploadAccountAvatar(file);
+            customAvatarUrl = await uploadProfileMedia(file, "avatar");
         }
+        let customBackgroundUrl = state.authProfile?.custom_background_url || "";
+        const backgroundFile = formData.get("backgroundFile");
+        if (backgroundFile instanceof File && backgroundFile.size > 0) {
+            customBackgroundUrl = await uploadProfileMedia(backgroundFile, "background");
+        }
+        const requestedBackground = backgroundFile instanceof File && backgroundFile.size > 0
+            ? "custom"
+            : formData.get("profileBackground");
 
+        const badgeStateAfterUpload = accountBadgeState({
+            ...state.authProfile,
+            custom_background_url: customBackgroundUrl
+        }, linkedProfile);
         const payload = {
             display_name: cleanDisplayName(formData.get("displayName")),
             avatar_source: cleanAvatarSource(formData.get("avatarSource")),
             custom_avatar_url: customAvatarUrl || null,
-            profile_background: cleanProfileBackground(formData.get("profileBackground")),
-            pfp_border: cleanPfpBorder(formData.get("pfpBorder")),
+            custom_background_url: customBackgroundUrl || null,
+            profile_background: cleanProfileBackground(requestedBackground, { ...state.authProfile, custom_background_url: customBackgroundUrl }, badgeStateAfterUpload),
+            pfp_border: cleanPfpBorder(formData.get("pfpBorder"), state.authProfile, badgeState),
             selected_badges: selectedBadges
         };
 
@@ -4838,13 +4911,14 @@ async function submitAccountForm(form) {
     }
 }
 
-async function uploadAccountAvatar(file) {
+async function uploadProfileMedia(file, type = "avatar") {
     if (!state.authClient || !state.authSession?.user) throw new Error("Login is required for uploads.");
-    if (file.size > MAX_PROFILE_UPLOAD_BYTES) throw new Error("Profile picture must be 1 MB or smaller.");
+    if (file.size > MAX_PROFILE_UPLOAD_BYTES) throw new Error("Profile media must be 1 MB or smaller.");
     if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) throw new Error("Use PNG, JPG, WEBP, or GIF.");
 
     const extension = file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
-    const path = `${state.authSession.user.id}/avatar-${Date.now()}.${extension}`;
+    const safeType = type === "background" ? "background" : "avatar";
+    const path = `${state.authSession.user.id}/${safeType}-${Date.now()}.${extension}`;
     const { error } = await state.authClient.storage
         .from(PROFILE_MEDIA_BUCKET)
         .upload(path, file, {
@@ -4906,16 +4980,36 @@ function accountAvatarUrl(account, profile, size = 64) {
     const source = cleanAvatarSource(account?.avatar_source);
     if (source === "custom" && account?.custom_avatar_url) return account.custom_avatar_url;
     if (source === "discord" && account?.avatar_url) return account.avatar_url;
-    return playerSkinUrl(profile, profile, size);
+    return skinHeadUrl(accountMinecraftName(account, profile), size);
+}
+
+function accountMinecraftName(account, profile) {
+    return String(
+        account?.minecraft_player_name
+        || profile?.name
+        || account?.username
+        || DEFAULT_SKIN_NAME
+    ).trim() || DEFAULT_SKIN_NAME;
 }
 
 function avatarFrameClass(account) {
-    const border = cleanPfpBorder(account?.pfp_border);
+    const border = cleanPfpBorder(account?.pfp_border, account);
     return border === "none" ? "" : `avatar-frame-${border}`;
 }
 
 function profileBackgroundClass(account) {
-    return `profile-bg-${cleanProfileBackground(account?.profile_background)}`;
+    return `profile-bg-${cleanProfileBackground(account?.profile_background, account)}`;
+}
+
+function profileBackgroundStyle(account) {
+    const url = String(account?.custom_background_url || "").trim();
+    const background = cleanProfileBackground(account?.profile_background, account);
+    if (!url || background !== "custom") return "";
+    return ` style="--profile-bg-image: url('${escapeHtml(safeCssUrl(url))}')"`;
+}
+
+function safeCssUrl(value) {
+    return String(value || "").replace(/['"\\<>]/g, "");
 }
 
 function renderProfileBadge(badge) {
@@ -4989,14 +5083,33 @@ function cleanAvatarSource(value) {
     return AVATAR_SOURCE_OPTIONS.some((option) => option.id === id) ? id : "minecraft";
 }
 
-function cleanProfileBackground(value) {
-    const id = String(value || "").trim();
-    return PROFILE_BACKGROUNDS.some((option) => option.id === id) ? id : "default";
+function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
+    if (id === "default") return true;
+    if (id === "custom") return Boolean(account?.custom_background_url);
+    if (arrayField(account?.unlocked_backgrounds).includes(id)) return true;
+    const option = PROFILE_BACKGROUNDS.find((entry) => entry.id === id);
+    return Boolean(option?.unlock && badgeState.unlockedIds?.has(option.unlock));
 }
 
-function cleanPfpBorder(value) {
+function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
+    if (id === "none") return true;
+    if (arrayField(account?.unlocked_pfp_borders).includes(id)) return true;
+    const option = PFP_BORDERS.find((entry) => entry.id === id);
+    return Boolean(option?.unlock && badgeState.unlockedIds?.has(option.unlock));
+}
+
+function cleanProfileBackground(value, account = null, badgeState = null) {
     const id = String(value || "").trim();
-    return PFP_BORDERS.some((option) => option.id === id) ? id : "none";
+    const valid = PROFILE_BACKGROUNDS.some((option) => option.id === id) ? id : "default";
+    if (!account) return valid;
+    return profileBackgroundUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "default";
+}
+
+function cleanPfpBorder(value, account = null, badgeState = null) {
+    const id = String(value || "").trim();
+    const valid = PFP_BORDERS.some((option) => option.id === id) ? id : "none";
+    if (!account) return valid;
+    return pfpBorderUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "none";
 }
 
 function normalizePlayerName(name) {
@@ -5063,7 +5176,7 @@ function renderPlayerProfileHero(profile) {
     const badgeState = accountBadgeState(account, profile);
     const badges = selectedAccountBadges(account, badgeState.unlockedIds);
     return `
-        <section class="player-profile-hero ${profileBackgroundClass(account)}">
+        <section class="player-profile-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)}>
             <div class="player-profile-identity">
                 ${renderPlayerAvatar(profile, profile, 128, "player-profile-avatar")}
                 <div>

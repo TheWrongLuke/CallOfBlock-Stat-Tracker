@@ -2772,6 +2772,18 @@ img.identity-avatar {
     gap: 6px;
 }
 
+.calendar-empty-message {
+    grid-column: 1 / -1;
+    min-height: 154px;
+    display: grid;
+    place-items: center;
+    border: 1px dashed rgba(238, 244, 241, 0.16);
+    border-radius: 12px;
+    color: var(--muted);
+    text-align: center;
+    padding: 18px;
+}
+
 .calendar-weekday {
     color: var(--muted);
     font-size: 0.72rem;
@@ -3527,6 +3539,26 @@ img.identity-avatar {
     gap: 18px;
     align-items: center;
     overflow: hidden;
+    position: relative;
+    isolation: isolate;
+    background:
+        linear-gradient(90deg, rgba(9, 13, 16, 0.92), rgba(9, 13, 16, 0.58)),
+        var(--profile-bg-image, none),
+        var(--panel-strong);
+    background-size: cover;
+    background-position: center;
+}
+
+.account-hero::before,
+.player-profile-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+        radial-gradient(circle at 14% 18%, rgba(255, 203, 107, 0.16), transparent 28%),
+        linear-gradient(90deg, rgba(9, 13, 16, 0.76), rgba(9, 13, 16, 0.18));
+    pointer-events: none;
 }
 
 .account-hero-main,
@@ -3569,20 +3601,33 @@ img.identity-avatar {
 
 .profile-bg-br {
     background:
-        linear-gradient(135deg, rgba(255, 127, 114, 0.18), transparent 42%),
+        linear-gradient(90deg, rgba(9, 13, 16, 0.88), rgba(9, 13, 16, 0.52)),
+        linear-gradient(135deg, rgba(255, 127, 114, 0.28), transparent 42%),
         var(--panel-strong);
 }
 
 .profile-bg-dm {
     background:
-        linear-gradient(135deg, rgba(126, 200, 255, 0.18), transparent 42%),
+        linear-gradient(90deg, rgba(9, 13, 16, 0.88), rgba(9, 13, 16, 0.52)),
+        linear-gradient(135deg, rgba(126, 200, 255, 0.28), transparent 42%),
         var(--panel-strong);
 }
 
 .profile-bg-night {
     background:
-        linear-gradient(135deg, rgba(140, 255, 106, 0.14), transparent 34%),
+        linear-gradient(90deg, rgba(9, 13, 16, 0.9), rgba(9, 13, 16, 0.52)),
+        linear-gradient(135deg, rgba(140, 255, 106, 0.18), transparent 34%),
         linear-gradient(180deg, rgba(4, 8, 14, 0.98), rgba(11, 15, 24, 0.98));
+}
+
+.profile-bg-custom {
+    min-height: 260px;
+    background:
+        linear-gradient(90deg, rgba(9, 13, 16, 0.92), rgba(9, 13, 16, 0.44)),
+        var(--profile-bg-image, none),
+        var(--panel-strong);
+    background-size: cover;
+    background-position: center;
 }
 
 .account-panel {
