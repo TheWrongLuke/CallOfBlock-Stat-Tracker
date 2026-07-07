@@ -288,11 +288,20 @@ a[aria-disabled="true"] {
     background: rgba(255, 203, 107, 0.18);
 }
 
-.tracker-float {
+.floating-actions {
     position: fixed;
     top: 18px;
     right: 18px;
-    z-index: 20;
+    z-index: 24;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    max-width: calc(100vw - 36px);
+}
+
+.tracker-float {
+    position: static;
     min-height: 44px;
     border: 1px solid rgba(255, 203, 107, 0.46);
     border-radius: 999px;
@@ -304,23 +313,112 @@ a[aria-disabled="true"] {
     cursor: pointer;
     font: inherit;
     font-family: "Chakra Petch", sans-serif;
-    transition: top 180ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+    transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
+
+.account-widget {
+    display: flex;
+    justify-content: flex-end;
+    min-width: 0;
+}
+
+.account-widget button,
+.account-pill,
+.account-actions a,
+.account-actions button,
+.account-login-panel button,
+.account-form button {
+    min-height: 44px;
+    border: 1px solid rgba(126, 200, 255, 0.28);
+    border-radius: 999px;
+    padding: 8px 13px;
+    background: rgba(13, 16, 21, 0.76);
+    color: var(--text);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+    backdrop-filter: blur(14px);
+    cursor: pointer;
+    font: inherit;
+    font-family: "Chakra Petch", sans-serif;
+    text-decoration: none;
+}
+
+.account-widget button:hover,
+.account-pill:hover,
+.account-actions a:hover,
+.account-actions button:hover,
+.account-login-panel button:hover,
+.account-form button:hover:not(:disabled) {
+    border-color: rgba(255, 203, 107, 0.44);
+    color: var(--gold);
+    background: rgba(255, 203, 107, 0.12);
+}
+
+.account-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    max-width: min(220px, calc(100vw - 34px));
+}
+
+.account-pill > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-avatar-frame,
+.player-avatar,
+.account-avatar-large {
+    display: inline-grid;
+    place-items: center;
+    overflow: hidden;
+    border: 2px solid rgba(238, 244, 255, 0.14);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.account-avatar-frame {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+}
+
+.account-avatar-frame img,
+.player-avatar img,
+.account-avatar-large img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.account-avatar-frame img,
+.player-avatar img[src*="mc-heads"],
+.account-avatar-large img[src*="mc-heads"] {
+    image-rendering: pixelated;
+}
+
+.avatar-frame-gold { border-color: rgba(255, 203, 107, 0.86); box-shadow: 0 0 18px rgba(255, 203, 107, 0.16); }
+.avatar-frame-green { border-color: rgba(133, 232, 157, 0.86); box-shadow: 0 0 18px rgba(133, 232, 157, 0.14); }
+.avatar-frame-blue { border-color: rgba(126, 200, 255, 0.86); box-shadow: 0 0 18px rgba(126, 200, 255, 0.14); }
+.avatar-frame-red { border-color: rgba(255, 127, 114, 0.86); box-shadow: 0 0 18px rgba(255, 127, 114, 0.14); }
 
 .tracker-float:hover {
     color: var(--gold);
     background: rgba(255, 203, 107, 0.16);
 }
 
-.home-route .tracker-float {
+.home-route .floating-actions {
     top: 118px;
     right: clamp(18px, 3vw, 44px);
+}
+
+.home-route .tracker-float {
     border-color: rgba(140, 255, 106, 0.52);
     background: rgba(9, 13, 16, 0.76);
 }
 
-.home-route.home-scrolled .tracker-float {
+.home-route.home-scrolled .floating-actions {
     top: 18px;
+    right: 18px;
 }
 
 .home-route .tracker-float:hover {
@@ -708,12 +806,10 @@ a[aria-disabled="true"] {
     background: rgba(140, 255, 106, 0.08);
 }
 
-.featured-player img {
+.featured-player .featured-avatar {
     width: 60px;
     height: 60px;
-    image-rendering: pixelated;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.05);
 }
 
 .featured-player-main {
@@ -803,13 +899,13 @@ a[aria-disabled="true"] {
     grid-area: fifth;
 }
 
-.podium-rank-1 img {
+.podium-rank-1 .featured-avatar {
     width: 92px;
     height: 92px;
     border-radius: 16px;
 }
 
-.podium-rank-2 img {
+.podium-rank-2 .featured-avatar {
     width: 78px;
     height: 78px;
     border-radius: 14px;
@@ -2563,11 +2659,25 @@ img.identity-avatar {
     justify-content: space-between;
     gap: 10px;
     color: rgba(238, 244, 255, 0.9);
+    min-width: 0;
 }
 
 .vote-breakdown small {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px 7px;
+    min-width: 0;
+    max-width: 100%;
     color: var(--muted);
-    white-space: nowrap;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+.vote-breakdown small span,
+.vote-breakdown small time {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .calendar-card h4,
@@ -3052,6 +3162,15 @@ img.identity-avatar {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+
+.player-name strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .profile-link {
@@ -3072,6 +3191,34 @@ img.identity-avatar {
 .rank-1 { color: var(--gold); }
 .rank-2 { color: #d0d9eb; }
 .rank-3 { color: #f3a46f; }
+
+.leaderboard-player,
+.linked-player-card,
+.player-profile-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.player-avatar {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    border-radius: 11px;
+}
+
+.featured-avatar,
+.profile-preview-avatar,
+.linked-player-avatar,
+.player-profile-avatar {
+    border-radius: 14px;
+}
+
+.featured-avatar {
+    width: 58px;
+    height: 58px;
+}
 
 .pagination {
     justify-content: space-between;
@@ -3098,7 +3245,7 @@ img.identity-avatar {
 
 .profile-preview-head {
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: 78px minmax(0, 1fr);
     gap: 14px;
     align-items: center;
     border: 1px solid var(--line);
@@ -3107,12 +3254,9 @@ img.identity-avatar {
     background: rgba(255, 255, 255, 0.035);
 }
 
-.profile-preview-head img {
+.profile-preview-avatar {
     width: 72px;
     height: 72px;
-    image-rendering: pixelated;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.05);
 }
 
 .profile-preview-head span {
@@ -3131,6 +3275,38 @@ img.identity-avatar {
     white-space: nowrap;
     font-family: "Chakra Petch", sans-serif;
     font-size: 1.25rem;
+}
+
+.account-badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 10px;
+}
+
+.account-badge-row.compact {
+    margin-top: 8px;
+}
+
+.profile-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    border: 1px solid rgba(255, 203, 107, 0.24);
+    border-radius: 999px;
+    padding: 4px 8px;
+    background: rgba(255, 203, 107, 0.1);
+    color: rgba(255, 233, 190, 0.92);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.profile-badge.empty {
+    border-color: rgba(150, 167, 191, 0.2);
+    background: rgba(150, 167, 191, 0.08);
+    color: var(--muted);
 }
 
 .mode-block {
@@ -3324,6 +3500,266 @@ img.identity-avatar {
     margin-top: 22px;
 }
 
+.account-view {
+    width: min(1200px, calc(100vw - 32px));
+    margin: 20px auto 0;
+}
+
+.account-body {
+    display: grid;
+    gap: 16px;
+}
+
+.account-hero,
+.account-panel,
+.account-login-panel,
+.player-profile-hero {
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: clamp(18px, 3vw, 28px);
+    background: var(--panel-strong);
+}
+
+.account-hero,
+.player-profile-hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: center;
+    overflow: hidden;
+}
+
+.account-hero-main,
+.account-actions,
+.player-profile-quickstats {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.account-avatar-large,
+.player-profile-avatar {
+    width: 112px;
+    height: 112px;
+    flex: 0 0 auto;
+    border-radius: 22px;
+}
+
+.account-hero h2,
+.account-panel h3,
+.account-login-panel h2,
+.player-profile-hero h3 {
+    margin: 6px 0;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.account-hero h2 {
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    line-height: 0.94;
+}
+
+.account-hero p,
+.account-panel p,
+.account-login-panel p,
+.player-profile-identity > div > span,
+.account-form small {
+    color: var(--muted);
+}
+
+.profile-bg-br {
+    background:
+        linear-gradient(135deg, rgba(255, 127, 114, 0.18), transparent 42%),
+        var(--panel-strong);
+}
+
+.profile-bg-dm {
+    background:
+        linear-gradient(135deg, rgba(126, 200, 255, 0.18), transparent 42%),
+        var(--panel-strong);
+}
+
+.profile-bg-night {
+    background:
+        linear-gradient(135deg, rgba(140, 255, 106, 0.14), transparent 34%),
+        linear-gradient(180deg, rgba(4, 8, 14, 0.98), rgba(11, 15, 24, 0.98));
+}
+
+.account-panel {
+    display: grid;
+    gap: 16px;
+}
+
+.linked-player-card {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.linked-player-avatar {
+    width: 64px;
+    height: 64px;
+}
+
+.linked-player-card strong,
+.linked-player-card span {
+    display: block;
+}
+
+.linked-player-card span {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+}
+
+.account-stat-grid,
+.player-profile-quickstats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.player-profile-quickstats {
+    grid-template-columns: repeat(3, minmax(110px, 1fr));
+    min-width: min(420px, 100%);
+}
+
+.account-form label,
+.account-form fieldset {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.account-form label > span,
+.account-form legend {
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.account-form input[type="text"],
+.account-form input[type="file"],
+.account-form select {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--text);
+    font: inherit;
+}
+
+.account-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.account-option-row,
+.badge-picker {
+    display: grid;
+    gap: 8px;
+}
+
+.account-option-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.account-option-row label,
+.badge-picker label {
+    min-height: 44px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.account-option-row label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.badge-picker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.badge-picker label {
+    display: grid;
+    gap: 5px;
+}
+
+.badge-picker label.locked {
+    opacity: 0.48;
+}
+
+.badge-picker input,
+.account-option-row input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--gold);
+}
+
+.account-warning {
+    border: 1px solid rgba(255, 203, 107, 0.3);
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: rgba(255, 203, 107, 0.1);
+    color: #ffe2a3;
+}
+
+.mission-list {
+    display: grid;
+    gap: 10px;
+}
+
+.mission-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) minmax(140px, 0.7fr) auto;
+    gap: 12px;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.14);
+}
+
+.mission-row.complete {
+    border-color: rgba(133, 232, 157, 0.28);
+    background: rgba(133, 232, 157, 0.08);
+}
+
+.mission-row strong,
+.mission-row span {
+    display: block;
+}
+
+.mission-row span,
+.mission-row small {
+    color: var(--muted);
+}
+
+.mission-progress {
+    height: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.mission-progress i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--green), var(--gold));
+}
+
 .player-tabs,
 .history-filters {
     display: flex;
@@ -3486,6 +3922,8 @@ code {
     .community-admin-summary,
     .playtests-layout,
     .playtest-detail-head,
+    .account-hero,
+    .player-profile-hero,
     .playtest-summary-grid,
     .calendar-vote-grid,
     .playtest-analytics-grid {
@@ -3518,7 +3956,7 @@ code {
         width: min(520px, calc(100vw - 36px));
     }
 
-    .home-route .tracker-float {
+    .home-route .floating-actions {
         top: 188px;
     }
 
@@ -3578,7 +4016,13 @@ code {
 
     .summary-grid,
     .profile-stats,
-    .hero-status {
+    .hero-status,
+    .account-stat-grid,
+    .player-profile-quickstats,
+    .badge-picker,
+    .account-option-row,
+    .account-form-grid,
+    .mission-row {
         grid-template-columns: 1fr;
     }
 
@@ -3609,7 +4053,8 @@ code {
     }
 
     .playtests-view,
-    .community-admin-view {
+    .community-admin-view,
+    .account-view {
         width: min(100vw - 16px, 100%);
         margin-top: 12px;
     }
@@ -3711,10 +4156,15 @@ code {
         padding: 9px 12px;
     }
 
+    .floating-actions {
+        top: 10px;
+        right: 10px;
+        gap: 8px;
+        flex-wrap: wrap;
+        max-width: calc(100vw - 20px);
+    }
+
     .tracker-float {
-        top: auto;
-        right: 12px;
-        bottom: 12px;
         min-height: 48px;
         padding: 10px 16px;
     }
@@ -3726,14 +4176,15 @@ code {
         gap: 8px;
     }
 
-    .home-route .tracker-float {
+    .home-route .floating-actions,
+    .home-route.home-scrolled .floating-actions {
         top: auto;
         right: 12px;
         bottom: 12px;
     }
 
-    .home-route.home-scrolled .tracker-float {
-        top: auto;
+    .account-pill {
+        max-width: min(190px, calc(100vw - 120px));
     }
 
     .home-route .status-card {
@@ -3799,9 +4250,9 @@ code {
         grid-template-columns: 48px minmax(0, 1fr);
     }
 
-    .featured-player img,
-    .podium-rank-1 img,
-    .podium-rank-2 img {
+    .featured-player .featured-avatar,
+    .podium-rank-1 .featured-avatar,
+    .podium-rank-2 .featured-avatar {
         width: 48px;
         height: 48px;
         border-radius: 10px;

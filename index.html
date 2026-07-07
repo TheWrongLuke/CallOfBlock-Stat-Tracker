@@ -6,7 +6,7 @@
     <title>Call of Block Stats</title>
     <link rel="icon" type="image/png" href="./Icon.png">
     <link rel="apple-touch-icon" href="./Icon.png">
-    <link rel="stylesheet" href="./styles.css?v=server-polish-11">
+    <link rel="stylesheet" href="./styles.css?v=remote-playtests-3">
 </head>
 <body class="home-route">
 <div class="app-shell">
@@ -71,7 +71,10 @@
             </article>
         </div>
     </header>
-    <button type="button" class="tracker-float" data-route="leaderboard">Tracker</button>
+    <div class="floating-actions" aria-label="Site actions">
+        <button type="button" class="tracker-float" data-route="leaderboard">Tracker</button>
+        <div class="account-widget" id="account-widget" aria-live="polite"></div>
+    </div>
 
     <main class="home-view" id="home-view">
         <section class="landing-intro">
@@ -609,6 +612,10 @@
         <div id="player-detail-body" class="player-detail-body"></div>
     </section>
 
+    <main class="account-view panel hidden" id="account-view">
+        <div id="account-body" class="account-body"></div>
+    </main>
+
     <footer class="site-footer">
         <div class="footer-main">
             <p class="panel-kicker">Call of Block</p>
@@ -629,6 +636,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./api-config.js?v=site-1"></script>
-<script src="./app.js?v=playtests-15" defer></script>
+<script src="./app.js?v=remote-playtests-3" defer></script>
 </body>
 </html>

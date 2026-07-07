@@ -29,6 +29,24 @@ create table if not exists public.profiles (
     updated_at timestamptz not null default now()
 );
 
+alter table public.profiles
+    add column if not exists display_name text,
+    add column if not exists minecraft_player_uuid text,
+    add column if not exists minecraft_player_name text,
+    add column if not exists minecraft_player_id text,
+    add column if not exists avatar_source text not null default 'minecraft',
+    add column if not exists custom_avatar_url text,
+    add column if not exists profile_background text not null default 'default',
+    add column if not exists pfp_border text not null default 'none',
+    add column if not exists selected_badges text[] not null default '{}',
+    add column if not exists unlocked_badges text[] not null default '{}';
+
+create index if not exists profiles_minecraft_player_id_idx
+    on public.profiles (minecraft_player_id);
+
+create index if not exists profiles_minecraft_player_name_idx
+    on public.profiles (minecraft_player_name);
+
 create table if not exists public.playtests (
     id uuid primary key default gen_random_uuid(),
     title text not null,
@@ -266,8 +284,28 @@ grant usage on schema public to anon, authenticated;
 
 revoke all on table public.profiles from anon, authenticated;
 grant select on table public.profiles to anon, authenticated;
-grant insert (id, discord_id, username, avatar_url) on table public.profiles to authenticated;
-grant update (username, avatar_url) on table public.profiles to authenticated;
+grant insert (
+    id,
+    discord_id,
+    username,
+    avatar_url,
+    display_name,
+    avatar_source,
+    custom_avatar_url,
+    profile_background,
+    pfp_border,
+    selected_badges
+) on table public.profiles to authenticated;
+grant update (
+    username,
+    avatar_url,
+    display_name,
+    avatar_source,
+    custom_avatar_url,
+    profile_background,
+    pfp_border,
+    selected_badges
+) on table public.profiles to authenticated;
 
 grant select on table public.playtests to anon, authenticated;
 grant insert, update, delete on table public.playtests to authenticated;
@@ -280,6 +318,46 @@ grant select on table public.playtest_vote_events to authenticated;
 grant select, insert on table public.playtest_vote_events to service_role;
 grant select, insert, update, delete on table public.playtest_bans to authenticated;
 grant all on all tables in schema public to service_role;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+    'profile-media',
+    'profile-media',
+    true,
+    1048576,
+    array['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Profile media is public" on storage.objects;
+create policy "Profile media is public"
+on storage.objects for select
+using (bucket_id = 'profile-media');
+
+drop policy if exists "Users upload own profile media" on storage.objects;
+create policy "Users upload own profile media"
+on storage.objects for insert
+to authenticated
+with check (
+    bucket_id = 'profile-media'
+    and auth.uid()::text = (storage.foldername(name))[1]
+);
+
+drop policy if exists "Users update own profile media" on storage.objects;
+create policy "Users update own profile media"
+on storage.objects for update
+to authenticated
+using (
+    bucket_id = 'profile-media'
+    and auth.uid()::text = (storage.foldername(name))[1]
+)
+with check (
+    bucket_id = 'profile-media'
+    and auth.uid()::text = (storage.foldername(name))[1]
+);
 
 drop policy if exists "Profiles are readable" on public.profiles;
 create policy "Profiles are readable"
@@ -324,6 +402,28 @@ create policy "Admins manage slots"
 on public.playtest_slots for all
 using (public.is_playtest_admin())
 with check (public.is_playtest_admin());
+
+drop policy if exists "Users create community slots" on public.playtest_slots;
+create policy "Users create community slots"
+on public.playtest_slots for insert
+to authenticated
+with check (
+    source = 'community'
+    and is_main = false
+    and start_datetime > now()
+    and exists (
+        select 1
+        from public.playtests p
+        left join public.playtest_bans b on b.user_id = auth.uid()
+        left join public.profiles pr on pr.id = auth.uid()
+        where p.id = playtest_id
+          and p.status = 'voting'
+          and p.votes_frozen = false
+          and p.archived_at is null
+          and coalesce(pr.banned_from_voting, false) = false
+          and b.user_id is null
+    )
+);
 
 drop policy if exists "Votes are readable" on public.availability;
 create policy "Votes are readable"

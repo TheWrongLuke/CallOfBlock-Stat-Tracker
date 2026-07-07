@@ -41,6 +41,52 @@ const CHAMPION_ROTATE_MS = 5000;
 const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64, 103, 109, 97, 105, 108, 46, 99, 111, 109];
 const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v2";
 const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
+const PROFILE_BASE_COLUMNS = "id, discord_id, username, avatar_url, is_admin, banned_from_voting";
+const PROFILE_ACCOUNT_COLUMNS = [
+    "display_name",
+    "minecraft_player_uuid",
+    "minecraft_player_name",
+    "minecraft_player_id",
+    "avatar_source",
+    "custom_avatar_url",
+    "profile_background",
+    "pfp_border",
+    "selected_badges",
+    "unlocked_badges"
+];
+const PROFILE_SELECT_COLUMNS = `${PROFILE_BASE_COLUMNS}, ${PROFILE_ACCOUNT_COLUMNS.join(", ")}`;
+const PROFILE_MEDIA_BUCKET = "profile-media";
+const MAX_PROFILE_UPLOAD_BYTES = 1024 * 1024;
+const PLAYTEST_SELECT_COLUMNS = "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
+const PLAYTEST_SLOT_SELECT_COLUMNS = "id, playtest_id, start_datetime, end_datetime, label, is_main, source, confirmed_at, confirmed_by, created_at";
+const AVAILABILITY_SELECT_COLUMNS = "id, playtest_id, slot_id, user_id, status, mode_preference, available_start_datetime, available_end_datetime, created_at, updated_at";
+const NOTIFICATION_SELECT_COLUMNS = "id, playtest_id, slot_id, user_id, notify_on_confirmation, created_at, updated_at";
+const AVATAR_SOURCE_OPTIONS = [
+    { id: "discord", label: "Discord picture" },
+    { id: "minecraft", label: "Minecraft skin" },
+    { id: "custom", label: "Custom upload" }
+];
+const PROFILE_BACKGROUNDS = [
+    { id: "default", label: "Default" },
+    { id: "br", label: "Battle Royale" },
+    { id: "dm", label: "Deathmatch" },
+    { id: "night", label: "Night Ops" }
+];
+const PFP_BORDERS = [
+    { id: "none", label: "None" },
+    { id: "gold", label: "Gold" },
+    { id: "green", label: "Green" },
+    { id: "blue", label: "Blue" },
+    { id: "red", label: "Red" }
+];
+const BADGE_CATALOG = [
+    { id: "linked", label: "Linked", description: "Discord and Minecraft account paired.", test: ({ linked }) => linked },
+    { id: "first_win", label: "First Win", description: "Win at least one match.", test: ({ stats }) => stats.wins >= 1 },
+    { id: "br_winner", label: "BR Survivor", description: "Win a Battle Royale game.", test: ({ br }) => br.stats.wins >= 1 },
+    { id: "dm_winner", label: "DM Victor", description: "Win a Deathmatch game.", test: ({ dm }) => dm.stats.wins >= 1 },
+    { id: "sharpshooter", label: "Sharpshooter", description: "Reach 35% headshot rate with at least 20 hits.", test: ({ stats, derived }) => stats.hits >= 20 && derived.headshotRate >= 35 },
+    { id: "veteran", label: "Veteran", description: "Play 25 games.", test: ({ stats }) => stats.games >= 25 }
+];
 const DEFAULT_PLAYTEST_VIEWER = {
     userId: "local-preview-user",
     username: "You",
@@ -82,7 +128,12 @@ const state = {
     authReady: false,
     authSession: null,
     authProfile: null,
+    authProfileExtended: true,
     authMessage: "",
+    accountProfiles: [],
+    accountProfilesReady: false,
+    accountMessage: "",
+    accountSaving: false,
     pollMs: DEFAULT_API_POLL_MS,
     refreshTimer: null,
     dataSignature: "",
@@ -115,6 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bindStaticEvents();
     startChampionRotation();
     void initAuth();
+    void loadRemotePlaytests({ silent: true });
     void loadData();
 });
 
@@ -165,6 +217,8 @@ async function initAuth() {
         const { data, error } = await state.authClient.auth.getSession();
         if (error) throw error;
         await applyAuthSession(data?.session || null);
+        await loadAccountProfiles();
+        await loadRemotePlaytests({ silent: true });
         state.authClient.auth.onAuthStateChange((_event, session) => {
             void applyAuthSession(session, true);
         });
@@ -185,12 +239,16 @@ async function applyAuthSession(session, shouldRender = false) {
         state.authProfile = null;
         state.authMessage = "";
         resetPlaytestViewer();
+        await loadAccountProfiles();
+        await loadRemotePlaytests({ silent: true });
         if (shouldRender) render();
         return;
     }
 
     updateViewerFromDiscordUser(session.user);
     await syncPlaytestProfile(session.user);
+    await loadAccountProfiles();
+    await loadRemotePlaytests({ silent: true });
     consumePlaytestAuthReturn();
     if (shouldRender) render();
 }
@@ -203,7 +261,7 @@ async function signInWithDiscord() {
     }
 
     state.authMessage = "";
-    rememberPlaytestAuthReturn();
+    if (state.view === "playtests") rememberPlaytestAuthReturn();
     const { error } = await state.authClient.auth.signInWithOAuth({
         provider: "discord",
         options: {
@@ -228,8 +286,11 @@ async function signOutDiscord() {
     }
     state.authSession = null;
     state.authProfile = null;
+    state.accountMessage = "";
     state.authMessage = "";
     resetPlaytestViewer();
+    await loadAccountProfiles();
+    await loadRemotePlaytests({ silent: true });
     render();
 }
 
@@ -299,6 +360,20 @@ function bindStaticEvents() {
             return;
         }
 
+        const authLoginButton = event.target.closest("[data-auth-login]");
+        if (authLoginButton) {
+            event.preventDefault();
+            void signInWithDiscord();
+            return;
+        }
+
+        const authSignOutButton = event.target.closest("[data-auth-sign-out]");
+        if (authSignOutButton) {
+            event.preventDefault();
+            void signOutDiscord();
+            return;
+        }
+
         const contactButton = event.target.closest("[data-contact-email]");
         if (contactButton) {
             event.preventDefault();
@@ -307,9 +382,15 @@ function bindStaticEvents() {
     });
 
     document.addEventListener("submit", (event) => {
+        if (event.target.matches("[data-account-form]")) {
+            event.preventDefault();
+            void submitAccountForm(event.target);
+            return;
+        }
+
         if (!event.target.matches("[data-confirm-dialog-form]")) return;
         event.preventDefault();
-        submitConfirmDialog(event.target);
+        void submitConfirmDialog(event.target);
     });
 
     const search = document.getElementById("player-search");
@@ -440,6 +521,12 @@ function applyRoute() {
         state.profilePreviewOpen = false;
         return;
     }
+    if (route === "account") {
+        state.view = "account";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        return;
+    }
     if (route === "community-dates") {
         state.view = "communityAdmin";
         state.selectedId = null;
@@ -516,6 +603,14 @@ function routeTo(route) {
         state.selectedId = null;
         state.profilePreviewOpen = false;
         window.location.hash = "playtests";
+        render();
+        return;
+    }
+    if (route === "account") {
+        state.view = "account";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        window.location.hash = "account";
         render();
         return;
     }
@@ -647,22 +742,19 @@ async function syncPlaytestProfile(user) {
 
     const username = discordUsernameFromUser(user);
     const avatarUrl = discordAvatarFromUser(user);
-    const profileColumns = "id, discord_id, username, avatar_url, is_admin, banned_from_voting";
-
     try {
-        const { data: existing, error: selectError } = await state.authClient
-            .from("profiles")
-            .select(profileColumns)
-            .eq("id", user.id)
-            .maybeSingle();
+        const { data: existing, error: selectError, extended } = await selectOwnProfile(user.id);
+        state.authProfileExtended = extended;
         if (selectError) throw selectError;
 
         if (existing) {
+            const updatePayload = { username, avatar_url: avatarUrl || null };
+            if (state.authProfileExtended && !existing.display_name) updatePayload.display_name = username;
             const { data, error } = await state.authClient
                 .from("profiles")
-                .update({ username, avatar_url: avatarUrl || null })
+                .update(updatePayload)
                 .eq("id", user.id)
-                .select(profileColumns)
+                .select(state.authProfileExtended ? PROFILE_SELECT_COLUMNS : PROFILE_BASE_COLUMNS)
                 .single();
             if (error) throw error;
             applyPlaytestProfile(data);
@@ -675,9 +767,10 @@ async function syncPlaytestProfile(user) {
                 id: user.id,
                 discord_id: discordId,
                 username,
-                avatar_url: avatarUrl || null
+                avatar_url: avatarUrl || null,
+                ...(state.authProfileExtended ? { display_name: username, avatar_source: "discord" } : {})
             })
-            .select(profileColumns)
+            .select(state.authProfileExtended ? PROFILE_SELECT_COLUMNS : PROFILE_BASE_COLUMNS)
             .single();
         if (error) throw error;
         applyPlaytestProfile(data);
@@ -689,6 +782,272 @@ async function syncPlaytestProfile(user) {
         state.authMessage = "Discord login worked, but profile sync failed. Check the playtest schema.";
         return null;
     }
+}
+
+async function selectOwnProfile(userId) {
+    const extendedResult = await state.authClient
+        .from("profiles")
+        .select(PROFILE_SELECT_COLUMNS)
+        .eq("id", userId)
+        .maybeSingle();
+    if (!extendedResult.error) return { ...extendedResult, extended: true };
+
+    const baseResult = await state.authClient
+        .from("profiles")
+        .select(PROFILE_BASE_COLUMNS)
+        .eq("id", userId)
+        .maybeSingle();
+    return { ...baseResult, extended: false };
+}
+
+async function loadAccountProfiles() {
+    if (!state.authClient) {
+        state.accountProfiles = [];
+        state.accountProfilesReady = true;
+        return;
+    }
+
+    try {
+        const { data, error } = await state.authClient
+            .from("profiles")
+            .select(PROFILE_SELECT_COLUMNS)
+            .limit(1000);
+        if (error) throw error;
+        state.accountProfiles = Array.isArray(data) ? data : [];
+        state.accountProfilesReady = true;
+    } catch (error) {
+        console.warn("Could not load account profiles", error);
+        state.accountProfiles = state.authProfile ? [state.authProfile] : [];
+        state.accountProfilesReady = true;
+    }
+}
+
+async function loadRemotePlaytests(options = {}) {
+    const shouldRender = options.render !== false;
+    const silent = Boolean(options.silent);
+    if (!state.authClient) {
+        state.playtests.remotePlaytests = [];
+        state.playtests.remoteLoading = false;
+        return false;
+    }
+
+    state.playtests.remoteLoading = true;
+    if (!silent && shouldRender) render();
+
+    try {
+        const { data: playtestRows, error: playtestError } = await state.authClient
+            .from("playtests")
+            .select(PLAYTEST_SELECT_COLUMNS)
+            .is("archived_at", null)
+            .order("created_at", { ascending: false });
+        if (playtestError) throw playtestError;
+
+        const playtestIds = [...new Set((playtestRows || []).map((row) => row.id).filter(Boolean))];
+        let slotRows = [];
+        let availabilityRows = [];
+        let subscriptionRows = [];
+
+        if (playtestIds.length) {
+            const { data: slots, error: slotError } = await state.authClient
+                .from("playtest_slots")
+                .select(PLAYTEST_SLOT_SELECT_COLUMNS)
+                .in("playtest_id", playtestIds)
+                .order("start_datetime", { ascending: true });
+            if (slotError) throw slotError;
+            slotRows = Array.isArray(slots) ? slots : [];
+
+            const { data: availability, error: availabilityError } = await state.authClient
+                .from("availability")
+                .select(AVAILABILITY_SELECT_COLUMNS)
+                .in("playtest_id", playtestIds);
+            if (availabilityError) throw availabilityError;
+            availabilityRows = Array.isArray(availability) ? availability : [];
+
+            if (isDiscordLoggedIn()) {
+                const { data: subscriptions, error: subscriptionError } = await state.authClient
+                    .from("playtest_notification_subscriptions")
+                    .select(NOTIFICATION_SELECT_COLUMNS)
+                    .in("playtest_id", playtestIds);
+                if (subscriptionError) throw subscriptionError;
+                subscriptionRows = Array.isArray(subscriptions) ? subscriptions : [];
+            }
+        }
+
+        const profileMap = await loadProfilesForVoteRows(availabilityRows);
+        const remotePlaytests = mapRemotePlaytests(playtestRows || [], slotRows, availabilityRows, profileMap);
+        state.playtests.remotePlaytests = remotePlaytests;
+        state.playtests.remoteLoadedAt = new Date().toISOString();
+        state.playtests.remoteError = "";
+        syncRemoteConfirmations(remotePlaytests);
+        syncRemoteUserVotes(remotePlaytests);
+        syncRemoteSubscriptions(playtestIds, subscriptionRows);
+
+        if (!activePlaytests().some((playtest) => playtest.id === state.playtests.activeId)) {
+            state.playtests.activeId = activePlaytests()[0]?.id || "";
+        }
+        savePlaytestState();
+        return true;
+    } catch (error) {
+        console.warn("Could not load Supabase playtests", error);
+        state.playtests.remotePlaytests = [];
+        state.playtests.remoteError = remotePlaytestErrorMessage(error);
+        return false;
+    } finally {
+        state.playtests.remoteLoading = false;
+        if (shouldRender) render();
+    }
+}
+
+async function loadProfilesForVoteRows(availabilityRows) {
+    const userIds = [...new Set((availabilityRows || []).map((row) => row.user_id).filter(Boolean))];
+    if (!userIds.length || !state.authClient) return new Map();
+
+    const extended = await state.authClient
+        .from("profiles")
+        .select(PROFILE_SELECT_COLUMNS)
+        .in("id", userIds);
+    let rows = extended.data;
+    if (extended.error) {
+        const base = await state.authClient
+            .from("profiles")
+            .select(PROFILE_BASE_COLUMNS)
+            .in("id", userIds);
+        rows = base.error ? [] : base.data;
+    }
+
+    return new Map((rows || []).map((profile) => [profile.id, profile]));
+}
+
+function mapRemotePlaytests(playtestRows, slotRows, availabilityRows, profileMap) {
+    const slotsByPlaytest = new Map();
+    for (const row of slotRows || []) {
+        const slot = remoteSlotToLocal(row);
+        if (!slot) continue;
+        if (!slotsByPlaytest.has(row.playtest_id)) slotsByPlaytest.set(row.playtest_id, []);
+        slotsByPlaytest.get(row.playtest_id).push(slot);
+    }
+
+    const votesByPlaytest = new Map();
+    for (const row of availabilityRows || []) {
+        const vote = remoteAvailabilityToVote(row, profileMap);
+        if (!vote) continue;
+        if (!votesByPlaytest.has(row.playtest_id)) votesByPlaytest.set(row.playtest_id, {});
+        const bySlot = votesByPlaytest.get(row.playtest_id);
+        bySlot[row.slot_id] = bySlot[row.slot_id] || [];
+        bySlot[row.slot_id].push(vote);
+    }
+
+    return (playtestRows || []).map((row) => {
+        const slots = (slotsByPlaytest.get(row.id) || []).sort((a, b) => dateValue(a.startAt) - dateValue(b.startAt));
+        const mainSlot = slots.find((slot) => slot.id === row.main_slot_id) || slots.find((slot) => slot.isMain) || slots[0] || null;
+        return {
+            id: String(row.id),
+            title: String(row.title || "Community Playtest"),
+            description: String(row.description || ""),
+            status: ["upcoming", "voting", "closed", "finished"].includes(row.status) ? row.status : "voting",
+            createdBy: row.created_by || "",
+            createdAt: row.created_at || new Date().toISOString(),
+            mainSlotId: mainSlot?.id || "",
+            frozen: Boolean(row.votes_frozen),
+            archived: Boolean(row.archived_at),
+            remote: true,
+            slots,
+            remoteVotesBySlot: votesByPlaytest.get(row.id) || {}
+        };
+    }).filter((playtest) => !playtest.archived);
+}
+
+function remoteSlotToLocal(row) {
+    if (!row?.id || !row.start_datetime) return null;
+    return {
+        id: String(row.id),
+        label: String(row.label || (row.source === "community" ? "Community date" : "Featured date")),
+        startAt: String(row.start_datetime),
+        endAt: row.end_datetime ? String(row.end_datetime) : "",
+        source: row.source === "community" ? "community" : "featured",
+        isMain: Boolean(row.is_main),
+        confirmedAt: row.confirmed_at || "",
+        confirmedBy: row.confirmed_by || "",
+        remote: true
+    };
+}
+
+function remoteAvailabilityToVote(row, profileMap) {
+    if (!row?.slot_id || !PLAYTEST_STATUS_OPTIONS.some((option) => option.id === row.status)) return null;
+    const profile = profileMap.get(row.user_id) || {};
+    const username = profile.display_name || profile.username || "Discord player";
+    const startAt = row.available_start_datetime || "";
+    const endAt = row.available_end_datetime || "";
+    return {
+        userId: row.user_id || "",
+        username,
+        status: row.status,
+        updatedAt: row.updated_at || row.created_at || new Date().toISOString(),
+        modePreference: dbModePreferenceToLabel(row.mode_preference),
+        startTime: localTimeKey(startAt),
+        endTime: localTimeKey(endAt),
+        availableStartAt: startAt,
+        availableEndAt: endAt
+    };
+}
+
+function syncRemoteConfirmations(playtests) {
+    for (const playtest of playtests || []) {
+        const confirmations = {};
+        for (const slot of playtest.slots || []) {
+            if (!slot.confirmedAt) continue;
+            confirmations[slot.id] = {
+                confirmedAt: slot.confirmedAt,
+                confirmedBy: slot.confirmedBy || "",
+                startAt: slot.startAt,
+                endAt: slot.endAt || slot.startAt
+            };
+        }
+        if (Object.keys(confirmations).length) {
+            state.playtests.confirmedSlots[playtest.id] = confirmations;
+        } else {
+            delete state.playtests.confirmedSlots[playtest.id];
+        }
+    }
+}
+
+function syncRemoteUserVotes(playtests) {
+    for (const playtest of playtests || []) {
+        delete state.playtests.votes[playtest.id];
+        if (!isDiscordLoggedIn()) continue;
+        for (const slot of playtest.slots || []) {
+            const ownVote = (playtest.remoteVotesBySlot?.[slot.id] || []).find((vote) => vote.userId === PLAYTEST_VIEWER.userId);
+            if (!ownVote) continue;
+            state.playtests.votes[playtest.id] = state.playtests.votes[playtest.id] || {};
+            state.playtests.votes[playtest.id][slot.id] = ownVote;
+        }
+    }
+}
+
+function syncRemoteSubscriptions(playtestIds, subscriptionRows) {
+    for (const playtestId of playtestIds || []) {
+        delete state.playtests.notificationSubscriptions[playtestId];
+    }
+    if (!isDiscordLoggedIn()) return;
+    for (const row of subscriptionRows || []) {
+        if (!row?.playtest_id || !row.slot_id || row.notify_on_confirmation === false) continue;
+        state.playtests.notificationSubscriptions[row.playtest_id] = state.playtests.notificationSubscriptions[row.playtest_id] || {};
+        state.playtests.notificationSubscriptions[row.playtest_id][row.slot_id] = {
+            id: row.id,
+            userId: row.user_id,
+            username: PLAYTEST_VIEWER.username,
+            discordId: PLAYTEST_VIEWER.discordId,
+            createdAt: row.created_at || new Date().toISOString()
+        };
+    }
+}
+
+function remotePlaytestErrorMessage(error) {
+    const message = String(error?.message || error || "");
+    if (message.includes("playtests") || message.includes("schema cache")) {
+        return "Playtest database tables are missing. Run the Supabase playtest schema, then refresh.";
+    }
+    return "Could not load the public playtest calendar from Supabase.";
 }
 
 function applyPlaytestProfile(profile) {
@@ -899,9 +1258,11 @@ function rebuildCache() {
 function render() {
     renderHeroStatus();
     renderTopNav();
+    renderAccountWidget();
     renderHome();
     renderPlaytests();
     renderCommunityAdminPage();
+    renderAccountPage();
     renderPlaytestConfirmationDialog();
     renderMainViewTabs();
     renderModeTabs();
@@ -918,6 +1279,7 @@ function renderRoute() {
     document.getElementById("admin-help-view").classList.toggle("hidden", state.view !== "adminHelp");
     document.getElementById("playtests-view").classList.toggle("hidden", state.view !== "playtests");
     document.getElementById("community-admin-view").classList.toggle("hidden", state.view !== "communityAdmin");
+    document.getElementById("account-view").classList.toggle("hidden", state.view !== "account");
     const dashboard = document.querySelector(".dashboard");
     dashboard.classList.toggle("hidden", state.view !== "leaderboard");
     dashboard.classList.toggle("profile-closed", state.view === "leaderboard" && !state.profilePreviewOpen);
@@ -948,6 +1310,242 @@ function renderTopNav() {
         floatingButton.setAttribute("aria-label", onHome ? "Open stats tracker" : "Return to server hub");
         floatingButton.title = onHome ? "Open stats tracker" : "Return to server hub";
     }
+}
+
+function renderAccountWidget() {
+    const container = document.getElementById("account-widget");
+    if (!container) return;
+
+    if (!state.authClient) {
+        container.innerHTML = `<button type="button" disabled title="${escapeHtml(state.authMessage || "Discord login is not configured.")}">Login</button>`;
+        return;
+    }
+
+    if (!state.authReady) {
+        container.innerHTML = `<button type="button" disabled>Checking...</button>`;
+        return;
+    }
+
+    if (!isDiscordLoggedIn()) {
+        container.innerHTML = `<button type="button" data-auth-login>Login</button>`;
+        return;
+    }
+
+    const account = state.authProfile || {};
+    const avatarUrl = accountAvatarUrl(account, linkedStatsProfile(), 64);
+    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 64);
+    const name = accountDisplayName(account);
+    container.innerHTML = `
+        <a class="account-pill ${avatarFrameClass(account)}" href="#account" aria-label="${escapeHtml(`Open account for ${name}`)}">
+            <span class="account-avatar-frame">
+                <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+            </span>
+            <span>${escapeHtml(name)}</span>
+        </a>
+    `;
+}
+
+function renderAccountPage() {
+    const body = document.getElementById("account-body");
+    if (!body) return;
+
+    if (!state.authClient) {
+        body.innerHTML = renderAccountLoginPanel("Discord login is not configured for this site yet.");
+        return;
+    }
+
+    if (!isDiscordLoggedIn()) {
+        body.innerHTML = renderAccountLoginPanel("Login with Discord to connect your profile, notifications, and cosmetics.");
+        return;
+    }
+
+    const account = state.authProfile || {};
+    const linkedProfile = linkedStatsProfile();
+    const overall = linkedProfile ? buildProfileOverall(linkedProfile) : null;
+    const badgeState = accountBadgeState(account, linkedProfile);
+    const selectedBadges = selectedAccountBadges(account, badgeState.unlockedIds);
+    const avatarUrl = accountAvatarUrl(account, linkedProfile, 128);
+    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 128);
+    const linkedName = linkedProfile?.name || account.minecraft_player_name || "";
+    const schemaNote = state.authProfileExtended
+        ? ""
+        : `<p class="account-warning">Run the updated Supabase schema to unlock profile customization and Minecraft linking on the website.</p>`;
+
+    body.innerHTML = `
+        <section class="account-hero ${profileBackgroundClass(account)}">
+            <div class="account-hero-main">
+                <span class="account-avatar-large ${avatarFrameClass(account)}">
+                    <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+                </span>
+                <div>
+                    <p class="panel-kicker">Account</p>
+                    <h2>${escapeHtml(accountDisplayName(account))}</h2>
+                    <p>${linkedName ? `Linked to ${escapeHtml(linkedName)}` : "Minecraft account not linked yet."}</p>
+                    <div class="account-badge-row">
+                        ${selectedBadges.length
+                            ? selectedBadges.map((badge) => renderProfileBadge(badge)).join("")
+                            : `<span class="profile-badge empty">No badges shown</span>`}
+                    </div>
+                </div>
+            </div>
+            <div class="account-actions">
+                ${linkedProfile ? `<a href="#player=${encodeURIComponent(linkedProfile.playerId)}&tab=overview">Open stats profile</a>` : ""}
+                <button type="button" data-auth-sign-out>Sign out</button>
+            </div>
+        </section>
+
+        ${schemaNote}
+        ${renderAccountLinkPanel(account, linkedProfile)}
+        ${linkedProfile ? renderAccountStatsPanel(linkedProfile, overall) : ""}
+        ${renderAccountCustomizeForm(account, badgeState)}
+        ${renderAccountMissions(linkedProfile, badgeState)}
+        ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
+    `;
+}
+
+function renderAccountLoginPanel(message) {
+    return `
+        <section class="account-login-panel">
+            <p class="panel-kicker">Account</p>
+            <h2>Login with Discord</h2>
+            <p>${escapeHtml(message)}</p>
+            <button type="button" data-auth-login ${state.authReady ? "" : "disabled"}>Login with Discord</button>
+            ${state.authMessage ? `<p class="identity-status">${escapeHtml(state.authMessage)}</p>` : ""}
+        </section>
+    `;
+}
+
+function renderAccountLinkPanel(account, linkedProfile) {
+    return `
+        <section class="account-panel">
+            <div>
+                <p class="panel-kicker">Minecraft Link</p>
+                <h3>${linkedProfile ? "Connected" : "Not connected"}</h3>
+            </div>
+            ${linkedProfile ? `
+                <div class="linked-player-card">
+                    ${renderPlayerAvatar(linkedProfile, linkedProfile, 64, "linked-player-avatar")}
+                    <div>
+                        <strong>${escapeHtml(linkedProfile.name)}</strong>
+                        <span>${escapeHtml(account.minecraft_player_uuid || "Linked through Discord bot")}</span>
+                    </div>
+                </div>
+            ` : `
+                <p class="mode-empty">Run <code>/linkminecraft</code> in Discord, then run the shown <code>/discordlink &lt;code&gt;</code> command in Minecraft while the bot and server are online.</p>
+            `}
+        </section>
+    `;
+}
+
+function renderAccountStatsPanel(profile, overall) {
+    const player = normalizePlayer(overall);
+    return `
+        <section class="account-panel">
+            <div>
+                <p class="panel-kicker">Tracked Profile</p>
+                <h3>${escapeHtml(profile.name)}</h3>
+            </div>
+            <div class="account-stat-grid">
+                ${renderStatCard("Wins", player.stats.wins)}
+                ${renderStatCard("Kills", player.stats.kills)}
+                ${renderStatCard("Games", player.stats.games)}
+                ${renderStatCard("Playtime", formatDuration(player.stats.playtimeSeconds))}
+            </div>
+        </section>
+    `;
+}
+
+function renderAccountCustomizeForm(account, badgeState) {
+    const avatarSource = cleanAvatarSource(account.avatar_source);
+    const background = cleanProfileBackground(account.profile_background);
+    const border = cleanPfpBorder(account.pfp_border);
+    const selectedIds = selectedAccountBadgeIds(account, badgeState.unlockedIds);
+
+    return `
+        <form class="account-panel account-form" data-account-form>
+            <div>
+                <p class="panel-kicker">Personalization</p>
+                <h3>Customize profile</h3>
+            </div>
+            <label>
+                <span>Display name</span>
+                <input name="displayName" type="text" maxlength="32" value="${escapeHtml(account.display_name || account.username || "")}" placeholder="Display name">
+            </label>
+            <fieldset>
+                <legend>Profile picture</legend>
+                <div class="account-option-row">
+                    ${AVATAR_SOURCE_OPTIONS.map((option) => `
+                        <label>
+                            <input type="radio" name="avatarSource" value="${escapeHtml(option.id)}" ${avatarSource === option.id ? "checked" : ""}>
+                            <span>${escapeHtml(option.label)}</span>
+                        </label>
+                    `).join("")}
+                </div>
+            </fieldset>
+            <label>
+                <span>Custom picture upload</span>
+                <input name="avatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+                <small>Max 1 MB. Stored in Supabase profile media.</small>
+            </label>
+            <div class="account-form-grid">
+                <label>
+                    <span>Background</span>
+                    <select name="profileBackground">
+                        ${PROFILE_BACKGROUNDS.map((option) => `<option value="${escapeHtml(option.id)}" ${background === option.id ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+                    </select>
+                </label>
+                <label>
+                    <span>PFP border</span>
+                    <select name="pfpBorder">
+                        ${PFP_BORDERS.map((option) => `<option value="${escapeHtml(option.id)}" ${border === option.id ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+                    </select>
+                </label>
+            </div>
+            <fieldset>
+                <legend>Shown badges</legend>
+                <div class="badge-picker">
+                    ${BADGE_CATALOG.map((badge) => {
+                        const unlocked = badgeState.unlockedIds.has(badge.id);
+                        return `
+                            <label class="${unlocked ? "" : "locked"}">
+                                <input type="checkbox" name="selectedBadges" value="${escapeHtml(badge.id)}" ${selectedIds.has(badge.id) ? "checked" : ""} ${unlocked ? "" : "disabled"}>
+                                <span>${escapeHtml(badge.label)}</span>
+                                <small>${escapeHtml(unlocked ? badge.description : `Locked: ${badge.description}`)}</small>
+                            </label>
+                        `;
+                    }).join("")}
+                </div>
+            </fieldset>
+            <button type="submit" ${state.accountSaving || !state.authProfileExtended ? "disabled" : ""}>${state.accountSaving ? "Saving..." : "Save profile"}</button>
+        </form>
+    `;
+}
+
+function renderAccountMissions(profile, badgeState) {
+    const missions = accountMissions(profile);
+    return `
+        <section class="account-panel">
+            <div>
+                <p class="panel-kicker">Missions</p>
+                <h3>Badge progress</h3>
+            </div>
+            <div class="mission-list">
+                ${missions.map((mission) => `
+                    <article class="mission-row ${mission.complete ? "complete" : ""}">
+                        <div>
+                            <strong>${escapeHtml(mission.label)}</strong>
+                            <span>${escapeHtml(mission.description)}</span>
+                        </div>
+                        <div class="mission-progress">
+                            <i style="width: ${Math.min(100, Math.round(mission.progress * 100))}%"></i>
+                        </div>
+                        <small>${escapeHtml(mission.status)}</small>
+                    </article>
+                `).join("")}
+            </div>
+            <p class="mode-empty">${badgeState.unlockedIds.size} badge${badgeState.unlockedIds.size === 1 ? "" : "s"} unlocked.</p>
+        </section>
+    `;
 }
 
 function renderHome() {
@@ -1054,13 +1652,11 @@ function renderFeaturedPlayer(player, rank, modeId) {
     const derived = normalizeDerived(player.derived, stats);
     const profile = profileById(player.playerId);
     const name = player.name || profile?.name || "Unknown";
-    const skinUrl = playerSkinUrl(player, profile, 96);
-    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 96);
     const modeTab = modeId === "deathmatch" ? "deathmatch" : "battleRoyale";
 
     return `
         <a class="featured-player podium-rank-${rank}" href="#player=${encodeURIComponent(player.playerId)}&tab=${encodeURIComponent(modeTab)}">
-            <img src="${escapeHtml(skinUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+            ${renderPlayerAvatar(player, profile, 96, "featured-avatar")}
             <div class="featured-player-main">
                 <div>
                     <span class="rank-badge rank-${Math.min(rank, 3)}">${rank}</span>
@@ -1376,7 +1972,10 @@ function renderPlaytestList(playtests, active) {
     const container = document.getElementById("playtest-list");
     if (!container) return;
     if (playtests.length === 0) {
-        container.innerHTML = `<section class="playtest-side-block"><p class="mode-empty">No active playtests.</p></section>`;
+        const status = state.playtests.remoteLoading
+            ? "Loading public playtests..."
+            : state.playtests.remoteError || "No active playtests.";
+        container.innerHTML = `<section class="playtest-side-block"><p class="mode-empty">${escapeHtml(status)}</p></section>`;
         return;
     }
 
@@ -1513,10 +2112,13 @@ function renderPlaytestBoard(playtest) {
     const board = document.getElementById("playtest-board");
     if (!board) return;
     if (!playtest) {
+        const emptyText = state.playtests.remoteLoading
+            ? "Loading the public playtest calendar..."
+            : state.playtests.remoteError || (isPlaytestAdmin() ? "Create one from the admin controls. It will be saved to the public Supabase calendar." : "No public playtest is available yet.");
         board.innerHTML = `
             <section class="playtest-empty">
                 <h3>No playtest selected</h3>
-                <p>${isPlaytestAdmin() ? "Create one from the admin controls or restore a local draft." : "No public playtest is available yet."}</p>
+                <p>${escapeHtml(emptyText)}</p>
             </section>
         `;
         return;
@@ -1953,7 +2555,10 @@ function renderVoteBreakdown(summary) {
                             : `<ul>${voters.map((vote) => `
                                 <li>
                                     <span>${escapeHtml(vote.username)}</span>
-                                    <small>${["available", "preferred", "maybe"].includes(vote.status) ? `${escapeHtml(formatVoteTimeRange(summary.slot, vote))} - ` : ""}Updated ${escapeHtml(formatRelativeTime(vote.updatedAt))}</small>
+                                    <small title="${escapeHtml(formatFullLocalDate(vote.updatedAt))}">
+                                        ${["available", "preferred", "maybe"].includes(vote.status) ? `<span>${escapeHtml(formatVoteTimeRange(summary.slot, vote))}</span>` : ""}
+                                        <time datetime="${escapeHtml(vote.updatedAt || "")}">Updated ${escapeHtml(formatRelativeTime(vote.updatedAt))}</time>
+                                    </small>
                                 </li>
                             `).join("")}</ul>`}
                     </section>
@@ -2071,18 +2676,6 @@ function handlePlaytestClick(event) {
         return;
     }
 
-    const authLoginButton = event.target.closest("[data-auth-login]");
-    if (authLoginButton) {
-        void signInWithDiscord();
-        return;
-    }
-
-    const authSignOutButton = event.target.closest("[data-auth-sign-out]");
-    if (authSignOutButton) {
-        void signOutDiscord();
-        return;
-    }
-
     const selectButton = event.target.closest("[data-playtest-select]");
     if (selectButton) {
         state.playtests.activeId = selectButton.dataset.playtestSelect;
@@ -2096,17 +2689,13 @@ function handlePlaytestClick(event) {
         const playtest = activePlaytest();
         if (!playtest || !canVoteOnPlaytest(playtest)) return;
         const slot = playtest.slots.find((entry) => entry.id === voteButton.dataset.slotId);
-        setPlaytestVote(playtest.id, voteButton.dataset.slotId, voteButton.dataset.playtestVote, voteTimeRangeForButton(voteButton, slot));
+        void setPlaytestVote(playtest.id, voteButton.dataset.slotId, voteButton.dataset.playtestVote, voteTimeRangeForButton(voteButton, slot));
         return;
     }
 
     const calendarVoteButton = event.target.closest("[data-playtest-calendar-vote]");
     if (calendarVoteButton) {
-        const playtest = activePlaytest();
-        if (!playtest || !canVoteOnPlaytest(playtest)) return;
-        const slot = ensureCommunitySlot(playtest.id, calendarVoteButton.dataset.calendarDate, selectedCommunityTimeRange());
-        if (!slot) return;
-        setPlaytestVote(playtest.id, slot.id, calendarVoteButton.dataset.playtestCalendarVote, selectedCommunityTimeRange());
+        void handleCalendarVote(calendarVoteButton);
         return;
     }
 
@@ -2135,25 +2724,13 @@ function handlePlaytestClick(event) {
             render();
             return;
         }
-        toggleNotificationSubscription(playtest.id, key);
-        savePlaytestState();
-        render();
+        void toggleNotificationSubscription(playtest.id, key);
         return;
     }
 
     const confirmButton = event.target.closest("[data-confirm-date]");
     if (confirmButton) {
-        if (!isPlaytestAdmin()) return;
-        const playtest = activePlaytest();
-        if (!playtest) return;
-        let slotId = confirmButton.dataset.confirmSlot;
-        if (!slotId) {
-            const slot = ensureCommunitySlot(playtest.id, confirmButton.dataset.confirmDate, selectedCommunityTimeRange());
-            if (!slot) return;
-            slotId = slot.id;
-        }
-        openConfirmDialog(playtest.id, slotId);
-        render();
+        void handleConfirmDateClick(confirmButton);
         return;
     }
 
@@ -2162,9 +2739,7 @@ function handlePlaytestClick(event) {
         if (!isPlaytestAdmin()) return;
         const playtest = activePlaytest();
         if (!playtest) return;
-        unconfirmPlaytestSlot(playtest.id, unconfirmButton.dataset.unconfirmSlot);
-        savePlaytestState();
-        render();
+        void unconfirmPlaytestSlot(playtest.id, unconfirmButton.dataset.unconfirmSlot);
         return;
     }
 
@@ -2205,9 +2780,7 @@ function handlePlaytestClick(event) {
             render();
             return;
         }
-        deletePlaytestSlot(playtest.id, slotId);
-        savePlaytestState();
-        render();
+        void deletePlaytestSlot(playtest.id, slotId);
         return;
     }
 
@@ -2234,7 +2807,7 @@ function handlePlaytestClick(event) {
     const adminButton = event.target.closest("[data-playtest-admin]");
     if (adminButton) {
         if (!isPlaytestAdmin()) return;
-        handlePlaytestAdmin(adminButton.dataset.playtestAdmin);
+        void handlePlaytestAdmin(adminButton.dataset.playtestAdmin);
     }
 }
 
@@ -2252,7 +2825,30 @@ function handlePlaytestChange(event) {
     }
 }
 
-function handlePlaytestSubmit(event) {
+async function handleCalendarVote(calendarVoteButton) {
+    const playtest = activePlaytest();
+    if (!playtest || !canVoteOnPlaytest(playtest)) return;
+    const timeRange = selectedCommunityTimeRange();
+    const slot = await ensureCommunitySlot(playtest.id, calendarVoteButton.dataset.calendarDate, timeRange);
+    if (!slot) return;
+    await setPlaytestVote(playtest.id, slot.id, calendarVoteButton.dataset.playtestCalendarVote, timeRange);
+}
+
+async function handleConfirmDateClick(confirmButton) {
+    if (!isPlaytestAdmin()) return;
+    const playtest = activePlaytest();
+    if (!playtest) return;
+    let slotId = confirmButton.dataset.confirmSlot;
+    if (!slotId) {
+        const slot = await ensureCommunitySlot(playtest.id, confirmButton.dataset.confirmDate, selectedCommunityTimeRange());
+        if (!slot) return;
+        slotId = slot.id;
+    }
+    openConfirmDialog(playtest.id, slotId);
+    render();
+}
+
+async function handlePlaytestSubmit(event) {
     if (event.target.id !== "playtest-create-form") return;
     event.preventDefault();
     if (!isPlaytestAdmin()) return;
@@ -2266,6 +2862,12 @@ function handlePlaytestSubmit(event) {
         .split(/\r?\n/)
         .map((value) => parsePlaytestDateInput(value.trim()))
         .filter(Boolean);
+    if (state.authClient && isDiscordLoggedIn()) {
+        const remoteCreated = await createRemotePlaytest(data, mainSlotAt, alternatives);
+        if (remoteCreated) form.reset();
+        return;
+    }
+
     const slots = [
         { id: `${id}-main`, label: "Featured date", startAt: mainSlotAt, source: "featured" },
         ...alternatives.map((startAt, index) => ({ id: `${id}-alt-${index + 1}`, label: `Featured date ${index + 2}`, startAt, source: "featured" }))
@@ -2289,10 +2891,76 @@ function handlePlaytestSubmit(event) {
     render();
 }
 
-function handlePlaytestAdmin(action) {
+async function createRemotePlaytest(data, mainSlotAt, alternatives) {
+    if (!state.authClient || !isPlaytestAdmin()) return false;
+    const title = String(data.get("title") || "Community Playtest").trim() || "Community Playtest";
+    const description = String(data.get("description") || "").trim();
+    const status = ["upcoming", "voting", "closed"].includes(data.get("status")) ? data.get("status") : "voting";
+
+    try {
+        const { data: playtest, error: playtestError } = await state.authClient
+            .from("playtests")
+            .insert({
+                title,
+                description,
+                status,
+                created_by: PLAYTEST_VIEWER.userId
+            })
+            .select(PLAYTEST_SELECT_COLUMNS)
+            .single();
+        if (playtestError) throw playtestError;
+
+        const slotRows = [
+            { startAt: mainSlotAt, label: "Featured date", isMain: true },
+            ...alternatives.map((startAt, index) => ({ startAt, label: `Featured date ${index + 2}`, isMain: false }))
+        ].map((slot) => ({
+            playtest_id: playtest.id,
+            start_datetime: slot.startAt,
+            end_datetime: defaultSlotEndAt(slot.startAt),
+            label: slot.label,
+            is_main: slot.isMain,
+            source: "featured"
+        }));
+
+        const { data: slots, error: slotError } = await state.authClient
+            .from("playtest_slots")
+            .insert(slotRows)
+            .select(PLAYTEST_SLOT_SELECT_COLUMNS);
+        if (slotError) throw slotError;
+
+        const mainSlot = (slots || []).find((slot) => slot.is_main) || slots?.[0];
+        if (mainSlot?.id) {
+            const { error: updateError } = await state.authClient
+                .from("playtests")
+                .update({ main_slot_id: mainSlot.id })
+                .eq("id", playtest.id);
+            if (updateError) throw updateError;
+        }
+
+        state.playtests.activeId = playtest.id;
+        state.authMessage = "";
+        await loadRemotePlaytests({ silent: true, render: false });
+        savePlaytestState();
+        render();
+        return true;
+    } catch (error) {
+        console.error("Failed to create Supabase playtest", error);
+        state.authMessage = "Could not create the public event. Check your admin role and Supabase schema.";
+        render();
+        return false;
+    }
+}
+
+async function handlePlaytestAdmin(action) {
     if (!isPlaytestAdmin()) return;
     const playtest = activePlaytest();
     if (!playtest) return;
+
+    if (isRemotePlaytest(playtest)) {
+        await handleRemotePlaytestAdmin(action, playtest);
+        return;
+    }
+
     const override = playtestOverride(playtest.id);
 
     if (action === "duplicate") {
@@ -2314,8 +2982,88 @@ function handlePlaytestAdmin(action) {
     render();
 }
 
-function setPlaytestVote(playtestId, slotId, status, timeRange = null) {
+async function handleRemotePlaytestAdmin(action, playtest) {
+    try {
+        if (action === "duplicate") {
+            await duplicateRemotePlaytest(playtest);
+        } else if (action === "close" || action === "reopen") {
+            const { error } = await state.authClient
+                .from("playtests")
+                .update({ status: action === "close" ? "closed" : "voting" })
+                .eq("id", playtest.id);
+            if (error) throw error;
+        } else if (action === "freeze" || action === "unfreeze") {
+            const { error } = await state.authClient
+                .from("playtests")
+                .update({ votes_frozen: action === "freeze" })
+                .eq("id", playtest.id);
+            if (error) throw error;
+        } else if (action === "reset-votes") {
+            const { error } = await state.authClient
+                .from("availability")
+                .delete()
+                .eq("playtest_id", playtest.id)
+                .eq("user_id", PLAYTEST_VIEWER.userId);
+            if (error) throw error;
+        }
+
+        await loadRemotePlaytests({ silent: true, render: false });
+        savePlaytestState();
+        render();
+    } catch (error) {
+        console.error("Failed to update Supabase playtest", error);
+        state.authMessage = "Could not update the public event. Check your admin role.";
+        render();
+    }
+}
+
+async function duplicateRemotePlaytest(playtest) {
+    const { data: clone, error: playtestError } = await state.authClient
+        .from("playtests")
+        .insert({
+            title: `${playtest.title} Copy`,
+            description: playtest.description || "",
+            status: "voting",
+            created_by: PLAYTEST_VIEWER.userId,
+            votes_frozen: false
+        })
+        .select(PLAYTEST_SELECT_COLUMNS)
+        .single();
+    if (playtestError) throw playtestError;
+
+    const slotRows = (playtest.slots || []).map((slot, index) => ({
+        playtest_id: clone.id,
+        start_datetime: slot.startAt,
+        end_datetime: slot.endAt || defaultSlotEndAt(slot.startAt),
+        label: slot.label || "Featured date",
+        is_main: slot.id === playtest.mainSlotId || (!playtest.mainSlotId && index === 0),
+        source: "featured"
+    }));
+    if (slotRows.length) {
+        const { data: slots, error: slotError } = await state.authClient
+            .from("playtest_slots")
+            .insert(slotRows)
+            .select(PLAYTEST_SLOT_SELECT_COLUMNS);
+        if (slotError) throw slotError;
+        const mainSlot = (slots || []).find((slot) => slot.is_main) || slots?.[0];
+        if (mainSlot?.id) {
+            const { error: updateError } = await state.authClient
+                .from("playtests")
+                .update({ main_slot_id: mainSlot.id })
+                .eq("id", clone.id);
+            if (updateError) throw updateError;
+        }
+    }
+    state.playtests.activeId = clone.id;
+}
+
+async function setPlaytestVote(playtestId, slotId, status, timeRange = null) {
     if (!PLAYTEST_STATUS_OPTIONS.some((option) => option.id === status)) return;
+    if (isRemotePlaytest(playtestId) && (!state.authClient || !isDiscordLoggedIn())) {
+        state.authMessage = "Login with Discord required to vote.";
+        render();
+        return;
+    }
     const preference = playtestPreference(playtestId);
     const slot = findPlaytestSlot(playtestId, slotId);
     const normalizedRange = timeRange
@@ -2334,6 +3082,35 @@ function setPlaytestVote(playtestId, slotId, status, timeRange = null) {
         availableStartAt: localDateTimeIso(dateKeyValue, normalizedRange.startTime),
         availableEndAt: localDateTimeIso(dateKeyValue, normalizedRange.endTime)
     };
+
+    if (isRemotePlaytest(playtestId)) {
+        try {
+            const { error } = await state.authClient
+                .from("availability")
+                .upsert({
+                    playtest_id: playtestId,
+                    slot_id: slotId,
+                    user_id: PLAYTEST_VIEWER.userId,
+                    status,
+                    mode_preference: labelToDbModePreference(preference.modePreference),
+                    available_start_datetime: state.playtests.votes[playtestId][slotId].availableStartAt,
+                    available_end_datetime: state.playtests.votes[playtestId][slotId].availableEndAt
+                }, { onConflict: "playtest_id,slot_id,user_id" });
+            if (error) throw error;
+            state.authMessage = "";
+            await loadRemotePlaytests({ silent: true, render: false });
+            savePlaytestState();
+            render();
+            return;
+        } catch (error) {
+            console.error("Failed to save Supabase vote", error);
+            if (state.playtests.votes?.[playtestId]) delete state.playtests.votes[playtestId][slotId];
+            state.authMessage = "Could not save your vote. Check that the date is still open.";
+            render();
+            return;
+        }
+    }
+
     recordAdminVoteEvent(playtestId, slotId, status);
     closeEmptyCommunitySlots();
     savePlaytestState();
@@ -2406,6 +3183,9 @@ function communitySlotHasParticipant(playtestId, slotId) {
 }
 
 function seedVotesForSlot(playtest, slotId) {
+    if (Array.isArray(playtest?.remoteVotesBySlot?.[slotId])) {
+        return playtest.remoteVotesBySlot[slotId];
+    }
     const matrix = playtest?.seedMatrix?.[slotId];
     if (!matrix) return [];
     const votes = [];
@@ -2559,9 +3339,14 @@ function playtestLockReason(playtest) {
 }
 
 function activePlaytests() {
+    const remotePlaytests = Array.isArray(state.playtests.remotePlaytests) ? state.playtests.remotePlaytests : [];
+    const remoteIds = new Set(remotePlaytests.map((playtest) => playtest.id));
+    const localPlaytests = (Array.isArray(state.playtests.localPlaytests) ? state.playtests.localPlaytests : [])
+        .filter((playtest) => !remoteIds.has(playtest.id));
     const playtests = [
+        ...remotePlaytests,
         ...DEFAULT_PLAYTESTS,
-        ...(Array.isArray(state.playtests.localPlaytests) ? state.playtests.localPlaytests : [])
+        ...localPlaytests
     ].map(applyPlaytestOverride).filter((playtest) => !playtest.archived);
 
     if (!playtests.some((playtest) => playtest.id === state.playtests.activeId)) {
@@ -2580,6 +3365,27 @@ function isPlaytestAdmin() {
 
 function isDiscordLoggedIn() {
     return Boolean(state.authSession?.user && PLAYTEST_VIEWER.discordId);
+}
+
+function isRemotePlaytest(playtestOrId) {
+    const id = typeof playtestOrId === "string" ? playtestOrId : playtestOrId?.id;
+    if (!id) return false;
+    return Boolean(
+        playtestOrId?.remote
+        || (state.playtests.remotePlaytests || []).some((playtest) => playtest.id === id)
+    );
+}
+
+function labelToDbModePreference(value) {
+    if (value === "Battle Royale") return "battle_royale";
+    if (value === "Deathmatch") return "deathmatch";
+    return "either";
+}
+
+function dbModePreferenceToLabel(value) {
+    if (value === "battle_royale") return "Battle Royale";
+    if (value === "deathmatch") return "Deathmatch";
+    return "Either";
 }
 
 function playtestAuthLabel() {
@@ -2652,7 +3458,7 @@ function closeConfirmDialog() {
     render();
 }
 
-function submitConfirmDialog(form) {
+async function submitConfirmDialog(form) {
     if (!isPlaytestAdmin()) return;
     const pending = state.playtests.pendingConfirmation;
     if (!pending) return;
@@ -2660,7 +3466,7 @@ function submitConfirmDialog(form) {
         form.querySelector("[data-confirm-start]")?.value,
         form.querySelector("[data-confirm-end]")?.value
     );
-    confirmPlaytestSlot(pending.playtestId, pending.slotId, range);
+    await confirmPlaytestSlot(pending.playtestId, pending.slotId, range);
     state.playtests.pendingConfirmation = null;
     savePlaytestState();
     render();
@@ -2717,8 +3523,11 @@ function findPlaytestSlot(playtestId, slotId) {
     return playtest?.slots?.find((slot) => slot.id === slotId) || null;
 }
 
-function ensureCommunitySlot(playtestId, selectedKey, timeRange = normalizeTimeRange()) {
+async function ensureCommunitySlot(playtestId, selectedKey, timeRange = normalizeTimeRange()) {
     if (!selectedKey || isPastDateKey(selectedKey)) return null;
+    if (isRemotePlaytest(playtestId)) {
+        return createRemoteCommunitySlot(playtestId, selectedKey, timeRange);
+    }
     state.playtests.communitySlots[playtestId] = state.playtests.communitySlots[playtestId] || [];
     const existing = state.playtests.communitySlots[playtestId].find((slot) => dateKey(slot.startAt) === selectedKey);
     if (existing) return existing;
@@ -2733,6 +3542,47 @@ function ensureCommunitySlot(playtestId, selectedKey, timeRange = normalizeTimeR
     state.playtests.communitySlots[playtestId].push(slot);
     state.playtests.selectedCalendarDates[playtestId] = selectedKey;
     return slot;
+}
+
+async function createRemoteCommunitySlot(playtestId, selectedKey, timeRange = normalizeTimeRange()) {
+    if (!state.authClient || !isDiscordLoggedIn()) {
+        state.authMessage = "Login with Discord required to vote.";
+        render();
+        return null;
+    }
+
+    const existing = activePlaytests()
+        .find((playtest) => playtest.id === playtestId)
+        ?.slots
+        ?.find((slot) => dateKey(slot.startAt) === selectedKey);
+    if (existing) return existing;
+
+    const normalizedRange = normalizeTimeRange(timeRange.startTime, timeRange.endTime);
+    try {
+        const { data, error } = await state.authClient
+            .from("playtest_slots")
+            .insert({
+                playtest_id: playtestId,
+                start_datetime: localDateTimeIso(selectedKey, normalizedRange.startTime),
+                end_datetime: localDateTimeIso(selectedKey, normalizedRange.endTime),
+                label: "Community date",
+                is_main: false,
+                source: "community"
+            })
+            .select(PLAYTEST_SLOT_SELECT_COLUMNS)
+            .single();
+        if (error) throw error;
+
+        state.playtests.selectedCalendarDates[playtestId] = selectedKey;
+        await loadRemotePlaytests({ silent: true, render: false });
+        savePlaytestState();
+        return findPlaytestSlot(playtestId, data.id) || remoteSlotToLocal(data);
+    } catch (error) {
+        console.error("Failed to create community date", error);
+        state.authMessage = "Could not create that community date. Check that the event is still open.";
+        render();
+        return null;
+    }
 }
 
 function confirmedSlotId(playtestId) {
@@ -2763,7 +3613,7 @@ function confirmedSlotStartValue(playtestId, slot) {
     return dateValue(confirmation?.startAt || slot?.startAt);
 }
 
-function confirmPlaytestSlot(playtestId, slotId, timeRange = null) {
+async function confirmPlaytestSlot(playtestId, slotId, timeRange = null) {
     if (!isPlaytestAdmin()) return;
     if (!slotId) return;
     const slot = findPlaytestSlot(playtestId, slotId);
@@ -2772,22 +3622,78 @@ function confirmPlaytestSlot(playtestId, slotId, timeRange = null) {
         ? normalizeTimeRange(timeRange.startTime, timeRange.endTime)
         : confirmationDefaultTimeRange(playtestId, { slot });
     const key = dateKey(slot.startAt);
+    const startAt = localDateTimeIso(key, normalizedRange.startTime);
+    const endAt = localDateTimeIso(key, normalizedRange.endTime);
+
+    if (isRemotePlaytest(playtestId)) {
+        try {
+            const { error: clearError } = await state.authClient
+                .from("playtest_slots")
+                .update({ confirmed_at: null, confirmed_by: null })
+                .eq("playtest_id", playtestId)
+                .not("confirmed_at", "is", null);
+            if (clearError) throw clearError;
+
+            const { error } = await state.authClient
+                .from("playtest_slots")
+                .update({
+                    confirmed_at: new Date().toISOString(),
+                    confirmed_by: PLAYTEST_VIEWER.userId,
+                    start_datetime: startAt,
+                    end_datetime: endAt
+                })
+                .eq("id", slotId)
+                .eq("playtest_id", playtestId);
+            if (error) throw error;
+
+            await loadRemotePlaytests({ silent: true, render: false });
+            return;
+        } catch (error) {
+            console.error("Failed to confirm Supabase playtest date", error);
+            state.authMessage = "Could not confirm that date. Check your admin role.";
+            return;
+        }
+    }
+
     state.playtests.confirmedSlots[playtestId] = {
         [slotId]: {
             confirmedAt: new Date().toISOString(),
             confirmedBy: PLAYTEST_VIEWER.userId,
-            startAt: localDateTimeIso(key, normalizedRange.startTime),
-            endAt: localDateTimeIso(key, normalizedRange.endTime)
+            startAt,
+            endAt
         }
     };
     recordAdminSystemEvent(playtestId, slotId, "confirmed");
 }
 
-function unconfirmPlaytestSlot(playtestId, slotId) {
+async function unconfirmPlaytestSlot(playtestId, slotId) {
     if (!isPlaytestAdmin()) return;
     if (!slotId || !state.playtests.confirmedSlots?.[playtestId]?.[slotId]) return;
+
+    if (isRemotePlaytest(playtestId)) {
+        try {
+            const { error } = await state.authClient
+                .from("playtest_slots")
+                .update({ confirmed_at: null, confirmed_by: null })
+                .eq("id", slotId)
+                .eq("playtest_id", playtestId);
+            if (error) throw error;
+            await loadRemotePlaytests({ silent: true, render: false });
+            savePlaytestState();
+            render();
+            return;
+        } catch (error) {
+            console.error("Failed to unconfirm Supabase playtest date", error);
+            state.authMessage = "Could not unconfirm that date. Check your admin role.";
+            render();
+            return;
+        }
+    }
+
     delete state.playtests.confirmedSlots[playtestId][slotId];
     recordAdminSystemEvent(playtestId, slotId, "unconfirmed");
+    savePlaytestState();
+    render();
 }
 
 function isNotificationSubscribed(playtestId, key) {
@@ -2796,8 +3702,42 @@ function isNotificationSubscribed(playtestId, key) {
     return Boolean(subscription && subscription.userId === PLAYTEST_VIEWER.userId);
 }
 
-function toggleNotificationSubscription(playtestId, key) {
+async function toggleNotificationSubscription(playtestId, key) {
     if (!key || !isDiscordLoggedIn()) return;
+    if (isRemotePlaytest(playtestId)) {
+        try {
+            const existing = state.playtests.notificationSubscriptions?.[playtestId]?.[key];
+            if (existing?.userId === PLAYTEST_VIEWER.userId) {
+                const { error } = await state.authClient
+                    .from("playtest_notification_subscriptions")
+                    .delete()
+                    .eq("playtest_id", playtestId)
+                    .eq("slot_id", key)
+                    .eq("user_id", PLAYTEST_VIEWER.userId);
+                if (error) throw error;
+            } else {
+                const { error } = await state.authClient
+                    .from("playtest_notification_subscriptions")
+                    .upsert({
+                        playtest_id: playtestId,
+                        slot_id: key,
+                        user_id: PLAYTEST_VIEWER.userId,
+                        notify_on_confirmation: true
+                    }, { onConflict: "playtest_id,slot_id,user_id" });
+                if (error) throw error;
+            }
+            await loadRemotePlaytests({ silent: true, render: false });
+            savePlaytestState();
+            render();
+            return;
+        } catch (error) {
+            console.error("Failed to update Supabase notification subscription", error);
+            state.authMessage = "Could not update the notification toggle.";
+            render();
+            return;
+        }
+    }
+
     state.playtests.notificationSubscriptions[playtestId] = state.playtests.notificationSubscriptions[playtestId] || {};
     const existing = state.playtests.notificationSubscriptions[playtestId][key];
     if (existing?.userId === PLAYTEST_VIEWER.userId) {
@@ -2810,6 +3750,8 @@ function toggleNotificationSubscription(playtestId, key) {
             createdAt: new Date().toISOString()
         };
     }
+    savePlaytestState();
+    render();
 }
 
 function notificationSubscriberCount(playtestId, slotId) {
@@ -2856,7 +3798,7 @@ function canDeletePlaytestSlot(playtest, slotId) {
     return Boolean(slotId && slots.some((slot) => slot.id === slotId));
 }
 
-function deletePlaytestSlot(playtestId, slotId) {
+async function deletePlaytestSlot(playtestId, slotId) {
     if (!isPlaytestAdmin()) return;
     const playtest = activePlaytests().find((entry) => entry.id === playtestId);
     if (!canDeletePlaytestSlot(playtest, slotId)) return;
@@ -2864,6 +3806,28 @@ function deletePlaytestSlot(playtestId, slotId) {
     if (!slot) return;
 
     recordAdminSystemEvent(playtestId, slotId, "deleted");
+
+    if (isRemotePlaytest(playtestId)) {
+        try {
+            const { error } = await state.authClient
+                .from("playtest_slots")
+                .delete()
+                .eq("id", slotId)
+                .eq("playtest_id", playtestId);
+            if (error) throw error;
+            cleanupPlaytestSlotState(playtestId, slot);
+            await loadRemotePlaytests({ silent: true, render: false });
+            state.playtests.pendingSlotDelete = null;
+            savePlaytestState();
+            render();
+            return;
+        } catch (error) {
+            console.error("Failed to delete Supabase playtest date", error);
+            state.authMessage = "Could not delete that date. Check your admin role.";
+            render();
+            return;
+        }
+    }
 
     if (slot.source === "community") {
         state.playtests.communitySlots[playtestId] = (state.playtests.communitySlots?.[playtestId] || []).filter((entry) => entry.id !== slotId);
@@ -2877,6 +3841,8 @@ function deletePlaytestSlot(playtestId, slotId) {
 
     cleanupPlaytestSlotState(playtestId, slot);
     state.playtests.pendingSlotDelete = null;
+    savePlaytestState();
+    render();
 }
 
 function cleanupPlaytestSlotState(playtestId, slot) {
@@ -3006,6 +3972,13 @@ function localDateTimeIso(key, time) {
     return localDateFromKey(key, time).toISOString();
 }
 
+function defaultSlotEndAt(startAt) {
+    const date = new Date(startAt);
+    if (Number.isNaN(date.getTime())) return "";
+    date.setHours(date.getHours() + 2);
+    return date.toISOString();
+}
+
 function localTimeKey(value) {
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return "";
@@ -3053,7 +4026,9 @@ function applyPlaytestOverride(playtest) {
     const override = state.playtests.overrides?.[playtest.id] || {};
     const deletedSlots = state.playtests.deletedSlots?.[playtest.id] || {};
     const playtestSlots = (playtest.slots || []).filter((slot) => !deletedSlots[slot.id]);
-    const communitySlots = (state.playtests.communitySlots?.[playtest.id] || []).filter((slot) => !deletedSlots[slot.id]);
+    const communitySlots = playtest.remote
+        ? []
+        : (state.playtests.communitySlots?.[playtest.id] || []).filter((slot) => !deletedSlots[slot.id]);
     return { ...playtest, ...override, slots: [...playtestSlots, ...communitySlots] };
 }
 
@@ -3190,6 +4165,10 @@ function savePlaytestState() {
 function emptyPlaytestState() {
     return {
         activeId: DEFAULT_PLAYTESTS[0]?.id || "",
+        remotePlaytests: [],
+        remoteLoading: false,
+        remoteLoadedAt: "",
+        remoteError: "",
         votes: {},
         preferences: {},
         localPlaytests: [],
@@ -3638,6 +4617,7 @@ function renderTable() {
         const displayRank = start + index + 1;
         const stats = normalizeStats(player.stats);
         const derived = normalizeDerived(player.derived, stats);
+        const profile = profileById(player.playerId);
         const tr = document.createElement("tr");
         if (player.playerId === state.selectedId) tr.classList.add("selected");
         tr.dataset.playerId = player.playerId;
@@ -3645,9 +4625,12 @@ function renderTable() {
         tr.innerHTML = `
             <td><span class="rank-badge rank-${Math.min(displayRank, 3)}">${displayRank}</span></td>
             <td>
-                <div class="player-name">
-                    <strong>${escapeHtml(player.name)}</strong>
-                    <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview" aria-label="${escapeHtml(`Open ${player.name} profile`)}">Profile</a>
+                <div class="leaderboard-player">
+                    ${renderPlayerAvatar(player, profile, 42, "leaderboard-avatar")}
+                    <div class="player-name">
+                        <strong>${escapeHtml(player.name)}</strong>
+                        <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview" aria-label="${escapeHtml(`Open ${player.name} profile`)}">Profile</a>
+                    </div>
                 </div>
             </td>
             <td>${stats.wins}</td>
@@ -3805,6 +4788,221 @@ function renderPagination(totalRows, totalPages) {
     container.appendChild(right);
 }
 
+async function submitAccountForm(form) {
+    if (!state.authClient || !state.authSession?.user || !state.authProfileExtended) return;
+    state.accountSaving = true;
+    state.accountMessage = "";
+    render();
+
+    try {
+        const formData = new FormData(form);
+        const linkedProfile = linkedStatsProfile();
+        const badgeState = accountBadgeState(state.authProfile, linkedProfile);
+        const selectedBadges = formData
+            .getAll("selectedBadges")
+            .map((value) => String(value || "").trim())
+            .filter((id) => badgeState.unlockedIds.has(id))
+            .slice(0, 5);
+        let customAvatarUrl = state.authProfile?.custom_avatar_url || "";
+        const file = formData.get("avatarFile");
+        if (file instanceof File && file.size > 0) {
+            customAvatarUrl = await uploadAccountAvatar(file);
+        }
+
+        const payload = {
+            display_name: cleanDisplayName(formData.get("displayName")),
+            avatar_source: cleanAvatarSource(formData.get("avatarSource")),
+            custom_avatar_url: customAvatarUrl || null,
+            profile_background: cleanProfileBackground(formData.get("profileBackground")),
+            pfp_border: cleanPfpBorder(formData.get("pfpBorder")),
+            selected_badges: selectedBadges
+        };
+
+        const { data, error } = await state.authClient
+            .from("profiles")
+            .update(payload)
+            .eq("id", state.authSession.user.id)
+            .select(PROFILE_SELECT_COLUMNS)
+            .single();
+        if (error) throw error;
+
+        applyPlaytestProfile(data);
+        await loadAccountProfiles();
+        state.accountMessage = "Profile saved.";
+    } catch (error) {
+        console.error("Failed to save account profile", error);
+        state.accountMessage = error?.message || "Could not save profile right now.";
+    } finally {
+        state.accountSaving = false;
+        render();
+    }
+}
+
+async function uploadAccountAvatar(file) {
+    if (!state.authClient || !state.authSession?.user) throw new Error("Login is required for uploads.");
+    if (file.size > MAX_PROFILE_UPLOAD_BYTES) throw new Error("Profile picture must be 1 MB or smaller.");
+    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) throw new Error("Use PNG, JPG, WEBP, or GIF.");
+
+    const extension = file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
+    const path = `${state.authSession.user.id}/avatar-${Date.now()}.${extension}`;
+    const { error } = await state.authClient.storage
+        .from(PROFILE_MEDIA_BUCKET)
+        .upload(path, file, {
+            cacheControl: "3600",
+            contentType: file.type,
+            upsert: true
+        });
+    if (error) throw error;
+
+    const { data } = state.authClient.storage.from(PROFILE_MEDIA_BUCKET).getPublicUrl(path);
+    if (!data?.publicUrl) throw new Error("Upload succeeded but no public URL was returned.");
+    return data.publicUrl;
+}
+
+function linkedStatsProfile() {
+    if (!state.authProfile) return null;
+    return accountLinkedStatsProfile(state.authProfile);
+}
+
+function accountLinkedStatsProfile(account) {
+    if (!account) return null;
+    const playerId = String(account.minecraft_player_id || "").trim();
+    if (playerId) {
+        const byId = profileById(playerId);
+        if (byId) return byId;
+    }
+    const nameKey = normalizePlayerName(account.minecraft_player_name);
+    if (!nameKey) return null;
+    return state.cache.profiles.find((profile) => normalizePlayerName(profile.name) === nameKey) || null;
+}
+
+function accountProfileForPlayer(player, profile) {
+    const playerId = player?.playerId || profile?.playerId || "";
+    const nameKey = normalizePlayerName(player?.name || profile?.name || "");
+    return (state.accountProfiles || []).find((account) => {
+        if (account.minecraft_player_id && account.minecraft_player_id === playerId) return true;
+        if (account.minecraft_player_name && normalizePlayerName(account.minecraft_player_name) === nameKey) return true;
+        return false;
+    }) || null;
+}
+
+function accountDisplayName(account) {
+    return String(account?.display_name || account?.username || PLAYTEST_VIEWER.username || "Account").trim();
+}
+
+function renderPlayerAvatar(player, profile, size = 64, extraClass = "") {
+    const account = accountProfileForPlayer(player, profile);
+    const url = accountAvatarUrl(account, profile || player, size);
+    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, size);
+    return `
+        <span class="player-avatar ${avatarFrameClass(account)} ${escapeHtml(extraClass)}">
+            <img src="${escapeHtml(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+        </span>
+    `;
+}
+
+function accountAvatarUrl(account, profile, size = 64) {
+    if (account && !account.avatar_source && !profile?.name && account.avatar_url) return account.avatar_url;
+    const source = cleanAvatarSource(account?.avatar_source);
+    if (source === "custom" && account?.custom_avatar_url) return account.custom_avatar_url;
+    if (source === "discord" && account?.avatar_url) return account.avatar_url;
+    return playerSkinUrl(profile, profile, size);
+}
+
+function avatarFrameClass(account) {
+    const border = cleanPfpBorder(account?.pfp_border);
+    return border === "none" ? "" : `avatar-frame-${border}`;
+}
+
+function profileBackgroundClass(account) {
+    return `profile-bg-${cleanProfileBackground(account?.profile_background)}`;
+}
+
+function renderProfileBadge(badge) {
+    return `<span class="profile-badge badge-${escapeHtml(badge.id)}" title="${escapeHtml(badge.description)}">${escapeHtml(badge.label)}</span>`;
+}
+
+function accountBadgeState(account, profile) {
+    const linked = Boolean(profile || accountLinkedStatsProfile(account));
+    const linkedProfile = profile || accountLinkedStatsProfile(account);
+    const overall = linkedProfile ? buildProfileOverall(linkedProfile) : null;
+    const br = linkedProfile ? normalizePlayer(linkedProfile.battleRoyale) : normalizePlayer(null);
+    const dm = linkedProfile ? normalizePlayer(linkedProfile.deathmatch) : normalizePlayer(null);
+    const stats = normalizeStats(overall?.stats);
+    const derived = normalizeDerived(overall?.derived, stats);
+    const context = { account, linked, profile: linkedProfile, overall, br, dm, stats, derived };
+    const unlockedIds = new Set(BADGE_CATALOG.filter((badge) => badge.test(context)).map((badge) => badge.id));
+    for (const id of arrayField(account?.unlocked_badges)) unlockedIds.add(id);
+    return { unlockedIds, context };
+}
+
+function selectedAccountBadgeIds(account, unlockedIds) {
+    const selected = arrayField(account?.selected_badges).filter((id) => unlockedIds.has(id));
+    if (selected.length) return new Set(selected.slice(0, 5));
+    return new Set([...unlockedIds].slice(0, 3));
+}
+
+function selectedAccountBadges(account, unlockedIds) {
+    const selectedIds = selectedAccountBadgeIds(account, unlockedIds);
+    return BADGE_CATALOG.filter((badge) => selectedIds.has(badge.id));
+}
+
+function accountMissions(profile) {
+    const overall = profile ? buildProfileOverall(profile) : null;
+    const br = profile ? normalizePlayer(profile.battleRoyale) : normalizePlayer(null);
+    const dm = profile ? normalizePlayer(profile.deathmatch) : normalizePlayer(null);
+    const stats = normalizeStats(overall?.stats);
+    const derived = normalizeDerived(overall?.derived, stats);
+    return [
+        mission("Link Minecraft", "Pair Discord to Minecraft with /linkminecraft.", profile ? 1 : 0, 1),
+        mission("First Win", "Win any tracked match.", stats.wins, 1),
+        mission("Battle Royale Winner", "Win one Battle Royale game.", br.stats.wins, 1),
+        mission("Deathmatch Winner", "Win one Deathmatch game.", dm.stats.wins, 1),
+        mission("Veteran", "Play 25 tracked games.", stats.games, 25),
+        mission("Sharpshooter", "Reach 35% headshot rate after 20 hits.", stats.hits >= 20 ? derived.headshotRate : 0, 35, "%")
+    ];
+}
+
+function mission(label, description, value, target, suffix = "") {
+    const current = number(value);
+    const complete = current >= target;
+    return {
+        label,
+        description,
+        complete,
+        progress: target > 0 ? current / target : 0,
+        status: complete ? "Complete" : `${formatNumber(current)}${suffix} / ${formatNumber(target)}${suffix}`
+    };
+}
+
+function arrayField(value) {
+    return Array.isArray(value) ? value.map((entry) => String(entry || "").trim()).filter(Boolean) : [];
+}
+
+function cleanDisplayName(value) {
+    const text = String(value || "").trim().replace(/\s+/g, " ");
+    return text.slice(0, 32) || accountDisplayName(state.authProfile);
+}
+
+function cleanAvatarSource(value) {
+    const id = String(value || "").trim();
+    return AVATAR_SOURCE_OPTIONS.some((option) => option.id === id) ? id : "minecraft";
+}
+
+function cleanProfileBackground(value) {
+    const id = String(value || "").trim();
+    return PROFILE_BACKGROUNDS.some((option) => option.id === id) ? id : "default";
+}
+
+function cleanPfpBorder(value) {
+    const id = String(value || "").trim();
+    return PFP_BORDERS.some((option) => option.id === id) ? id : "none";
+}
+
+function normalizePlayerName(name) {
+    return String(name || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+}
+
 function renderProfilePreview() {
     const container = document.getElementById("profile-body");
     const profile = profileById(state.selectedId);
@@ -3816,14 +5014,17 @@ function renderProfilePreview() {
     }
 
     const overall = buildProfileOverall(profile);
-    const skinUrl = playerSkinUrl(profile, profile, 96);
-    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 96);
+    const account = accountProfileForPlayer(profile, profile);
+    const badges = selectedAccountBadges(account, accountBadgeState(account, profile).unlockedIds);
     container.innerHTML = `
         <div class="profile-preview-head">
-            <img src="${escapeHtml(skinUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+            ${renderPlayerAvatar(profile, profile, 96, "profile-preview-avatar")}
             <div>
                 <span>Selected Player</span>
                 <strong>${escapeHtml(profile.name || "Unknown")}</strong>
+                <div class="account-badge-row compact">
+                    ${badges.length ? badges.slice(0, 3).map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges</span>`}
+                </div>
             </div>
         </div>
         <button class="primary-action" type="button" id="open-full-profile">Open Full Profile</button>
@@ -3852,7 +5053,35 @@ function renderPlayerDetail() {
 
     const tabs = renderPlayerTabs();
     const content = renderPlayerTabContent(profile);
-    body.innerHTML = `${tabs}${content}`;
+    body.innerHTML = `${renderPlayerProfileHero(profile)}${tabs}${content}`;
+}
+
+function renderPlayerProfileHero(profile) {
+    const account = accountProfileForPlayer(profile, profile);
+    const overall = buildProfileOverall(profile);
+    const player = normalizePlayer(overall);
+    const badgeState = accountBadgeState(account, profile);
+    const badges = selectedAccountBadges(account, badgeState.unlockedIds);
+    return `
+        <section class="player-profile-hero ${profileBackgroundClass(account)}">
+            <div class="player-profile-identity">
+                ${renderPlayerAvatar(profile, profile, 128, "player-profile-avatar")}
+                <div>
+                    <p class="panel-kicker">${account ? "Linked Account" : "Tracked Player"}</p>
+                    <h3>${escapeHtml(profile.name || "Unknown")}</h3>
+                    <span>${account ? escapeHtml(accountDisplayName(account)) : "No website account linked yet"}</span>
+                    <div class="account-badge-row">
+                        ${badges.length ? badges.map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges shown</span>`}
+                    </div>
+                </div>
+            </div>
+            <div class="player-profile-quickstats">
+                ${renderStatCard("Wins", player.stats.wins)}
+                ${renderStatCard("Kills", player.stats.kills)}
+                ${renderStatCard("Games", player.stats.games)}
+            </div>
+        </section>
+    `;
 }
 
 function renderPlayerTabs() {
