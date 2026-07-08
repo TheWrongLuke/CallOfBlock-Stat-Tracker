@@ -3639,50 +3639,68 @@ img.identity-avatar {
 
 .profile-bg-br {
     background:
-        linear-gradient(90deg, rgba(9, 13, 16, 0.88), rgba(9, 13, 16, 0.52)),
-        linear-gradient(135deg, rgba(255, 127, 114, 0.28), transparent 42%),
+        linear-gradient(90deg, rgba(9, 13, 16, 0.74), rgba(9, 13, 16, 0.36)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 52px),
+        linear-gradient(135deg, rgba(255, 93, 80, 0.58), rgba(255, 203, 107, 0.24) 46%, rgba(34, 19, 17, 0.98)),
         var(--panel-strong);
 }
 
 .profile-bg-dm {
     background:
-        linear-gradient(90deg, rgba(9, 13, 16, 0.88), rgba(9, 13, 16, 0.52)),
-        linear-gradient(135deg, rgba(126, 200, 255, 0.28), transparent 42%),
+        linear-gradient(90deg, rgba(9, 13, 16, 0.74), rgba(9, 13, 16, 0.36)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 52px),
+        linear-gradient(135deg, rgba(65, 157, 230, 0.58), rgba(133, 232, 157, 0.16) 48%, rgba(9, 20, 32, 0.98)),
         var(--panel-strong);
 }
 
 .profile-bg-night {
     background:
-        linear-gradient(90deg, rgba(9, 13, 16, 0.9), rgba(9, 13, 16, 0.52)),
-        linear-gradient(135deg, rgba(140, 255, 106, 0.18), transparent 34%),
+        linear-gradient(90deg, rgba(4, 8, 14, 0.74), rgba(4, 8, 14, 0.36)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 52px),
+        linear-gradient(135deg, rgba(89, 191, 80, 0.34), rgba(126, 200, 255, 0.1) 48%, rgba(4, 8, 14, 0.98)),
         linear-gradient(180deg, rgba(4, 8, 14, 0.98), rgba(11, 15, 24, 0.98));
 }
 
 .account-hero.profile-bg-br,
 .player-profile-hero.profile-bg-br {
     background:
-        linear-gradient(90deg, rgba(9, 13, 16, 0.84), rgba(9, 13, 16, 0.34)),
-        radial-gradient(circle at 82% 28%, rgba(255, 127, 114, 0.42), transparent 30%),
-        linear-gradient(135deg, rgba(255, 127, 114, 0.52), rgba(255, 203, 107, 0.16) 48%, transparent 72%),
+        linear-gradient(90deg, rgba(9, 13, 16, 0.74), rgba(9, 13, 16, 0.26)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 52px),
+        linear-gradient(135deg, rgba(255, 93, 80, 0.62), rgba(255, 203, 107, 0.28) 46%, rgba(34, 19, 17, 0.98)),
         var(--panel-strong);
 }
 
 .account-hero.profile-bg-dm,
 .player-profile-hero.profile-bg-dm {
     background:
-        linear-gradient(90deg, rgba(9, 13, 16, 0.84), rgba(9, 13, 16, 0.34)),
-        radial-gradient(circle at 82% 28%, rgba(126, 200, 255, 0.44), transparent 30%),
-        linear-gradient(135deg, rgba(126, 200, 255, 0.54), rgba(133, 232, 157, 0.14) 48%, transparent 72%),
+        linear-gradient(90deg, rgba(9, 13, 16, 0.74), rgba(9, 13, 16, 0.26)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 52px),
+        linear-gradient(135deg, rgba(65, 157, 230, 0.64), rgba(133, 232, 157, 0.18) 48%, rgba(9, 20, 32, 0.98)),
         var(--panel-strong);
 }
 
 .account-hero.profile-bg-night,
 .player-profile-hero.profile-bg-night {
     background:
-        linear-gradient(90deg, rgba(4, 8, 14, 0.82), rgba(4, 8, 14, 0.32)),
-        radial-gradient(circle at 82% 28%, rgba(140, 255, 106, 0.3), transparent 30%),
-        linear-gradient(135deg, rgba(140, 255, 106, 0.3), rgba(126, 200, 255, 0.1) 48%, transparent 72%),
+        linear-gradient(90deg, rgba(4, 8, 14, 0.74), rgba(4, 8, 14, 0.26)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 52px),
+        linear-gradient(135deg, rgba(89, 191, 80, 0.38), rgba(126, 200, 255, 0.1) 48%, rgba(4, 8, 14, 0.98)),
         linear-gradient(180deg, rgba(4, 8, 14, 0.98), rgba(11, 15, 24, 0.98));
+}
+
+.account-hero.profile-bg-br::before,
+.account-hero.profile-bg-dm::before,
+.account-hero.profile-bg-night::before,
+.player-profile-hero.profile-bg-br::before,
+.player-profile-hero.profile-bg-dm::before,
+.player-profile-hero.profile-bg-night::before {
+    background: linear-gradient(90deg, rgba(6, 9, 12, 0.54), rgba(6, 9, 12, 0.1));
 }
 
 .profile-bg-custom {
@@ -3828,22 +3846,28 @@ img.identity-avatar {
 
 .account-custom-preview.profile-bg-br {
     background:
-        linear-gradient(180deg, rgba(9, 13, 16, 0.08), rgba(9, 13, 16, 0.86)),
-        linear-gradient(135deg, rgba(255, 127, 114, 0.28), transparent 48%),
+        linear-gradient(180deg, rgba(9, 13, 16, 0.12), rgba(9, 13, 16, 0.82)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 52px),
+        linear-gradient(135deg, rgba(255, 93, 80, 0.58), rgba(255, 203, 107, 0.24) 46%, rgba(34, 19, 17, 0.98)),
         var(--panel-strong);
 }
 
 .account-custom-preview.profile-bg-dm {
     background:
-        linear-gradient(180deg, rgba(9, 13, 16, 0.08), rgba(9, 13, 16, 0.86)),
-        linear-gradient(135deg, rgba(126, 200, 255, 0.28), transparent 48%),
+        linear-gradient(180deg, rgba(9, 13, 16, 0.12), rgba(9, 13, 16, 0.82)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 52px),
+        linear-gradient(135deg, rgba(65, 157, 230, 0.58), rgba(133, 232, 157, 0.16) 48%, rgba(9, 20, 32, 0.98)),
         var(--panel-strong);
 }
 
 .account-custom-preview.profile-bg-night {
     background:
-        linear-gradient(180deg, rgba(9, 13, 16, 0.08), rgba(9, 13, 16, 0.88)),
-        linear-gradient(135deg, rgba(140, 255, 106, 0.18), transparent 40%),
+        linear-gradient(180deg, rgba(4, 8, 14, 0.12), rgba(4, 8, 14, 0.84)),
+        repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 72px),
+        repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 52px),
+        linear-gradient(135deg, rgba(89, 191, 80, 0.34), rgba(126, 200, 255, 0.1) 48%, rgba(4, 8, 14, 0.98)),
         linear-gradient(180deg, rgba(4, 8, 14, 0.98), rgba(11, 15, 24, 0.98));
 }
 
