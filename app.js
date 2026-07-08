@@ -42,7 +42,7 @@ const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97,
 const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v2";
 const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
 const BADGE_SEEN_STORAGE_KEY = "cob_seen_badges_v1";
-const PROFILE_BASE_COLUMNS = "id, discord_id, username, avatar_url, is_admin, banned_from_voting";
+const PROFILE_BASE_COLUMNS = "id, discord_id, username, avatar_url, is_admin, banned_from_voting, created_at";
 const PROFILE_ACCOUNT_COLUMNS = [
     "display_name",
     "minecraft_player_uuid",
@@ -1305,6 +1305,7 @@ function render() {
     renderCommunityAdminPage();
     renderAccountPage();
     renderPlaytestConfirmationDialog();
+    renderAccountUploadDialog();
     renderMainViewTabs();
     renderModeTabs();
     renderSummary();
@@ -1422,6 +1423,7 @@ function renderAccountPage() {
                     <p class="panel-kicker">Account</p>
                     <h2>${escapeHtml(accountDisplayName(account))}</h2>
                     <p>${linkedName ? `Linked to ${escapeHtml(linkedName)}` : "Minecraft account not linked yet."}</p>
+                    ${renderAccountSignedDate(account)}
                     <div class="account-badge-row">
                         ${selectedBadges.length
                             ? selectedBadges.map((badge) => renderProfileBadge(badge)).join("")
@@ -1440,7 +1442,6 @@ function renderAccountPage() {
         ${linkedProfile ? renderAccountStatsPanel(linkedProfile, overall) : ""}
         ${renderAccountCustomizeForm(account, badgeState)}
         ${renderAccountMissions(account, linkedProfile, badgeState)}
-        ${renderAccountUploadDialog()}
         ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
     `;
 }
@@ -1454,6 +1455,16 @@ function renderAccountLoginPanel(message) {
             <button type="button" data-auth-login ${state.authReady ? "" : "disabled"}>Login with Discord</button>
             ${state.authMessage ? `<p class="identity-status">${escapeHtml(state.authMessage)}</p>` : ""}
         </section>
+    `;
+}
+
+function renderAccountSignedDate(account) {
+    const signedAt = account?.created_at || account?.createdAt;
+    if (!signedAt) return "";
+    return `
+        <small class="account-signed-date" title="${escapeHtml(formatFullLocalDate(signedAt))}">
+            Signed ${escapeHtml(formatAccountSignedDate(signedAt))} - ${escapeHtml(formatAccountAge(signedAt))}
+        </small>
     `;
 }
 
@@ -1522,22 +1533,23 @@ function renderAccountCustomizeForm(account, badgeState) {
                         <legend>Profile picture</legend>
                         <div class="account-option-row compact">
                             ${AVATAR_SOURCE_OPTIONS.map((option) => `
-                                <label>
+                                <label${option.id === "custom" ? ` data-account-upload-open="avatar"` : ""}>
                                     <input type="radio" name="avatarSource" value="${escapeHtml(option.id)}" ${avatarSource === option.id ? "checked" : ""}>
                                     <span>${escapeHtml(option.label)}</span>
                                 </label>
                             `).join("")}
                         </div>
-                        <button class="media-upload-button" type="button" data-account-upload-open="avatar">Upload custom icon</button>
-                        <small>Recommended icon: 512x512 square PNG/WebP, max 1 MB.</small>
                     </fieldset>
                     <div class="account-form-grid">
                         <label>
                             <span>Background</span>
                             <select name="profileBackground">
                                 ${PROFILE_BACKGROUNDS.map((option) => {
-                                    const unlocked = profileBackgroundUnlocked(option.id, account, badgeState);
-                                    return `<option value="${escapeHtml(option.id)}" ${background === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(unlocked ? option.label : `${option.label} - locked`)}</option>`;
+                                    const unlocked = option.id === "custom" || profileBackgroundUnlocked(option.id, account, badgeState);
+                                    const label = option.id === "custom" && !account.custom_background_url
+                                        ? `${option.label} - upload`
+                                        : unlocked ? option.label : `${option.label} - locked`;
+                                    return `<option value="${escapeHtml(option.id)}" ${background === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(label)}</option>`;
                                 }).join("")}
                             </select>
                         </label>
@@ -1551,8 +1563,6 @@ function renderAccountCustomizeForm(account, badgeState) {
                             </select>
                         </label>
                     </div>
-                    <button class="media-upload-button" type="button" data-account-upload-open="background">Upload custom background</button>
-                    <small>Recommended banner: 1600x500 PNG/WebP, or 1920x600 for wide screens. Max 1 MB.</small>
                 </div>
                 <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Profile preview">
                     <span class="account-preview-avatar ${avatarFrameClass(account)}">
@@ -1626,14 +1636,19 @@ function renderAccountMissions(account, profile, badgeState) {
 }
 
 function renderAccountUploadDialog() {
+    const host = accountUploadHost();
     const type = state.accountUploadDialog;
-    if (type !== "avatar" && type !== "background") return "";
+    if (!host) return;
+    if (type !== "avatar" && type !== "background") {
+        host.innerHTML = "";
+        return;
+    }
     const isAvatar = type === "avatar";
     const title = isAvatar ? "Upload custom icon" : "Upload custom background";
     const help = isAvatar
         ? "Use a 512x512 square PNG/WebP under 1 MB. This icon is used on your account, leaderboard row, preview, and full stats profile."
         : "Use a 1600x500 PNG/WebP banner under 1 MB, or 1920x600 for sharper wide screens. The image fills the profile header.";
-    return `
+    host.innerHTML = `
         <div class="account-upload-backdrop" data-account-upload-backdrop>
             <form class="account-upload-dialog" data-account-upload-form="${escapeHtml(type)}">
                 <div class="date-card-topline">
@@ -1653,6 +1668,16 @@ function renderAccountUploadDialog() {
             </form>
         </div>
     `;
+}
+
+function accountUploadHost() {
+    let host = document.getElementById("account-upload-host");
+    if (host) return host;
+    if (!document.body) return null;
+    host = document.createElement("div");
+    host.id = "account-upload-host";
+    document.body.appendChild(host);
+    return host;
 }
 
 function avatarSourceLabel(value) {
@@ -4521,6 +4546,22 @@ function formatLocalDate(value, options) {
     return date.toLocaleString(undefined, options).replace("24:", "00:");
 }
 
+function formatAccountSignedDate(value) {
+    return formatLocalDate(value, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function formatAccountAge(value) {
+    const time = dateValue(value);
+    if (!time) return "new account";
+    const days = Math.max(0, Math.floor((Date.now() - time) / 86400000));
+    if (days < 1) return "joined today";
+    if (days < 30) return `${days} day${days === 1 ? "" : "s"} old`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} month${months === 1 ? "" : "s"} old`;
+    const years = Math.floor(days / 365);
+    return `${years} year${years === 1 ? "" : "s"} old`;
+}
+
 function formatRelativeTime(value) {
     const time = dateValue(value);
     if (!time) return "recently";
@@ -5406,6 +5447,7 @@ function renderPlayerProfileHero(profile) {
                     <p class="panel-kicker">${account ? "Linked Account" : "Tracked Player"}</p>
                     <h3>${escapeHtml(profile.name || "Unknown")}</h3>
                     <span>${account ? escapeHtml(accountDisplayName(account)) : "No website account linked yet"}</span>
+                    ${account ? renderAccountSignedDate(account) : ""}
                     <div class="account-badge-row">
                         ${badges.length ? badges.map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
                     </div>

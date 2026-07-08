@@ -3625,8 +3625,16 @@ img.identity-avatar {
 .account-panel p,
 .account-login-panel p,
 .player-profile-identity > div > span,
+.account-signed-date,
 .account-form small {
     color: var(--muted);
+}
+
+.account-signed-date {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.82rem;
+    letter-spacing: 0;
 }
 
 .profile-bg-br {
@@ -3936,15 +3944,18 @@ img.identity-avatar {
     position: fixed;
     inset: 0;
     z-index: 70;
-    display: grid;
-    place-items: center;
-    padding: 18px;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    overflow-y: auto;
+    padding: clamp(24px, 10vh, 84px) 18px 18px;
     background: rgba(3, 6, 10, 0.72);
     backdrop-filter: blur(10px);
 }
 
 .account-upload-dialog {
     width: min(520px, calc(100vw - 32px));
+    flex: 0 0 auto;
     border: 1px solid var(--line);
     border-radius: 18px;
     padding: 18px;
