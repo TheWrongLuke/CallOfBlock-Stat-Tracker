@@ -5068,9 +5068,6 @@ function renderPagination(totalRows, totalPages) {
 
 async function submitAccountForm(form) {
     if (!state.authClient || !state.authSession?.user || !state.authProfileExtended) return;
-    state.accountSaving = true;
-    state.accountMessage = "";
-    render();
 
     try {
         const formData = new FormData(form);
@@ -5101,6 +5098,10 @@ async function submitAccountForm(form) {
             ...inferredLink
         };
 
+        state.accountSaving = true;
+        state.accountMessage = "";
+        setAccountFormSaving(form, true);
+
         const { data, error } = await state.authClient
             .from("profiles")
             .update(payload)
@@ -5119,6 +5120,19 @@ async function submitAccountForm(form) {
         state.accountSaving = false;
         render();
     }
+}
+
+function setAccountFormSaving(form, saving) {
+    const button = form?.querySelector("button[type='submit']");
+    if (!button) return;
+    if (saving) {
+        button.dataset.idleText = button.textContent;
+        button.textContent = "Saving...";
+        button.disabled = true;
+        return;
+    }
+    button.textContent = button.dataset.idleText || "Save profile";
+    button.disabled = !state.authProfileExtended;
 }
 
 function openAccountUploadDialog(type) {
