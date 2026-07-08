@@ -3658,6 +3658,33 @@ img.identity-avatar {
         linear-gradient(180deg, rgba(4, 8, 14, 0.98), rgba(11, 15, 24, 0.98));
 }
 
+.account-hero.profile-bg-br,
+.player-profile-hero.profile-bg-br {
+    background:
+        linear-gradient(90deg, rgba(9, 13, 16, 0.84), rgba(9, 13, 16, 0.34)),
+        radial-gradient(circle at 82% 28%, rgba(255, 127, 114, 0.42), transparent 30%),
+        linear-gradient(135deg, rgba(255, 127, 114, 0.52), rgba(255, 203, 107, 0.16) 48%, transparent 72%),
+        var(--panel-strong);
+}
+
+.account-hero.profile-bg-dm,
+.player-profile-hero.profile-bg-dm {
+    background:
+        linear-gradient(90deg, rgba(9, 13, 16, 0.84), rgba(9, 13, 16, 0.34)),
+        radial-gradient(circle at 82% 28%, rgba(126, 200, 255, 0.44), transparent 30%),
+        linear-gradient(135deg, rgba(126, 200, 255, 0.54), rgba(133, 232, 157, 0.14) 48%, transparent 72%),
+        var(--panel-strong);
+}
+
+.account-hero.profile-bg-night,
+.player-profile-hero.profile-bg-night {
+    background:
+        linear-gradient(90deg, rgba(4, 8, 14, 0.82), rgba(4, 8, 14, 0.32)),
+        radial-gradient(circle at 82% 28%, rgba(140, 255, 106, 0.3), transparent 30%),
+        linear-gradient(135deg, rgba(140, 255, 106, 0.3), rgba(126, 200, 255, 0.1) 48%, transparent 72%),
+        linear-gradient(180deg, rgba(4, 8, 14, 0.98), rgba(11, 15, 24, 0.98));
+}
+
 .profile-bg-custom {
     min-height: 260px;
     background:
