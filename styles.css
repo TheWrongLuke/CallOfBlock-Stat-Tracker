@@ -3303,6 +3303,7 @@ img.identity-avatar {
 .profile-badge {
     display: inline-flex;
     align-items: center;
+    gap: 6px;
     min-height: 28px;
     border: 1px solid rgba(255, 203, 107, 0.24);
     border-radius: 999px;
@@ -3313,6 +3314,35 @@ img.identity-avatar {
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
+}
+
+.badge-icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    display: inline-grid;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--gold);
+    font-size: 0.55rem;
+    line-height: 1;
+}
+
+.badge-icon img,
+.badge-icon-fallback {
+    width: 100%;
+    height: 100%;
+}
+
+.badge-icon img {
+    object-fit: cover;
+}
+
+.badge-icon-fallback {
+    display: grid;
+    place-items: center;
 }
 
 .profile-badge.empty {
@@ -3689,8 +3719,8 @@ img.identity-avatar {
 }
 
 .account-form input[type="text"],
-.account-form input[type="file"],
-.account-form select {
+.account-form select,
+.account-upload-dialog input[type="file"] {
     width: 100%;
     min-height: 44px;
     border: 1px solid var(--line);
@@ -3699,6 +3729,103 @@ img.identity-avatar {
     background: rgba(0, 0, 0, 0.25);
     color: var(--text);
     font: inherit;
+}
+
+.account-customizer {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1fr);
+    gap: 18px;
+    align-items: stretch;
+}
+
+.account-custom-fields {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+}
+
+.account-custom-preview {
+    min-height: 320px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 18px;
+    display: grid;
+    align-content: end;
+    justify-items: start;
+    gap: 14px;
+    overflow: hidden;
+    background:
+        linear-gradient(180deg, rgba(9, 13, 16, 0.06), rgba(9, 13, 16, 0.84)),
+        var(--profile-bg-image, none),
+        var(--panel-strong);
+    background-size: cover;
+    background-position: center;
+}
+
+.account-preview-avatar {
+    width: 150px;
+    height: 150px;
+    border-radius: 24px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.account-preview-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.account-preview-avatar img[src*="mc-heads"] {
+    image-rendering: pixelated;
+}
+
+.account-custom-preview strong {
+    display: block;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: clamp(1.7rem, 3vw, 2.7rem);
+    line-height: 0.96;
+}
+
+.account-custom-preview span {
+    color: var(--muted);
+}
+
+.account-custom-preview.profile-bg-br {
+    background:
+        linear-gradient(180deg, rgba(9, 13, 16, 0.08), rgba(9, 13, 16, 0.86)),
+        linear-gradient(135deg, rgba(255, 127, 114, 0.28), transparent 48%),
+        var(--panel-strong);
+}
+
+.account-custom-preview.profile-bg-dm {
+    background:
+        linear-gradient(180deg, rgba(9, 13, 16, 0.08), rgba(9, 13, 16, 0.86)),
+        linear-gradient(135deg, rgba(126, 200, 255, 0.28), transparent 48%),
+        var(--panel-strong);
+}
+
+.account-custom-preview.profile-bg-night {
+    background:
+        linear-gradient(180deg, rgba(9, 13, 16, 0.08), rgba(9, 13, 16, 0.88)),
+        linear-gradient(135deg, rgba(140, 255, 106, 0.18), transparent 40%),
+        linear-gradient(180deg, rgba(4, 8, 14, 0.98), rgba(11, 15, 24, 0.98));
+}
+
+.account-custom-preview.profile-bg-custom {
+    background:
+        linear-gradient(180deg, rgba(9, 13, 16, 0.08), rgba(9, 13, 16, 0.86)),
+        var(--profile-bg-image, none),
+        var(--panel-strong);
+    background-size: cover;
+    background-position: center;
+}
+
+.media-upload-button {
+    justify-self: start;
+    min-height: 38px;
+    border-radius: 999px;
+    padding: 8px 12px;
 }
 
 .account-form-grid {
@@ -3715,6 +3842,10 @@ img.identity-avatar {
 
 .account-option-row {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.account-option-row.compact {
+    grid-template-columns: 1fr;
 }
 
 .account-option-row label,
@@ -3740,6 +3871,29 @@ img.identity-avatar {
     display: grid;
     gap: 5px;
     position: relative;
+}
+
+.badge-picker-main {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+}
+
+.badge-picker-main .badge-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+}
+
+.badge-picker-main strong {
+    display: block;
+    font-size: 0.82rem;
+}
+
+.badge-picker-main small {
+    display: block;
+    margin-top: 2px;
 }
 
 .badge-picker label.locked {
@@ -3776,6 +3930,45 @@ img.identity-avatar {
     padding: 12px 14px;
     background: rgba(255, 203, 107, 0.1);
     color: #ffe2a3;
+}
+
+.account-upload-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: rgba(3, 6, 10, 0.72);
+    backdrop-filter: blur(10px);
+}
+
+.account-upload-dialog {
+    width: min(520px, calc(100vw - 32px));
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 18px;
+    display: grid;
+    gap: 14px;
+    background: rgba(15, 23, 34, 0.98);
+    box-shadow: var(--shadow);
+}
+
+.account-upload-dialog h3,
+.account-upload-dialog p {
+    margin: 0;
+}
+
+.account-upload-dialog label {
+    display: grid;
+    gap: 8px;
+}
+
+.account-upload-dialog label > span {
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
 }
 
 .mission-list {
@@ -4018,6 +4211,7 @@ code {
     .playtests-layout,
     .playtest-detail-head,
     .account-hero,
+    .account-customizer,
     .player-profile-hero,
     .playtest-summary-grid,
     .calendar-vote-grid,

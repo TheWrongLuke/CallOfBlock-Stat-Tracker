@@ -140,6 +140,8 @@ const state = {
     accountProfilesReady: false,
     accountMessage: "",
     accountSaving: false,
+    accountUploadDialog: "",
+    accountUploading: false,
     pollMs: DEFAULT_API_POLL_MS,
     refreshTimer: null,
     dataSignature: "",
@@ -380,6 +382,20 @@ function bindStaticEvents() {
             return;
         }
 
+        const uploadOpenButton = event.target.closest("[data-account-upload-open]");
+        if (uploadOpenButton) {
+            event.preventDefault();
+            openAccountUploadDialog(uploadOpenButton.dataset.accountUploadOpen);
+            return;
+        }
+
+        const uploadCloseButton = event.target.closest("[data-account-upload-close]");
+        if (uploadCloseButton || event.target.matches("[data-account-upload-backdrop]")) {
+            event.preventDefault();
+            closeAccountUploadDialog();
+            return;
+        }
+
         const contactButton = event.target.closest("[data-contact-email]");
         if (contactButton) {
             event.preventDefault();
@@ -394,9 +410,25 @@ function bindStaticEvents() {
             return;
         }
 
+        if (event.target.matches("[data-account-upload-form]")) {
+            event.preventDefault();
+            void submitAccountUploadForm(event.target);
+            return;
+        }
+
         if (!event.target.matches("[data-confirm-dialog-form]")) return;
         event.preventDefault();
         void submitConfirmDialog(event.target);
+    });
+
+    document.addEventListener("change", (event) => {
+        if (event.target.matches("[name='avatarSource']") && event.target.value === "custom") {
+            openAccountUploadDialog("avatar");
+            return;
+        }
+        if (event.target.matches("[name='profileBackground']") && event.target.value === "custom") {
+            openAccountUploadDialog("background");
+        }
     });
 
     document.addEventListener("mouseover", handleBadgeSeenEvent);
@@ -1408,6 +1440,7 @@ function renderAccountPage() {
         ${linkedProfile ? renderAccountStatsPanel(linkedProfile, overall) : ""}
         ${renderAccountCustomizeForm(account, badgeState)}
         ${renderAccountMissions(account, linkedProfile, badgeState)}
+        ${renderAccountUploadDialog()}
         ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
     `;
 }
@@ -1469,6 +1502,9 @@ function renderAccountCustomizeForm(account, badgeState) {
     const background = cleanProfileBackground(account.profile_background, account, badgeState);
     const border = cleanPfpBorder(account.pfp_border, account, badgeState);
     const selectedIds = selectedAccountBadgeIds(account, badgeState.unlockedIds);
+    const linkedProfile = linkedStatsProfile();
+    const avatarUrl = accountAvatarUrl(account, linkedProfile, 180);
+    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 180);
 
     return `
         <form class="account-panel account-form" data-account-form>
@@ -1476,54 +1512,62 @@ function renderAccountCustomizeForm(account, badgeState) {
                 <p class="panel-kicker">Personalization</p>
                 <h3>Customize profile</h3>
             </div>
-            <label>
-                <span>Display name</span>
-                <input name="displayName" type="text" maxlength="32" value="${escapeHtml(account.display_name || account.username || "")}" placeholder="Display name">
-            </label>
-            <fieldset>
-                <legend>Profile picture</legend>
-                <div class="account-option-row">
-                    ${AVATAR_SOURCE_OPTIONS.map((option) => `
+            <div class="account-customizer">
+                <div class="account-custom-fields">
+                    <label>
+                        <span>Display name</span>
+                        <input name="displayName" type="text" maxlength="32" value="${escapeHtml(account.display_name || account.username || "")}" placeholder="Display name">
+                    </label>
+                    <fieldset>
+                        <legend>Profile picture</legend>
+                        <div class="account-option-row compact">
+                            ${AVATAR_SOURCE_OPTIONS.map((option) => `
+                                <label>
+                                    <input type="radio" name="avatarSource" value="${escapeHtml(option.id)}" ${avatarSource === option.id ? "checked" : ""}>
+                                    <span>${escapeHtml(option.label)}</span>
+                                </label>
+                            `).join("")}
+                        </div>
+                        <button class="media-upload-button" type="button" data-account-upload-open="avatar">Upload custom icon</button>
+                        <small>Recommended icon: 512x512 square PNG/WebP, max 1 MB.</small>
+                    </fieldset>
+                    <div class="account-form-grid">
                         <label>
-                            <input type="radio" name="avatarSource" value="${escapeHtml(option.id)}" ${avatarSource === option.id ? "checked" : ""}>
-                            <span>${escapeHtml(option.label)}</span>
+                            <span>Background</span>
+                            <select name="profileBackground">
+                                ${PROFILE_BACKGROUNDS.map((option) => {
+                                    const unlocked = profileBackgroundUnlocked(option.id, account, badgeState);
+                                    return `<option value="${escapeHtml(option.id)}" ${background === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(unlocked ? option.label : `${option.label} - locked`)}</option>`;
+                                }).join("")}
+                            </select>
                         </label>
-                    `).join("")}
+                        <label>
+                            <span>PFP border</span>
+                            <select name="pfpBorder">
+                                ${PFP_BORDERS.map((option) => {
+                                    const unlocked = pfpBorderUnlocked(option.id, account, badgeState);
+                                    return `<option value="${escapeHtml(option.id)}" ${border === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(unlocked ? option.label : `${option.label} - locked`)}</option>`;
+                                }).join("")}
+                            </select>
+                        </label>
+                    </div>
+                    <button class="media-upload-button" type="button" data-account-upload-open="background">Upload custom background</button>
+                    <small>Recommended banner: 1600x500 PNG/WebP, or 1920x600 for wide screens. Max 1 MB.</small>
                 </div>
-            </fieldset>
-            <label>
-                <span>Custom picture upload</span>
-                <input name="avatarFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
-                <small>Recommended 512x512 square PNG/WebP. Max 1 MB. This same icon is used on your account, leaderboard, preview, and stats profile.</small>
-            </label>
-            <label>
-                <span>Custom background PNG</span>
-                <input name="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
-                <small>Recommended 1600x500 banner PNG/WebP, or 1920x600 for sharper wide screens. Max 1 MB. Select Custom PNG after uploading.</small>
-            </label>
-            <div class="account-form-grid">
-                <label>
-                    <span>Background</span>
-                    <select name="profileBackground">
-                        ${PROFILE_BACKGROUNDS.map((option) => {
-                            const unlocked = profileBackgroundUnlocked(option.id, account, badgeState);
-                            return `<option value="${escapeHtml(option.id)}" ${background === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(unlocked ? option.label : `${option.label} - locked`)}</option>`;
-                        }).join("")}
-                    </select>
-                </label>
-                <label>
-                    <span>PFP border</span>
-                    <select name="pfpBorder">
-                        ${PFP_BORDERS.map((option) => {
-                            const unlocked = pfpBorderUnlocked(option.id, account, badgeState);
-                            return `<option value="${escapeHtml(option.id)}" ${border === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(unlocked ? option.label : `${option.label} - locked`)}</option>`;
-                        }).join("")}
-                    </select>
-                </label>
+                <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Profile preview">
+                    <span class="account-preview-avatar ${avatarFrameClass(account)}">
+                        <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+                    </span>
+                    <div>
+                        <p class="panel-kicker">Preview</p>
+                        <strong>${escapeHtml(accountDisplayName(account))}</strong>
+                        <span>${escapeHtml(avatarSourceLabel(avatarSource))} icon - ${escapeHtml(backgroundLabel(background))}</span>
+                    </div>
+                </aside>
             </div>
             <fieldset>
                 <legend>Equip badges</legend>
-                <small>${badgeState.unlockedIds.size} unlocked. Badges are only shown on your public profile after you check them here.</small>
+                <small>${badgeState.unlockedIds.size} unlocked. Badges are only shown on your public profile after you check them here. Recommended badge icon: 256x256 transparent PNG/WebP.</small>
                 <div class="badge-picker">
                     ${BADGE_CATALOG.map((badge) => {
                         const unlocked = badgeState.unlockedIds.has(badge.id);
@@ -1531,8 +1575,13 @@ function renderAccountCustomizeForm(account, badgeState) {
                         return `
                             <label class="${unlocked ? "" : "locked"} ${isNew ? "badge-new" : ""}" data-badge-id="${escapeHtml(badge.id)}">
                                 <input type="checkbox" name="selectedBadges" value="${escapeHtml(badge.id)}" ${selectedIds.has(badge.id) ? "checked" : ""} ${unlocked ? "" : "disabled"}>
-                                <span>${escapeHtml(badge.label)}</span>
-                                <small>${escapeHtml(unlocked ? badge.description : `Locked: ${badge.description}`)}</small>
+                                <span class="badge-picker-main">
+                                    ${renderBadgeIcon(badge)}
+                                    <span>
+                                        <strong>${escapeHtml(badge.label)}</strong>
+                                        <small>${escapeHtml(unlocked ? badge.description : `Locked: ${badge.description}`)}</small>
+                                    </span>
+                                </span>
                             </label>
                         `;
                     }).join("")}
@@ -1574,6 +1623,44 @@ function renderAccountMissions(account, profile, badgeState) {
             <p class="mode-empty">${badgeState.unlockedIds.size} badge${badgeState.unlockedIds.size === 1 ? "" : "s"} unlocked. Missions are lightweight XP milestones for now.</p>
         </section>
     `;
+}
+
+function renderAccountUploadDialog() {
+    const type = state.accountUploadDialog;
+    if (type !== "avatar" && type !== "background") return "";
+    const isAvatar = type === "avatar";
+    const title = isAvatar ? "Upload custom icon" : "Upload custom background";
+    const help = isAvatar
+        ? "Use a 512x512 square PNG/WebP under 1 MB. This icon is used on your account, leaderboard row, preview, and full stats profile."
+        : "Use a 1600x500 PNG/WebP banner under 1 MB, or 1920x600 for sharper wide screens. The image fills the profile header.";
+    return `
+        <div class="account-upload-backdrop" data-account-upload-backdrop>
+            <form class="account-upload-dialog" data-account-upload-form="${escapeHtml(type)}">
+                <div class="date-card-topline">
+                    <p class="panel-kicker">${escapeHtml(isAvatar ? "Profile Icon" : "Profile Banner")}</p>
+                    <button type="button" class="modal-icon-button" data-account-upload-close aria-label="Close upload dialog">x</button>
+                </div>
+                <h3>${escapeHtml(title)}</h3>
+                <p>${escapeHtml(help)}</p>
+                <label>
+                    <span>${escapeHtml(isAvatar ? "Icon image" : "Banner image")}</span>
+                    <input name="mediaFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required>
+                </label>
+                <div class="date-admin-actions modal-actions">
+                    <button type="button" data-account-upload-close>Cancel</button>
+                    <button type="submit" ${state.accountUploading ? "disabled" : ""}>${state.accountUploading ? "Uploading..." : "Upload and use"}</button>
+                </div>
+            </form>
+        </div>
+    `;
+}
+
+function avatarSourceLabel(value) {
+    return AVATAR_SOURCE_OPTIONS.find((option) => option.id === value)?.label || "Minecraft skin";
+}
+
+function backgroundLabel(value) {
+    return PROFILE_BACKGROUNDS.find((option) => option.id === value)?.label || "Default";
 }
 
 function renderHome() {
@@ -4872,19 +4959,9 @@ async function submitAccountForm(form) {
             .map((value) => String(value || "").trim())
             .filter((id) => badgeState.unlockedIds.has(id))
             .slice(0, 5);
-        let customAvatarUrl = state.authProfile?.custom_avatar_url || "";
-        const file = formData.get("avatarFile");
-        if (file instanceof File && file.size > 0) {
-            customAvatarUrl = await uploadProfileMedia(file, "avatar");
-        }
-        let customBackgroundUrl = state.authProfile?.custom_background_url || "";
-        const backgroundFile = formData.get("backgroundFile");
-        if (backgroundFile instanceof File && backgroundFile.size > 0) {
-            customBackgroundUrl = await uploadProfileMedia(backgroundFile, "background");
-        }
-        const requestedBackground = backgroundFile instanceof File && backgroundFile.size > 0
-            ? "custom"
-            : formData.get("profileBackground");
+        const customAvatarUrl = state.authProfile?.custom_avatar_url || "";
+        const customBackgroundUrl = state.authProfile?.custom_background_url || "";
+        const requestedBackground = formData.get("profileBackground");
 
         const badgeStateAfterUpload = accountBadgeState({
             ...state.authProfile,
@@ -4916,6 +4993,56 @@ async function submitAccountForm(form) {
         state.accountMessage = error?.message || "Could not save profile right now.";
     } finally {
         state.accountSaving = false;
+        render();
+    }
+}
+
+function openAccountUploadDialog(type) {
+    if (type !== "avatar" && type !== "background") return;
+    if (!isDiscordLoggedIn()) return;
+    state.accountUploadDialog = type;
+    state.accountMessage = "";
+    render();
+}
+
+function closeAccountUploadDialog() {
+    state.accountUploadDialog = "";
+    state.accountUploading = false;
+    render();
+}
+
+async function submitAccountUploadForm(form) {
+    const type = form.dataset.accountUploadForm;
+    if ((type !== "avatar" && type !== "background") || !state.authClient || !state.authSession?.user) return;
+    const file = new FormData(form).get("mediaFile");
+    if (!(file instanceof File) || file.size <= 0) return;
+
+    state.accountUploading = true;
+    state.accountMessage = "";
+    render();
+
+    try {
+        const url = await uploadProfileMedia(file, type);
+        const payload = type === "avatar"
+            ? { custom_avatar_url: url, avatar_source: "custom" }
+            : { custom_background_url: url, profile_background: "custom" };
+        const { data, error } = await state.authClient
+            .from("profiles")
+            .update(payload)
+            .eq("id", state.authSession.user.id)
+            .select(PROFILE_SELECT_COLUMNS)
+            .single();
+        if (error) throw error;
+
+        applyPlaytestProfile(data);
+        await loadAccountProfiles();
+        state.accountUploadDialog = "";
+        state.accountMessage = type === "avatar" ? "Custom icon uploaded." : "Custom background uploaded.";
+    } catch (error) {
+        console.error("Failed to upload account media", error);
+        state.accountMessage = error?.message || "Could not upload that image.";
+    } finally {
+        state.accountUploading = false;
         render();
     }
 }
@@ -5033,7 +5160,27 @@ function safeCssUrl(value) {
 }
 
 function renderProfileBadge(badge) {
-    return `<span class="profile-badge badge-${escapeHtml(badge.id)}" title="${escapeHtml(badge.description)}">${escapeHtml(badge.label)}</span>`;
+    return `<span class="profile-badge badge-${escapeHtml(badge.id)}" title="${escapeHtml(badge.description)}">${renderBadgeIcon(badge)}<span>${escapeHtml(badge.label)}</span></span>`;
+}
+
+function renderBadgeIcon(badge) {
+    const label = badge?.label || "Badge";
+    return `
+        <span class="badge-icon" aria-hidden="true">
+            <img src="${escapeHtml(badgeIconUrl(badge))}" alt="" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
+            <span class="badge-icon-fallback" hidden>${escapeHtml(badgeInitials(label))}</span>
+        </span>
+    `;
+}
+
+function badgeIconUrl(badge) {
+    return badge?.icon || `./assets/badges/${encodeURIComponent(badge?.id || "default")}.png`;
+}
+
+function badgeInitials(label) {
+    const words = String(label || "Badge").trim().split(/\s+/).filter(Boolean);
+    if (words.length >= 2) return `${words[0][0] || ""}${words[1][0] || ""}`.toUpperCase();
+    return (words[0] || "B").slice(0, 2).toUpperCase();
 }
 
 function accountBadgeState(account, profile) {
