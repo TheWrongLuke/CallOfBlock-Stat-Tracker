@@ -5076,6 +5076,7 @@ async function submitAccountForm(form) {
         const formData = new FormData(form);
         const linkedProfile = linkedStatsProfile();
         const badgeState = accountBadgeState(state.authProfile, linkedProfile);
+        const inferredLink = inferredMinecraftLinkPayload(state.authProfile, linkedProfile);
         const selectedBadges = formData
             .getAll("selectedBadges")
             .map((value) => String(value || "").trim())
@@ -5096,7 +5097,8 @@ async function submitAccountForm(form) {
             custom_background_url: customBackgroundUrl || null,
             profile_background: cleanProfileBackground(requestedBackground, { ...state.authProfile, custom_background_url: customBackgroundUrl }, badgeStateAfterUpload),
             pfp_border: cleanPfpBorder(formData.get("pfpBorder"), state.authProfile, badgeState),
-            selected_badges: selectedBadges
+            selected_badges: selectedBadges,
+            ...inferredLink
         };
 
         const { data, error } = await state.authClient
@@ -5145,9 +5147,10 @@ async function submitAccountUploadForm(form) {
 
     try {
         const url = await uploadProfileMedia(file, type);
+        const inferredLink = inferredMinecraftLinkPayload(state.authProfile, linkedStatsProfile());
         const payload = type === "avatar"
-            ? { custom_avatar_url: url, avatar_source: "custom" }
-            : { custom_background_url: url, profile_background: "custom" };
+            ? { custom_avatar_url: url, avatar_source: "custom", ...inferredLink }
+            : { custom_background_url: url, profile_background: "custom", ...inferredLink };
         const { data, error } = await state.authClient
             .from("profiles")
             .update(payload)
@@ -5203,9 +5206,9 @@ function accountLinkedStatsProfile(account) {
         const byId = profileById(playerId);
         if (byId) return byId;
     }
-    const nameKey = normalizePlayerName(account.minecraft_player_name);
-    if (!nameKey) return null;
-    return state.cache.profiles.find((profile) => normalizePlayerName(profile.name) === nameKey) || null;
+    const nameKeys = accountMinecraftNameKeys(account);
+    if (!nameKeys.size) return null;
+    return state.cache.profiles.find((profile) => nameKeys.has(normalizePlayerName(profile.name))) || null;
 }
 
 function accountProfileForPlayer(player, profile) {
@@ -5216,9 +5219,24 @@ function accountProfileForPlayer(player, profile) {
     return accountProfileCandidates().find((account) => {
         if (account.minecraft_player_id && playerIds.has(String(account.minecraft_player_id).trim())) return true;
         if (account.minecraft_player_uuid && playerIds.has(String(account.minecraft_player_uuid).trim())) return true;
-        if (account.minecraft_player_name && normalizePlayerName(account.minecraft_player_name) === nameKey) return true;
+        if (nameKey && accountMinecraftNameKeys(account).has(nameKey)) return true;
         return false;
     }) || null;
+}
+
+function accountMinecraftNameKeys(account) {
+    const names = account?.minecraft_player_name
+        ? [account.minecraft_player_name]
+        : [account?.display_name, account?.username];
+    return new Set(names.map(normalizePlayerName).filter(Boolean));
+}
+
+function inferredMinecraftLinkPayload(account, profile) {
+    if (!account || !profile?.playerId || !profile?.name) return {};
+    const payload = {};
+    if (!String(account.minecraft_player_id || "").trim()) payload.minecraft_player_id = profile.playerId;
+    if (!String(account.minecraft_player_name || "").trim()) payload.minecraft_player_name = profile.name;
+    return payload;
 }
 
 function accountProfileCandidates() {
