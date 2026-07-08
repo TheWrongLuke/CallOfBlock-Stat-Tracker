@@ -1459,11 +1459,11 @@ function renderAccountPage() {
         </section>
 
         ${schemaNote}
+        ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
         ${renderAccountLinkPanel(account, linkedProfile)}
         ${linkedProfile ? renderAccountStatsPanel(linkedProfile, overall) : ""}
         ${renderAccountCustomizeForm(account, badgeState)}
         ${renderAccountMissions(account, linkedProfile, badgeState)}
-        ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
     `;
 }
 
@@ -5070,32 +5070,26 @@ async function submitAccountForm(form) {
     if (!state.authClient || !state.authSession?.user || !state.authProfileExtended) return;
 
     try {
-        const formData = new FormData(form);
+        const draft = readAccountFormDraft(form);
         const linkedProfile = linkedStatsProfile();
         const badgeState = accountBadgeState(state.authProfile, linkedProfile);
         const inferredLink = inferredMinecraftLinkPayload(state.authProfile, linkedProfile);
-        const selectedBadges = formData
-            .getAll("selectedBadges")
-            .map((value) => String(value || "").trim())
-            .filter((id) => badgeState.unlockedIds.has(id))
-            .slice(0, 5);
+        const selectedBadges = draft.selectedBadges.filter((id) => badgeState.unlockedIds.has(id)).slice(0, 5);
         const customAvatarUrl = state.authProfile?.custom_avatar_url || "";
         const customBackgroundUrl = state.authProfile?.custom_background_url || "";
-        const requestedBackground = formData.get("profileBackground");
 
         const badgeStateAfterUpload = accountBadgeState({
             ...state.authProfile,
             custom_background_url: customBackgroundUrl
         }, linkedProfile);
         const payload = {
-            display_name: cleanDisplayName(formData.get("displayName")),
-            avatar_source: cleanAvatarSource(formData.get("avatarSource")),
+            display_name: cleanDisplayName(draft.displayName),
+            avatar_source: draft.avatarSource,
             custom_avatar_url: customAvatarUrl || null,
             custom_background_url: customBackgroundUrl || null,
-            profile_background: cleanProfileBackground(requestedBackground, { ...state.authProfile, custom_background_url: customBackgroundUrl }, badgeStateAfterUpload),
-            pfp_border: cleanPfpBorder(formData.get("pfpBorder"), state.authProfile, badgeState),
-            selected_badges: selectedBadges,
-            ...inferredLink
+            profile_background: cleanProfileBackground(draft.profileBackground, { ...state.authProfile, custom_background_url: customBackgroundUrl }, badgeStateAfterUpload),
+            pfp_border: cleanPfpBorder(draft.pfpBorder, state.authProfile, badgeState),
+            selected_badges: selectedBadges
         };
 
         state.accountSaving = true;
@@ -5109,16 +5103,60 @@ async function submitAccountForm(form) {
             .select(PROFILE_SELECT_COLUMNS)
             .single();
         if (error) throw error;
+        verifySavedProfile(data, payload);
 
-        applyPlaytestProfile(data);
+        const linkResult = await saveInferredMinecraftLink(inferredLink);
+        applyPlaytestProfile(linkResult.profile || data);
         await loadAccountProfiles();
-        state.accountMessage = "Profile saved.";
+        state.accountMessage = linkResult.warning ? `Profile saved. ${linkResult.warning}` : "Profile saved.";
     } catch (error) {
         console.error("Failed to save account profile", error);
         state.accountMessage = error?.message || "Could not save profile right now.";
     } finally {
         state.accountSaving = false;
         render();
+    }
+}
+
+function readAccountFormDraft(form) {
+    const checkedAvatar = form?.querySelector("input[name='avatarSource']:checked");
+    const displayInput = form?.querySelector("[name='displayName']");
+    const backgroundSelect = form?.querySelector("[name='profileBackground']");
+    const borderSelect = form?.querySelector("[name='pfpBorder']");
+    const selectedBadges = [...(form?.querySelectorAll("input[name='selectedBadges']:checked") || [])]
+        .map((input) => String(input.value || "").trim())
+        .filter(Boolean);
+
+    return {
+        displayName: displayInput?.value || "",
+        avatarSource: cleanAvatarSource(checkedAvatar?.value),
+        profileBackground: cleanProfileBackground(backgroundSelect?.value, state.authProfile, accountBadgeState(state.authProfile, linkedStatsProfile())),
+        pfpBorder: cleanPfpBorder(borderSelect?.value, state.authProfile, accountBadgeState(state.authProfile, linkedStatsProfile())),
+        selectedBadges
+    };
+}
+
+function verifySavedProfile(saved, payload) {
+    if (!saved?.id) throw new Error("Supabase did not return the saved profile row.");
+    const checks = [
+        ["display name", saved.display_name || "", payload.display_name || ""],
+        ["profile picture", cleanAvatarSource(saved.avatar_source), cleanAvatarSource(payload.avatar_source)],
+        ["background", cleanProfileBackground(saved.profile_background, saved), cleanProfileBackground(payload.profile_background, saved)],
+        ["PFP border", cleanPfpBorder(saved.pfp_border, saved), cleanPfpBorder(payload.pfp_border, saved)]
+    ];
+
+    const selectedSaved = arrayField(saved.selected_badges).sort().join(",");
+    const selectedWanted = arrayField(payload.selected_badges).sort().join(",");
+    checks.push(["badges", selectedSaved, selectedWanted]);
+    if (payload.minecraft_player_id) checks.push(["Minecraft player id", saved.minecraft_player_id || "", payload.minecraft_player_id]);
+    if (payload.minecraft_player_name) checks.push(["Minecraft player name", saved.minecraft_player_name || "", payload.minecraft_player_name]);
+
+    const mismatches = checks
+        .filter(([, actual, expected]) => String(actual) !== String(expected))
+        .map(([label, actual, expected]) => `${label} saved as "${actual || "empty"}" instead of "${expected || "empty"}"`);
+
+    if (mismatches.length) {
+        throw new Error(`Supabase did not save the profile change: ${mismatches.join("; ")}.`);
     }
 }
 
@@ -5161,10 +5199,9 @@ async function submitAccountUploadForm(form) {
 
     try {
         const url = await uploadProfileMedia(file, type);
-        const inferredLink = inferredMinecraftLinkPayload(state.authProfile, linkedStatsProfile());
         const payload = type === "avatar"
-            ? { custom_avatar_url: url, avatar_source: "custom", ...inferredLink }
-            : { custom_background_url: url, profile_background: "custom", ...inferredLink };
+            ? { custom_avatar_url: url, avatar_source: "custom" }
+            : { custom_background_url: url, profile_background: "custom" };
         const { data, error } = await state.authClient
             .from("profiles")
             .update(payload)
@@ -5173,10 +5210,12 @@ async function submitAccountUploadForm(form) {
             .single();
         if (error) throw error;
 
-        applyPlaytestProfile(data);
+        const linkResult = await saveInferredMinecraftLink(inferredMinecraftLinkPayload(state.authProfile, linkedStatsProfile()));
+        applyPlaytestProfile(linkResult.profile || data);
         await loadAccountProfiles();
         state.accountUploadDialog = "";
-        state.accountMessage = type === "avatar" ? "Custom icon uploaded." : "Custom background uploaded.";
+        const uploadMessage = type === "avatar" ? "Custom icon uploaded." : "Custom background uploaded.";
+        state.accountMessage = linkResult.warning ? `${uploadMessage} ${linkResult.warning}` : uploadMessage;
     } catch (error) {
         console.error("Failed to upload account media", error);
         state.accountMessage = error?.message || "Could not upload that image.";
@@ -5251,6 +5290,26 @@ function inferredMinecraftLinkPayload(account, profile) {
     if (!String(account.minecraft_player_id || "").trim()) payload.minecraft_player_id = profile.playerId;
     if (!String(account.minecraft_player_name || "").trim()) payload.minecraft_player_name = profile.name;
     return payload;
+}
+
+async function saveInferredMinecraftLink(payload) {
+    if (!payload?.minecraft_player_id && !payload?.minecraft_player_name) return { profile: null, warning: "" };
+    try {
+        const { data, error } = await state.authClient
+            .from("profiles")
+            .update(payload)
+            .eq("id", state.authSession.user.id)
+            .select(PROFILE_SELECT_COLUMNS)
+            .single();
+        if (error) throw error;
+        return { profile: data, warning: "" };
+    } catch (error) {
+        console.warn("Profile saved, but inferred Minecraft link could not be stored", error);
+        return {
+            profile: null,
+            warning: "Minecraft link was not stored, so run /linkminecraft if the leaderboard icon does not stay linked after renaming."
+        };
+    }
 }
 
 function accountProfileCandidates() {
