@@ -1513,11 +1513,12 @@ function renderAccountLinkPanel(account, linkedProfile) {
 
 function renderAccountStatsPanel(profile, overall) {
     const player = normalizePlayer(overall);
+    const name = playerDisplayName(profile, profile);
     return `
         <section class="account-panel">
             <div>
                 <p class="panel-kicker">Tracked Profile</p>
-                <h3>${escapeHtml(profile.name)}</h3>
+                <h3>${escapeHtml(name)}</h3>
             </div>
             <div class="account-stat-grid">
                 ${renderStatCard("Wins", player.stats.wins)}
@@ -1870,7 +1871,7 @@ function renderFeaturedPlayer(player, rank, modeId) {
     const stats = normalizeStats(player.stats);
     const derived = normalizeDerived(player.derived, stats);
     const profile = profileById(player.playerId);
-    const name = player.name || profile?.name || "Unknown";
+    const name = playerDisplayName(player, profile);
     const modeTab = modeId === "deathmatch" ? "deathmatch" : "battleRoyale";
 
     return `
@@ -4894,6 +4895,7 @@ function renderTable() {
         const stats = normalizeStats(player.stats);
         const derived = normalizeDerived(player.derived, stats);
         const profile = profileById(player.playerId);
+        const name = playerDisplayName(player, profile);
         const tr = document.createElement("tr");
         if (player.playerId === state.selectedId) tr.classList.add("selected");
         tr.dataset.playerId = player.playerId;
@@ -4904,8 +4906,8 @@ function renderTable() {
                 <div class="leaderboard-player">
                     ${renderPlayerAvatar(player, profile, 42, "leaderboard-avatar")}
                     <div class="player-name">
-                        <strong>${escapeHtml(player.name)}</strong>
-                        <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview" aria-label="${escapeHtml(`Open ${player.name} profile`)}">Profile</a>
+                        <strong>${escapeHtml(name)}</strong>
+                        <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview" aria-label="${escapeHtml(`Open ${name} profile`)}">Profile</a>
                     </div>
                 </div>
             </td>
@@ -5207,10 +5209,13 @@ function accountLinkedStatsProfile(account) {
 }
 
 function accountProfileForPlayer(player, profile) {
-    const playerId = player?.playerId || profile?.playerId || "";
+    const playerIds = new Set([player?.playerId, profile?.playerId]
+        .map((id) => String(id || "").trim())
+        .filter(Boolean));
     const nameKey = normalizePlayerName(player?.name || profile?.name || "");
     return accountProfileCandidates().find((account) => {
-        if (account.minecraft_player_id && account.minecraft_player_id === playerId) return true;
+        if (account.minecraft_player_id && playerIds.has(String(account.minecraft_player_id).trim())) return true;
+        if (account.minecraft_player_uuid && playerIds.has(String(account.minecraft_player_uuid).trim())) return true;
         if (account.minecraft_player_name && normalizePlayerName(account.minecraft_player_name) === nameKey) return true;
         return false;
     }) || null;
@@ -5229,6 +5234,11 @@ function accountProfileCandidates() {
 
 function accountDisplayName(account) {
     return String(account?.display_name || account?.username || PLAYTEST_VIEWER.username || "Account").trim();
+}
+
+function playerDisplayName(player, profile) {
+    const account = accountProfileForPlayer(player, profile);
+    return account ? accountDisplayName(account) : String(player?.name || profile?.name || "Unknown").trim();
 }
 
 function renderPlayerAvatar(player, profile, size = 64, extraClass = "") {
@@ -5254,6 +5264,7 @@ function accountMinecraftName(account, profile) {
     return String(
         account?.minecraft_player_name
         || profile?.name
+        || account?.display_name
         || DEFAULT_SKIN_NAME
     ).trim() || DEFAULT_SKIN_NAME;
 }
@@ -5467,7 +5478,7 @@ function normalizePlayerName(name) {
 function renderProfilePreview() {
     const container = document.getElementById("profile-body");
     const profile = profileById(state.selectedId);
-    document.getElementById("profile-title").textContent = profile?.name || "Select a player";
+    document.getElementById("profile-title").textContent = profile ? playerDisplayName(profile, profile) : "Select a player";
 
     if (!profile) {
         container.innerHTML = `<div class="profile-placeholder"><p>Pick a player row to inspect their stats.</p></div>`;
@@ -5476,13 +5487,14 @@ function renderProfilePreview() {
 
     const overall = buildProfileOverall(profile);
     const account = accountProfileForPlayer(profile, profile);
+    const name = playerDisplayName(profile, profile);
     const badges = selectedAccountBadges(account, accountBadgeState(account, profile).unlockedIds);
     container.innerHTML = `
         <div class="profile-preview-head">
             ${renderPlayerAvatar(profile, profile, 96, "profile-preview-avatar")}
             <div>
                 <span>Selected Player</span>
-                <strong>${escapeHtml(profile.name || "Unknown")}</strong>
+                <strong>${escapeHtml(name)}</strong>
                 <div class="account-badge-row compact">
                     ${badges.length ? badges.slice(0, 3).map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
                 </div>
@@ -5509,7 +5521,7 @@ function renderPlayerDetail() {
         return;
     }
 
-    title.textContent = profile.name;
+    title.textContent = playerDisplayName(profile, profile);
     subtitle.textContent = "Stats update when the server publishes new data.";
 
     const tabs = renderPlayerTabs();
@@ -5519,6 +5531,7 @@ function renderPlayerDetail() {
 
 function renderPlayerProfileHero(profile) {
     const account = accountProfileForPlayer(profile, profile);
+    const name = playerDisplayName(profile, profile);
     const overall = buildProfileOverall(profile);
     const player = normalizePlayer(overall);
     const badgeState = accountBadgeState(account, profile);
@@ -5529,8 +5542,8 @@ function renderPlayerProfileHero(profile) {
                 ${renderPlayerAvatar(profile, profile, 128, "player-profile-avatar")}
                 <div>
                     <p class="panel-kicker">${account ? "Linked Account" : "Tracked Player"}</p>
-                    <h3>${escapeHtml(profile.name || "Unknown")}</h3>
-                    <span>${account ? escapeHtml(accountDisplayName(account)) : "No website account linked yet"}</span>
+                    <h3>${escapeHtml(name)}</h3>
+                    <span>${account ? escapeHtml(profile.name || "Linked Minecraft player") : "No website account linked yet"}</span>
                     ${account ? renderAccountSignedDate(account) : ""}
                     <div class="account-badge-row">
                         ${badges.length ? badges.map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
@@ -5743,18 +5756,24 @@ function renderMatchParticipants(match) {
     return `
         <div class="match-expanded">
             <div class="match-roster">
-                ${participants.map((player, index) => `
-                    <article class="roster-row ${player.won ? "winner" : ""}">
-                        <strong>${escapeHtml(match.mode === "battleRoyale" && player.placement ? formatPlacement(player.placement) : `#${index + 1}`)}</strong>
-                        ${player.playerId ? `<a class="roster-player-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview">${escapeHtml(player.name || "Unknown")}</a>` : `<span>${escapeHtml(player.name || "Unknown")}</span>`}
-                        <span>${escapeHtml(String(player.kills || 0))} K</span>
-                        <span>${escapeHtml(String(player.deaths || 0))} D</span>
-                        <span>${formatPercent(rate(player.headshots, player.hits))} HS</span>
-                        <span>${escapeHtml(player.topWeapon || "-")}</span>
-                    </article>
-                `).join("")}
+                ${participants.map((player, index) => renderMatchParticipant(player, index, match)).join("")}
             </div>
         </div>
+    `;
+}
+
+function renderMatchParticipant(player, index, match) {
+    const profile = player.playerId ? profileById(player.playerId) : null;
+    const name = player.playerId ? playerDisplayName(player, profile) : String(player.name || "Unknown");
+    return `
+        <article class="roster-row ${player.won ? "winner" : ""}">
+            <strong>${escapeHtml(match.mode === "battleRoyale" && player.placement ? formatPlacement(player.placement) : `#${index + 1}`)}</strong>
+            ${player.playerId ? `<a class="roster-player-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview">${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}
+            <span>${escapeHtml(String(player.kills || 0))} K</span>
+            <span>${escapeHtml(String(player.deaths || 0))} D</span>
+            <span>${formatPercent(rate(player.headshots, player.hits))} HS</span>
+            <span>${escapeHtml(player.topWeapon || "-")}</span>
+        </article>
     `;
 }
 
@@ -5900,7 +5919,12 @@ function currentLeaderboardRows() {
 }
 
 function rowSearchText(row) {
-    return String(row.name || row.label || row.id || "").toLowerCase();
+    const profile = row.playerId ? profileById(row.playerId) : null;
+    const displayName = row.playerId ? playerDisplayName(row, profile) : "";
+    return [row.name, row.label, row.id, displayName]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
 }
 
 function currentMode() {
