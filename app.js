@@ -382,6 +382,15 @@ function bindStaticEvents() {
             return;
         }
 
+        const customAvatarChoice = event.target.closest("[data-avatar-source-choice='custom']");
+        if (customAvatarChoice) {
+            const customAvatarInput = customAvatarChoice.querySelector("[name='avatarSource']");
+            if (customAvatarInput?.checked) {
+                openAccountUploadDialog("avatar");
+                return;
+            }
+        }
+
         const uploadOpenButton = event.target.closest("[data-account-upload-open]");
         if (uploadOpenButton) {
             event.preventDefault();
@@ -422,12 +431,24 @@ function bindStaticEvents() {
     });
 
     document.addEventListener("change", (event) => {
+        const accountForm = event.target.closest("[data-account-form]");
+        if (accountForm && event.target.matches("[name='avatarSource'], [name='profileBackground'], [name='pfpBorder']")) {
+            updateAccountCustomizePreview(accountForm);
+        }
+
         if (event.target.matches("[name='avatarSource']") && event.target.value === "custom") {
             openAccountUploadDialog("avatar");
             return;
         }
         if (event.target.matches("[name='profileBackground']") && event.target.value === "custom") {
             openAccountUploadDialog("background");
+        }
+    });
+
+    document.addEventListener("input", (event) => {
+        const accountForm = event.target.closest("[data-account-form]");
+        if (accountForm && event.target.matches("[name='displayName']")) {
+            updateAccountCustomizePreview(accountForm);
         }
     });
 
@@ -1533,7 +1554,7 @@ function renderAccountCustomizeForm(account, badgeState) {
                         <legend>Profile picture</legend>
                         <div class="account-option-row compact">
                             ${AVATAR_SOURCE_OPTIONS.map((option) => `
-                                <label${option.id === "custom" ? ` data-account-upload-open="avatar"` : ""}>
+                                <label${option.id === "custom" ? ` data-avatar-source-choice="custom"` : ""}>
                                     <input type="radio" name="avatarSource" value="${escapeHtml(option.id)}" ${avatarSource === option.id ? "checked" : ""}>
                                     <span>${escapeHtml(option.label)}</span>
                                 </label>
@@ -1564,14 +1585,14 @@ function renderAccountCustomizeForm(account, badgeState) {
                         </label>
                     </div>
                 </div>
-                <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Profile preview">
-                    <span class="account-preview-avatar ${avatarFrameClass(account)}">
-                        <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+                <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Profile preview" data-account-preview>
+                    <span class="account-preview-avatar ${avatarFrameClass(account)}" data-account-preview-avatar>
+                        <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-account-preview-img onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
                     </span>
                     <div>
                         <p class="panel-kicker">Preview</p>
-                        <strong>${escapeHtml(accountDisplayName(account))}</strong>
-                        <span>${escapeHtml(avatarSourceLabel(avatarSource))} icon - ${escapeHtml(backgroundLabel(background))}</span>
+                        <strong data-account-preview-name>${escapeHtml(accountDisplayName(account))}</strong>
+                        <span data-account-preview-meta>${escapeHtml(avatarSourceLabel(avatarSource))} icon - ${escapeHtml(backgroundLabel(background))}</span>
                     </div>
                 </aside>
             </div>
@@ -1600,6 +1621,64 @@ function renderAccountCustomizeForm(account, badgeState) {
             <button type="submit" ${state.accountSaving || !state.authProfileExtended ? "disabled" : ""}>${state.accountSaving ? "Saving..." : "Save profile"}</button>
         </form>
     `;
+}
+
+function updateAccountCustomizePreview(form) {
+    if (!form) return;
+    const preview = form.querySelector("[data-account-preview]");
+    if (!preview) return;
+
+    const account = state.authProfile || {};
+    const linkedProfile = linkedStatsProfile();
+    const badgeState = accountBadgeState(account, linkedProfile);
+    const avatarSource = cleanAvatarSource(form.elements.avatarSource?.value);
+    const background = cleanProfileBackground(form.elements.profileBackground?.value, account, badgeState);
+    const border = cleanPfpBorder(form.elements.pfpBorder?.value, account, badgeState);
+    const displayName = String(form.elements.displayName?.value || "").trim().replace(/\s+/g, " ") || accountDisplayName(account);
+    const previewAccount = {
+        ...account,
+        display_name: displayName,
+        avatar_source: avatarSource,
+        profile_background: background,
+        pfp_border: border
+    };
+
+    const image = preview.querySelector("[data-account-preview-img]");
+    const avatarUrl = accountPreviewAvatarUrl(previewAccount, account, linkedProfile, 180);
+    if (image && image.getAttribute("src") !== avatarUrl) {
+        image.src = avatarUrl;
+    }
+
+    const avatarFrame = preview.querySelector("[data-account-preview-avatar]");
+    replaceClassPrefix(avatarFrame, "avatar-frame-", avatarFrameClass(previewAccount));
+    replaceClassPrefix(preview, "profile-bg-", profileBackgroundClass(previewAccount));
+
+    const backgroundUrl = profileBackgroundImageUrl(previewAccount);
+    if (backgroundUrl) {
+        preview.style.setProperty("--profile-bg-image", `url('${backgroundUrl}')`);
+    } else {
+        preview.style.removeProperty("--profile-bg-image");
+    }
+
+    const name = preview.querySelector("[data-account-preview-name]");
+    if (name) name.textContent = displayName;
+    const meta = preview.querySelector("[data-account-preview-meta]");
+    if (meta) meta.textContent = `${avatarSourceLabel(avatarSource)} icon - ${backgroundLabel(background)}`;
+}
+
+function accountPreviewAvatarUrl(previewAccount, savedAccount, profile, size) {
+    if (cleanAvatarSource(previewAccount?.avatar_source) === "custom" && !previewAccount?.custom_avatar_url) {
+        return accountAvatarUrl(savedAccount, profile, size);
+    }
+    return accountAvatarUrl(previewAccount, profile, size);
+}
+
+function replaceClassPrefix(element, prefix, nextClass) {
+    if (!element) return;
+    for (const className of [...element.classList]) {
+        if (className.startsWith(prefix)) element.classList.remove(className);
+    }
+    if (nextClass) element.classList.add(nextClass);
 }
 
 function renderAccountMissions(account, profile, badgeState) {
@@ -5043,13 +5122,13 @@ function openAccountUploadDialog(type) {
     if (!isDiscordLoggedIn()) return;
     state.accountUploadDialog = type;
     state.accountMessage = "";
-    render();
+    renderAccountUploadDialog();
 }
 
 function closeAccountUploadDialog() {
     state.accountUploadDialog = "";
     state.accountUploading = false;
-    render();
+    renderAccountUploadDialog();
 }
 
 async function submitAccountUploadForm(form) {
@@ -5060,7 +5139,7 @@ async function submitAccountUploadForm(form) {
 
     state.accountUploading = true;
     state.accountMessage = "";
-    render();
+    renderAccountUploadDialog();
 
     try {
         const url = await uploadProfileMedia(file, type);
@@ -5175,7 +5254,6 @@ function accountMinecraftName(account, profile) {
     return String(
         account?.minecraft_player_name
         || profile?.name
-        || account?.username
         || DEFAULT_SKIN_NAME
     ).trim() || DEFAULT_SKIN_NAME;
 }
@@ -5190,10 +5268,16 @@ function profileBackgroundClass(account) {
 }
 
 function profileBackgroundStyle(account) {
+    const url = profileBackgroundImageUrl(account);
+    if (!url) return "";
+    return ` style="--profile-bg-image: url('${escapeHtml(url)}')"`;
+}
+
+function profileBackgroundImageUrl(account) {
     const url = String(account?.custom_background_url || "").trim();
     const background = cleanProfileBackground(account?.profile_background, account);
     if (!url || background !== "custom") return "";
-    return ` style="--profile-bg-image: url('${escapeHtml(safeCssUrl(url))}')"`;
+    return safeCssUrl(url);
 }
 
 function safeCssUrl(value) {
