@@ -42,6 +42,15 @@ const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97,
 const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v2";
 const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
 const BADGE_SEEN_STORAGE_KEY = "cob_seen_badges_v1";
+const ACCOUNT_MAX_LEVEL = 1000;
+const ACCOUNT_XP_PER_LEVEL = 10000;
+const ACHIEVEMENT_WIN_MILESTONES = [1, 5, 10, 20, 50, 100];
+const ACHIEVEMENT_KILL_MILESTONES = [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+const ACHIEVEMENT_MVP_MILESTONES = [1, 5, 10, 25, 50, 100];
+const ACHIEVEMENT_MODES = [
+    { id: "battleRoyale", label: "Battle Royale", short: "BR", key: "battleRoyale", badgePrefix: "br" },
+    { id: "deathmatch", label: "Deathmatch", short: "DM", key: "deathmatch", badgePrefix: "dm" }
+];
 const PROFILE_BASE_COLUMNS = "id, discord_id, username, avatar_url, is_admin, banned_from_voting, created_at";
 const PROFILE_ACCOUNT_COLUMNS = [
     "display_name",
@@ -72,24 +81,38 @@ const AVATAR_SOURCE_OPTIONS = [
     { id: "custom", label: "Custom upload" }
 ];
 const PROFILE_BACKGROUNDS = [
-    { id: "default", label: "Default", unlock: "default" },
-    { id: "br", label: "Battle Royale", unlock: "br_winner" },
-    { id: "dm", label: "Deathmatch", unlock: "dm_winner" },
-    { id: "night", label: "Night Ops", unlock: "veteran" },
+    { id: "default", label: "Default", unlock: "default", image: "./assets/profile-backgrounds/default.png" },
+    { id: "br", label: "Battle Royale", unlock: "br_winner", image: "./assets/profile-backgrounds/battle-royale.png" },
+    { id: "dm", label: "Deathmatch", unlock: "dm_winner", image: "./assets/profile-backgrounds/deathmatch.png" },
+    { id: "night", label: "Night Ops", unlock: "veteran", image: "./assets/profile-backgrounds/night-ops.png" },
     { id: "custom", label: "Custom PNG", unlock: "custom" }
 ];
 const PFP_BORDERS = [
-    { id: "none", label: "None", unlock: "default" },
-    { id: "gold", label: "Gold", unlock: "first_win" },
-    { id: "green", label: "Green", unlock: "linked" },
-    { id: "blue", label: "Blue", unlock: "dm_winner" },
-    { id: "red", label: "Red", unlock: "br_winner" }
+    { id: "none", label: "None", unlock: "default", image: "./assets/pfp-borders/none.png" },
+    { id: "gold", label: "Gold", unlock: "first_win", image: "./assets/pfp-borders/gold.png" },
+    { id: "green", label: "Green", unlock: "linked", image: "./assets/pfp-borders/green.png" },
+    { id: "blue", label: "Blue", unlock: "dm_winner", image: "./assets/pfp-borders/blue.png" },
+    { id: "red", label: "Red", unlock: "br_winner", image: "./assets/pfp-borders/red.png" }
 ];
 const BADGE_CATALOG = [
     { id: "linked", label: "Linked", description: "Discord and Minecraft account paired.", test: ({ linked }) => linked },
     { id: "first_win", label: "First Win", description: "Win at least one match.", test: ({ stats }) => stats.wins >= 1 },
     { id: "br_winner", label: "BR Survivor", description: "Win a Battle Royale game.", test: ({ br }) => br.stats.wins >= 1 },
     { id: "dm_winner", label: "DM Victor", description: "Win a Deathmatch game.", test: ({ dm }) => dm.stats.wins >= 1 },
+    { id: "br_wins_10", label: "BR 10 Wins", description: "Win 10 Battle Royale games.", test: ({ br }) => br.stats.wins >= 10 },
+    { id: "br_wins_50", label: "BR 50 Wins", description: "Win 50 Battle Royale games.", test: ({ br }) => br.stats.wins >= 50 },
+    { id: "br_wins_live", label: "BR Wins", description: "Dynamic badge unlocked at 100 Battle Royale wins.", dynamic: { mode: "battleRoyale", stat: "wins" }, test: ({ br }) => br.stats.wins >= 100 },
+    { id: "dm_wins_10", label: "DM 10 Wins", description: "Win 10 Deathmatch games.", test: ({ dm }) => dm.stats.wins >= 10 },
+    { id: "dm_wins_50", label: "DM 50 Wins", description: "Win 50 Deathmatch games.", test: ({ dm }) => dm.stats.wins >= 50 },
+    { id: "dm_wins_live", label: "DM Wins", description: "Dynamic badge unlocked at 100 Deathmatch wins.", dynamic: { mode: "deathmatch", stat: "wins" }, test: ({ dm }) => dm.stats.wins >= 100 },
+    { id: "br_kills_1000", label: "BR 1K Kills", description: "Score 1,000 Battle Royale kills.", test: ({ br }) => br.stats.kills >= 1000 },
+    { id: "br_kills_10000", label: "BR 10K Kills", description: "Score 10,000 Battle Royale kills.", test: ({ br }) => br.stats.kills >= 10000 },
+    { id: "dm_kills_1000", label: "DM 1K Kills", description: "Score 1,000 Deathmatch kills.", test: ({ dm }) => dm.stats.kills >= 1000 },
+    { id: "dm_kills_10000", label: "DM 10K Kills", description: "Score 10,000 Deathmatch kills.", test: ({ dm }) => dm.stats.kills >= 10000 },
+    { id: "br_mvp_10", label: "BR MVP 10", description: "Earn MVP 10 times in Battle Royale.", test: ({ br }) => br.stats.mvp >= 10 },
+    { id: "br_mvp_100", label: "BR MVP 100", description: "Earn MVP 100 times in Battle Royale.", test: ({ br }) => br.stats.mvp >= 100 },
+    { id: "dm_mvp_10", label: "DM MVP 10", description: "Earn MVP 10 times in Deathmatch.", test: ({ dm }) => dm.stats.mvp >= 10 },
+    { id: "dm_mvp_100", label: "DM MVP 100", description: "Earn MVP 100 times in Deathmatch.", test: ({ dm }) => dm.stats.mvp >= 100 },
     { id: "sharpshooter", label: "Sharpshooter", description: "Reach 35% headshot rate with at least 20 hits.", test: ({ stats, derived }) => stats.hits >= 20 && derived.headshotRate >= 35 },
     { id: "veteran", label: "Veteran", description: "Play 25 games.", test: ({ stats }) => stats.games >= 25 }
 ];
@@ -1246,16 +1269,17 @@ function exportSignature(data) {
                 sum.wins += stats.wins;
                 sum.games += stats.games;
                 sum.deaths += stats.deaths;
+                sum.mvp += stats.mvp;
                 return sum;
-            }, { kills: 0, wins: 0, games: 0, deaths: 0 });
-            return `${id}:${mode.totalPlayers || 0}:${mode.players?.length || 0}:${totals.wins}:${totals.kills}:${totals.games}:${totals.deaths}`;
+            }, { kills: 0, wins: 0, games: 0, deaths: 0, mvp: 0 });
+            return `${id}:${mode.totalPlayers || 0}:${mode.players?.length || 0}:${totals.wins}:${totals.kills}:${totals.games}:${totals.deaths}:${totals.mvp}`;
         })
         .join(",");
     const profileParts = (data.profiles || []).map((profile) => {
         const br = normalizeStats(profile.battleRoyale?.stats);
         const dm = normalizeStats(profile.deathmatch?.stats);
         const last = (profile.recentMatches || [])[0]?.endedAt || "";
-        return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${dm.games}:${dm.kills}:${dm.wins}:${profile.recentMatches?.length || 0}:${last}`;
+        return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.mvp}:${dm.games}:${dm.kills}:${dm.wins}:${dm.mvp}:${profile.recentMatches?.length || 0}:${last}`;
     }).join(",");
     const live = data.liveStatus || {};
     const livePart = `${live.onlinePlayers ?? ""}:${live.state ?? ""}:${live.mode ?? ""}:${live.mapId ?? ""}:${live.redScore ?? ""}:${live.blueScore ?? ""}:${live.matchPlayers ?? ""}:${live.alivePlayers ?? ""}:${live.teamMode ?? ""}`;
@@ -1399,8 +1423,8 @@ function renderAccountWidget() {
     const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 64);
     const name = accountDisplayName(account);
     container.innerHTML = `
-        <a class="account-pill ${avatarFrameClass(account)}" href="#account" aria-label="${escapeHtml(`Open account for ${name}`)}">
-            <span class="account-avatar-frame">
+        <a class="account-pill" href="#account" aria-label="${escapeHtml(`Open account for ${name}`)}">
+            <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
                 <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
             </span>
             <span>${escapeHtml(name)}</span>
@@ -1426,7 +1450,7 @@ function renderAccountPage() {
     const linkedProfile = linkedStatsProfile();
     const overall = linkedProfile ? buildProfileOverall(linkedProfile) : null;
     const badgeState = accountBadgeState(account, linkedProfile);
-    const selectedBadges = selectedAccountBadges(account, badgeState.unlockedIds);
+    const selectedBadges = selectedAccountBadges(account, badgeState);
     const avatarUrl = accountAvatarUrl(account, linkedProfile, 128);
     const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 128);
     const linkedName = linkedProfile?.name || account.minecraft_player_name || "";
@@ -1437,7 +1461,7 @@ function renderAccountPage() {
     body.innerHTML = `
         <section class="account-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)}>
             <div class="account-hero-main">
-                <span class="account-avatar-large ${avatarFrameClass(account)}">
+                <span class="account-avatar-large ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
                     <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
                 </span>
                 <div>
@@ -1445,6 +1469,7 @@ function renderAccountPage() {
                     <h2>${escapeHtml(accountDisplayName(account))}</h2>
                     <p>${linkedName ? `Linked to ${escapeHtml(linkedName)}` : "Minecraft account not linked yet."}</p>
                     ${renderAccountSignedDate(account)}
+                    ${renderAccountLevelPill(account, linkedProfile)}
                     <div class="account-badge-row">
                         ${selectedBadges.length
                             ? selectedBadges.map((badge) => renderProfileBadge(badge)).join("")
@@ -1587,7 +1612,7 @@ function renderAccountCustomizeForm(account, badgeState) {
                     </div>
                 </div>
                 <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Profile preview" data-account-preview>
-                    <span class="account-preview-avatar ${avatarFrameClass(account)}" data-account-preview-avatar>
+                    <span class="account-preview-avatar ${avatarFrameClass(account)}" data-account-preview-avatar${avatarFrameStyle(account)}>
                         <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-account-preview-img onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
                     </span>
                     <div>
@@ -1602,16 +1627,17 @@ function renderAccountCustomizeForm(account, badgeState) {
                 <small>${badgeState.unlockedIds.size} unlocked. Badges are only shown on your public profile after you check them here. Recommended badge icon: 256x256 transparent PNG/WebP.</small>
                 <div class="badge-picker">
                     ${BADGE_CATALOG.map((badge) => {
+                        const displayBadge = badgeDisplay(badge, badgeState.context);
                         const unlocked = badgeState.unlockedIds.has(badge.id);
                         const isNew = unlocked && isBadgeNew(account, badge.id);
                         return `
                             <label class="${unlocked ? "" : "locked"} ${isNew ? "badge-new" : ""}" data-badge-id="${escapeHtml(badge.id)}">
                                 <input type="checkbox" name="selectedBadges" value="${escapeHtml(badge.id)}" ${selectedIds.has(badge.id) ? "checked" : ""} ${unlocked ? "" : "disabled"}>
                                 <span class="badge-picker-main">
-                                    ${renderBadgeIcon(badge)}
+                                    ${renderBadgeIcon(displayBadge)}
                                     <span>
-                                        <strong>${escapeHtml(badge.label)}</strong>
-                                        <small>${escapeHtml(unlocked ? badge.description : `Locked: ${badge.description}`)}</small>
+                                        <strong>${escapeHtml(displayBadge.label)}</strong>
+                                        <small>${escapeHtml(unlocked ? displayBadge.description : `Locked: ${displayBadge.description}`)}</small>
                                     </span>
                                 </span>
                             </label>
@@ -1652,6 +1678,7 @@ function updateAccountCustomizePreview(form) {
 
     const avatarFrame = preview.querySelector("[data-account-preview-avatar]");
     replaceClassPrefix(avatarFrame, "avatar-frame-", avatarFrameClass(previewAccount));
+    setAvatarFrameImage(avatarFrame, previewAccount);
     replaceClassPrefix(preview, "profile-bg-", profileBackgroundClass(previewAccount));
 
     const backgroundUrl = profileBackgroundImageUrl(previewAccount);
@@ -1683,35 +1710,69 @@ function replaceClassPrefix(element, prefix, nextClass) {
 }
 
 function renderAccountMissions(account, profile, badgeState) {
-    const missions = accountMissions(account, profile);
-    const earnedXp = missions.filter((mission) => mission.complete).reduce((sum, mission) => sum + mission.xp, 0);
-    const totalXp = missions.reduce((sum, mission) => sum + mission.xp, 0);
+    const progress = accountProgress(account, profile);
     return `
         <section class="account-panel">
             <div class="mission-head">
                 <div>
-                    <p class="panel-kicker">Missions</p>
-                    <h3>XP progress</h3>
+                    <p class="panel-kicker">Achievements</p>
+                    <h3>Account level</h3>
                 </div>
-                <strong>${earnedXp} / ${totalXp} XP</strong>
+                <strong>LVL ${progress.level} / ${ACCOUNT_MAX_LEVEL}</strong>
+            </div>
+            <div class="account-level-card">
+                <div>
+                    <span>Total XP</span>
+                    <strong>${formatNumber(progress.totalXp)}</strong>
+                </div>
+                <div>
+                    <span>${progress.level >= ACCOUNT_MAX_LEVEL ? "Max level reached" : `Next level in ${formatNumber(progress.xpRemaining)} XP`}</span>
+                    <div class="mission-progress account-level-progress">
+                        <i style="width: ${Math.round(progress.levelProgress * 100)}%"></i>
+                    </div>
+                    <small>${formatNumber(progress.currentLevelXp)} / ${formatNumber(ACCOUNT_XP_PER_LEVEL)} XP</small>
+                </div>
+                <div>
+                    <span>Achievements</span>
+                    <strong>${progress.completedAchievements} / ${progress.totalAchievements}</strong>
+                </div>
+            </div>
+            <div class="achievement-groups">
+                ${progress.groups.map((group) => renderAchievementGroup(group)).join("")}
+            </div>
+            <p class="mode-empty">${badgeState.unlockedIds.size} badge${badgeState.unlockedIds.size === 1 ? "" : "s"} unlocked. Permanent achievements are live now; daily and weekly missions can plug into this XP total later.</p>
+        </section>
+    `;
+}
+
+function renderAchievementGroup(group) {
+    return `
+        <section class="achievement-group">
+            <div class="achievement-group-head">
+                <h4>${escapeHtml(group.label)}</h4>
+                <span>${group.completed} / ${group.achievements.length}</span>
             </div>
             <div class="mission-list">
-                ${missions.map((mission) => `
-                    <article class="mission-row ${mission.complete ? "complete" : ""}">
-                        <div>
-                            <strong>${escapeHtml(mission.label)}</strong>
-                            <span>${escapeHtml(mission.description)}</span>
-                        </div>
-                        <div class="mission-progress">
-                            <i style="width: ${Math.min(100, Math.round(mission.progress * 100))}%"></i>
-                        </div>
-                        <small>${escapeHtml(mission.status)}</small>
-                        <span class="mission-xp">+${mission.xp} XP</span>
-                    </article>
-                `).join("")}
+                ${group.achievements.map((achievement) => renderAchievementRow(achievement)).join("")}
             </div>
-            <p class="mode-empty">${badgeState.unlockedIds.size} badge${badgeState.unlockedIds.size === 1 ? "" : "s"} unlocked. Missions are lightweight XP milestones for now.</p>
         </section>
+    `;
+}
+
+function renderAchievementRow(achievement) {
+    const badgeText = achievement.badgeId ? " - badge unlock" : "";
+    return `
+        <article class="mission-row ${achievement.complete ? "complete" : ""}">
+            <div>
+                <strong>${escapeHtml(achievement.label)}</strong>
+                <span>${escapeHtml(`${achievement.description}${badgeText}`)}</span>
+            </div>
+            <div class="mission-progress">
+                <i style="width: ${Math.min(100, Math.round(achievement.progress * 100))}%"></i>
+            </div>
+            <small>${escapeHtml(achievement.status)}</small>
+            <span class="mission-xp">+${formatNumber(achievement.xp)} XP</span>
+        </article>
     `;
 }
 
@@ -5337,7 +5398,7 @@ function renderPlayerAvatar(player, profile, size = 64, extraClass = "") {
     const url = accountAvatarUrl(account, profile || player, size);
     const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, size);
     return `
-        <span class="player-avatar ${avatarFrameClass(account)} ${escapeHtml(extraClass)}">
+        <span class="player-avatar ${avatarFrameClass(account)} ${escapeHtml(extraClass)}"${avatarFrameStyle(account)}>
             <img src="${escapeHtml(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
         </span>
     `;
@@ -5361,8 +5422,31 @@ function accountMinecraftName(account, profile) {
 }
 
 function avatarFrameClass(account) {
+    return pfpBorderImageUrl(account) ? "avatar-frame-image" : "";
+}
+
+function avatarFrameStyle(account) {
+    const url = pfpBorderImageUrl(account);
+    if (!url) return "";
+    return ` style="--avatar-frame-image: url('${escapeHtml(url)}')"`;
+}
+
+function setAvatarFrameImage(element, account) {
+    if (!element) return;
+    const url = pfpBorderImageUrl(account);
+    element.classList.toggle("avatar-frame-image", Boolean(url));
+    if (url) {
+        element.style.setProperty("--avatar-frame-image", `url('${url}')`);
+    } else {
+        element.style.removeProperty("--avatar-frame-image");
+    }
+}
+
+function pfpBorderImageUrl(account) {
     const border = cleanPfpBorder(account?.pfp_border, account);
-    return border === "none" ? "" : `avatar-frame-${border}`;
+    if (border === "none") return "";
+    const option = PFP_BORDERS.find((entry) => entry.id === border);
+    return option?.image ? safeCssUrl(option.image) : "";
 }
 
 function profileBackgroundClass(account) {
@@ -5376,10 +5460,13 @@ function profileBackgroundStyle(account) {
 }
 
 function profileBackgroundImageUrl(account) {
-    const url = String(account?.custom_background_url || "").trim();
     const background = cleanProfileBackground(account?.profile_background, account);
-    if (!url || background !== "custom") return "";
-    return safeCssUrl(url);
+    if (background === "custom") {
+        const url = String(account?.custom_background_url || "").trim();
+        return url ? safeCssUrl(url) : "";
+    }
+    const option = PROFILE_BACKGROUNDS.find((entry) => entry.id === background);
+    return option?.image ? safeCssUrl(option.image) : "";
 }
 
 function safeCssUrl(value) {
@@ -5392,10 +5479,12 @@ function renderProfileBadge(badge) {
 
 function renderBadgeIcon(badge) {
     const label = badge?.label || "Badge";
+    const value = badge?.value === undefined || badge?.value === null ? "" : compactBadgeNumber(badge.value);
     return `
         <span class="badge-icon" aria-hidden="true">
             <img src="${escapeHtml(badgeIconUrl(badge))}" alt="" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
             <span class="badge-icon-fallback" hidden>${escapeHtml(badgeInitials(label))}</span>
+            ${value ? `<span class="badge-icon-value">${escapeHtml(value)}</span>` : ""}
         </span>
     `;
 }
@@ -5429,9 +5518,33 @@ function selectedAccountBadgeIds(account, unlockedIds) {
     return new Set(selected.slice(0, 5));
 }
 
-function selectedAccountBadges(account, unlockedIds) {
-    const selectedIds = selectedAccountBadgeIds(account, unlockedIds);
-    return BADGE_CATALOG.filter((badge) => selectedIds.has(badge.id));
+function selectedAccountBadges(account, badgeStateOrUnlockedIds) {
+    const badgeState = badgeStateOrUnlockedIds?.unlockedIds
+        ? badgeStateOrUnlockedIds
+        : { unlockedIds: badgeStateOrUnlockedIds, context: null };
+    const selectedIds = selectedAccountBadgeIds(account, badgeState.unlockedIds);
+    return BADGE_CATALOG
+        .filter((badge) => selectedIds.has(badge.id))
+        .map((badge) => badgeDisplay(badge, badgeState.context));
+}
+
+function badgeDisplay(badge, context) {
+    const value = badgeDynamicValue(badge, context);
+    return value === null ? badge : { ...badge, value };
+}
+
+function badgeDynamicValue(badge, context) {
+    if (!badge?.dynamic) return null;
+    const mode = badge.dynamic.mode === "battleRoyale" ? context?.br : context?.dm;
+    const stats = normalizeStats(mode?.stats);
+    return number(stats[badge.dynamic.stat]);
+}
+
+function compactBadgeNumber(value) {
+    const numeric = number(value);
+    if (numeric >= 1000000) return `${round2(numeric / 1000000)}M`;
+    if (numeric >= 10000) return `${Math.floor(numeric / 1000)}K`;
+    return formatNumber(numeric);
 }
 
 function handleBadgeSeenEvent(event) {
@@ -5473,46 +5586,143 @@ function markBadgeSeen(account, badgeId) {
     }
 }
 
-function accountMissions(account, profile) {
+function renderAccountLevelPill(account, profile) {
+    const progress = accountProgress(account, profile);
+    return `
+        <div class="account-level-pill" title="${escapeHtml(`${formatNumber(progress.totalXp)} total XP`)}">
+            <strong>LVL ${progress.level}</strong>
+            <span>${formatNumber(progress.totalXp)} XP</span>
+        </div>
+    `;
+}
+
+function accountProgress(account, profile) {
+    const groups = accountAchievementGroups(account, profile);
+    const achievements = groups.flatMap((group) => group.achievements);
+    const achievementXp = achievements
+        .filter((achievement) => achievement.complete)
+        .reduce((sum, achievement) => sum + achievement.xp, 0);
+    const storedXp = number(account?.xp);
+    const totalXp = Math.min(ACCOUNT_MAX_LEVEL * ACCOUNT_XP_PER_LEVEL, achievementXp + storedXp);
+    const level = Math.min(ACCOUNT_MAX_LEVEL, Math.floor(totalXp / ACCOUNT_XP_PER_LEVEL) + 1);
+    const levelBaseXp = (level - 1) * ACCOUNT_XP_PER_LEVEL;
+    const currentLevelXp = level >= ACCOUNT_MAX_LEVEL ? ACCOUNT_XP_PER_LEVEL : Math.max(0, totalXp - levelBaseXp);
+    const xpRemaining = level >= ACCOUNT_MAX_LEVEL ? 0 : Math.max(0, ACCOUNT_XP_PER_LEVEL - currentLevelXp);
+    return {
+        level,
+        totalXp,
+        storedXp,
+        achievementXp,
+        currentLevelXp,
+        xpRemaining,
+        levelProgress: level >= ACCOUNT_MAX_LEVEL ? 1 : currentLevelXp / ACCOUNT_XP_PER_LEVEL,
+        completedAchievements: achievements.filter((achievement) => achievement.complete).length,
+        totalAchievements: achievements.length,
+        groups
+    };
+}
+
+function accountAchievementGroups(account, profile) {
     const overall = profile ? buildProfileOverall(profile) : null;
     const br = profile ? normalizePlayer(profile.battleRoyale) : normalizePlayer(null);
     const dm = profile ? normalizePlayer(profile.deathmatch) : normalizePlayer(null);
     const stats = normalizeStats(overall?.stats);
     const derived = normalizeDerived(overall?.derived, stats);
-    return [
-        mission("Create Account", "Login with Discord once.", account?.id ? 1 : 0, 1, "", 10),
-        mission("Link Minecraft", "Pair Discord to Minecraft with /linkminecraft.", profile ? 1 : 0, 1, "", 50),
-        mission("Set Your Icon", "Choose Discord, Minecraft, or upload a custom profile picture.", cleanAvatarSource(account?.avatar_source) !== "minecraft" || account?.custom_avatar_url ? 1 : 0, 1, "", 20),
-        mission("Pick a Banner", "Choose or upload a profile background.", cleanProfileBackground(account?.profile_background, account) !== "default" ? 1 : 0, 1, "", 20),
-        mission("First Game", "Play one tracked match.", stats.games, 1, "", 25),
-        mission("First Kill", "Get one tracked kill.", stats.kills, 1, "", 25),
-        mission("First Hit", "Land one tracked hit.", stats.hits, 1, "", 15),
-        mission("First Win", "Win any tracked match.", stats.wins, 1, "", 50),
-        mission("Try Battle Royale", "Play one Battle Royale match.", br.stats.games, 1, "", 25),
-        mission("Try Deathmatch", "Play one Deathmatch match.", dm.stats.games, 1, "", 25),
-        mission("Play Both Modes", "Play at least one match in Battle Royale and Deathmatch.", br.stats.games > 0 && dm.stats.games > 0 ? 1 : 0, 1, "", 40),
-        mission("Battle Royale Winner", "Win one Battle Royale game.", br.stats.wins, 1, "", 75),
-        mission("Deathmatch Winner", "Win one Deathmatch game.", dm.stats.wins, 1, "", 75),
-        mission("Ten Kills", "Reach 10 total kills.", stats.kills, 10, "", 50),
-        mission("Fifty Kills", "Reach 50 total kills.", stats.kills, 50, "", 125),
-        mission("Hundred Kills", "Reach 100 total kills.", stats.kills, 100, "", 250),
-        mission("Five Games", "Play 5 tracked games.", stats.games, 5, "", 50),
-        mission("Veteran", "Play 25 tracked games.", stats.games, 25, "", 150),
-        mission("Regular", "Play 50 tracked games.", stats.games, 50, "", 300),
-        mission("One Hour In", "Reach 1 hour of tracked playtime.", stats.playtimeSeconds, 3600, "s", 80, formatDuration),
-        mission("Head Start", "Get your first headshot kill.", stats.headshotKills, 1, "", 35),
-        mission("Sharpshooter", "Reach 35% headshot rate after 20 hits.", stats.hits >= 20 ? derived.headshotRate : 0, 35, "%", 150)
+    const groups = [
+        {
+            id: "account",
+            label: "Account",
+            achievements: [
+                achievement("account_create", "Create Account", "Login with Discord once.", account?.id ? 1 : 0, 1, 500),
+                achievement("account_link_minecraft", "Link Minecraft", "Pair Discord to Minecraft with /linkminecraft.", profile ? 1 : 0, 1, 1000, { badgeId: "linked" }),
+                achievement("account_set_icon", "Set Your Icon", "Choose Discord, Minecraft, or upload a custom profile picture.", cleanAvatarSource(account?.avatar_source) !== "minecraft" || account?.custom_avatar_url ? 1 : 0, 1, 500),
+                achievement("account_pick_banner", "Pick a Banner", "Choose or upload a profile background.", cleanProfileBackground(account?.profile_background, account) !== "default" ? 1 : 0, 1, 500),
+                achievement("overall_first_game", "First Game", "Play one tracked match.", stats.games, 1, 750),
+                achievement("overall_first_kill", "First Kill", "Get one tracked kill.", stats.kills, 1, 750),
+                achievement("overall_first_hit", "First Hit", "Land one tracked hit.", stats.hits, 1, 500),
+                achievement("overall_first_win", "First Win", "Win any tracked match.", stats.wins, 1, 1500, { badgeId: "first_win" }),
+                achievement("overall_play_both", "Play Both Modes", "Play at least one match in Battle Royale and Deathmatch.", br.stats.games > 0 && dm.stats.games > 0 ? 1 : 0, 1, 1500),
+                achievement("overall_one_hour", "One Hour In", "Reach 1 hour of tracked playtime.", stats.playtimeSeconds, 3600, 2000, { suffix: "s", formatter: formatDuration }),
+                achievement("overall_head_start", "Head Start", "Get your first headshot kill.", stats.headshotKills, 1, 1000),
+                achievement("overall_sharpshooter", "Sharpshooter", "Reach 35% headshot rate after 20 hits.", stats.hits >= 20 ? derived.headshotRate : 0, 35, 4000, { suffix: "%", badgeId: "sharpshooter" }),
+                achievement("overall_veteran", "Veteran", "Play 25 tracked games.", stats.games, 25, 5000, { badgeId: "veteran" })
+            ]
+        },
+        ...ACHIEVEMENT_MODES.map((mode) => modeAchievementGroup(mode, mode.id === "battleRoyale" ? br : dm))
     ];
+    return groups.map((group) => ({
+        ...group,
+        completed: group.achievements.filter((entry) => entry.complete).length
+    }));
 }
 
-function mission(label, description, value, target, suffix = "", xp = 25, formatter = null) {
+function modeAchievementGroup(mode, player) {
+    const stats = normalizeStats(player?.stats);
+    const achievements = [
+        achievement(`${mode.id}_first_game`, `${mode.short} First Game`, `Play one ${mode.label} match.`, stats.games, 1, 750),
+        ...ACHIEVEMENT_WIN_MILESTONES.map((target) => achievement(
+            `${mode.id}_wins_${target}`,
+            `${mode.short} ${formatNumber(target)} ${target === 1 ? "Win" : "Wins"}`,
+            `Win ${formatNumber(target)} ${mode.label} ${target === 1 ? "game" : "games"}.`,
+            stats.wins,
+            target,
+            achievementXp("wins", target),
+            { badgeId: modeAchievementBadgeId(mode, "wins", target) }
+        )),
+        ...ACHIEVEMENT_KILL_MILESTONES.map((target) => achievement(
+            `${mode.id}_kills_${target}`,
+            `${mode.short} ${formatNumber(target)} Kills`,
+            `Score ${formatNumber(target)} ${mode.label} kills.`,
+            stats.kills,
+            target,
+            achievementXp("kills", target),
+            { badgeId: modeAchievementBadgeId(mode, "kills", target) }
+        )),
+        ...ACHIEVEMENT_MVP_MILESTONES.map((target) => achievement(
+            `${mode.id}_mvp_${target}`,
+            `${mode.short} MVP ${formatNumber(target)}`,
+            `Earn MVP ${formatNumber(target)} ${target === 1 ? "time" : "times"} in ${mode.label}.`,
+            stats.mvp,
+            target,
+            achievementXp("mvp", target),
+            { badgeId: modeAchievementBadgeId(mode, "mvp", target) }
+        ))
+    ];
+    return {
+        id: mode.id,
+        label: mode.label,
+        achievements
+    };
+}
+
+function modeAchievementBadgeId(mode, type, target) {
+    if (type === "wins") {
+        if (target === 1) return mode.id === "battleRoyale" ? "br_winner" : "dm_winner";
+        if (target === 10 || target === 50) return `${mode.badgePrefix}_wins_${target}`;
+        if (target === 100) return `${mode.badgePrefix}_wins_live`;
+    }
+    if (type === "kills" && (target === 1000 || target === 10000)) return `${mode.badgePrefix}_kills_${target}`;
+    if (type === "mvp" && (target === 10 || target === 100)) return `${mode.badgePrefix}_mvp_${target}`;
+    return "";
+}
+
+function achievementXp(type, target) {
+    if (type === "wins") return Math.max(1500, target * 500);
+    if (type === "kills") return Math.max(1000, target * 15);
+    if (type === "mvp") return Math.max(2000, target * 1000);
+    return 500;
+}
+
+function achievement(id, label, description, value, target, xp = 500, options = {}) {
     const current = number(value);
     const complete = current >= target;
-    const formatValue = formatter || ((entry) => `${formatNumber(entry)}${suffix}`);
+    const formatValue = options.formatter || ((entry) => `${formatNumber(entry)}${options.suffix || ""}`);
     return {
+        id,
         label,
         description,
         xp,
+        badgeId: options.badgeId || "",
         complete,
         progress: target > 0 ? current / target : 0,
         status: complete ? "Complete" : `${formatValue(current)} / ${formatValue(target)}`
@@ -5579,7 +5789,7 @@ function renderProfilePreview() {
     const overall = buildProfileOverall(profile);
     const account = accountProfileForPlayer(profile, profile);
     const name = playerDisplayName(profile, profile);
-    const badges = selectedAccountBadges(account, accountBadgeState(account, profile).unlockedIds);
+    const badges = selectedAccountBadges(account, accountBadgeState(account, profile));
     container.innerHTML = `
         <div class="profile-preview-head">
             ${renderPlayerAvatar(profile, profile, 96, "profile-preview-avatar")}
@@ -5626,7 +5836,7 @@ function renderPlayerProfileHero(profile) {
     const overall = buildProfileOverall(profile);
     const player = normalizePlayer(overall);
     const badgeState = accountBadgeState(account, profile);
-    const badges = selectedAccountBadges(account, badgeState.unlockedIds);
+    const badges = selectedAccountBadges(account, badgeState);
     return `
         <section class="player-profile-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)}>
             <div class="player-profile-identity">
@@ -5636,6 +5846,7 @@ function renderPlayerProfileHero(profile) {
                     <h3>${escapeHtml(name)}</h3>
                     <span>${account ? escapeHtml(profile.name || "Linked Minecraft player") : "No website account linked yet"}</span>
                     ${account ? renderAccountSignedDate(account) : ""}
+                    ${account ? renderAccountLevelPill(account, profile) : ""}
                     <div class="account-badge-row">
                         ${badges.length ? badges.map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
                     </div>
@@ -6055,6 +6266,7 @@ function combineStats(...statsList) {
         total.hits += next.hits;
         total.headshots += next.headshots;
         total.headshotKills += next.headshotKills;
+        total.mvp += next.mvp;
         total.bestKillStreak = Math.max(total.bestKillStreak, next.bestKillStreak);
         total.topMatchKills = Math.max(total.topMatchKills, next.topMatchKills);
         total.utilityKills += next.utilityKills;
@@ -6096,6 +6308,7 @@ function normalizeStats(stats) {
         hits: number(stats?.hits),
         headshots: number(stats?.headshots),
         headshotKills: number(stats?.headshotKills),
+        mvp: number(stats?.mvp ?? stats?.mvps ?? stats?.mvpCount ?? stats?.mvpAwards),
         bestKillStreak: number(stats?.bestKillStreak),
         topMatchKills: number(stats?.topMatchKills),
         utilityKills: number(stats?.utilityKills),
