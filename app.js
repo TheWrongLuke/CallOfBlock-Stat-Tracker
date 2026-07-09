@@ -47,12 +47,9 @@ const ACCOUNT_MAX_LEVEL = 1000;
 const ACCOUNT_XP_PER_LEVEL = 10000;
 const WEEKLY_MISSION_COUNT = 7;
 const WEEKLY_EASY_MISSION_COUNT = 4;
-const ACHIEVEMENT_WIN_MILESTONES = [1, 5, 10, 20, 50, 100];
-const ACHIEVEMENT_KILL_MILESTONES = [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
-const ACHIEVEMENT_MVP_MILESTONES = [1, 5, 10, 25, 50, 100];
-const ACHIEVEMENT_MODES = [
-    { id: "battleRoyale", label: "Battle Royale", short: "BR", key: "battleRoyale", badgePrefix: "br" },
-    { id: "deathmatch", label: "Deathmatch", short: "DM", key: "deathmatch", badgePrefix: "dm" }
+const MISSION_MODES = [
+    { id: "battleRoyale", label: "Battle Royale", short: "BR" },
+    { id: "deathmatch", label: "Deathmatch", short: "DM" }
 ];
 const PROFILE_BASE_COLUMNS = "id, discord_id, username, avatar_url, is_admin, banned_from_voting, created_at";
 const PROFILE_ACCOUNT_COLUMNS = [
@@ -501,6 +498,9 @@ function bindStaticEvents() {
         const accountForm = event.target.closest("[data-account-form]");
         if (accountForm && event.target.matches("[name='avatarSource'], [name='profileBackground'], [name='pfpBorder']")) {
             updateAccountCustomizePreview(accountForm);
+        }
+        if (accountForm && event.target.matches("[name='selectedBadges']")) {
+            enforceBadgeSelectionLimit(accountForm, event.target);
         }
 
         if (event.target.matches("[name='avatarSource']") && event.target.value === "custom") {
@@ -1521,7 +1521,7 @@ function renderAccountPage() {
                     <h2>${escapeHtml(accountDisplayName(account))}</h2>
                     <p>${linkedName ? `Linked to ${escapeHtml(linkedName)}` : "Minecraft account not linked yet."}</p>
                     ${renderAccountSignedDate(account)}
-                    ${renderAccountLevelPill(account, linkedProfile)}
+                    ${renderAccountLevelPill(account)}
                     <div class="account-badge-row">
                         ${selectedBadges.length
                             ? selectedBadges.map((badge) => renderProfileBadge(badge)).join("")
@@ -1539,8 +1539,8 @@ function renderAccountPage() {
         ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
         ${renderAccountLinkPanel(account, linkedProfile)}
         ${linkedProfile ? renderAccountStatsPanel(linkedProfile, overall) : ""}
+        ${renderWeeklyMissions(linkedProfile)}
         ${renderAccountCustomizeForm(account, badgeState)}
-        ${renderAccountMissions(account, linkedProfile, badgeState)}
     `;
 }
 
@@ -1676,15 +1676,17 @@ function renderAccountCustomizeForm(account, badgeState) {
             </div>
             <fieldset>
                 <legend>Equip badges</legend>
-                <small>${badgeState.unlockedIds.size} unlocked. Badges are only shown on your public profile after you check them here. Recommended badge icon: 256x256 transparent PNG/WebP.</small>
+                <small>${badgeState.unlockedIds.size} unlocked. Equip up to 5 badges on your public profile. Recommended badge icon: 256x256 transparent PNG/WebP.</small>
                 <div class="badge-picker">
                     ${BADGE_CATALOG.map((badge) => {
                         const displayBadge = badgeDisplay(badge, badgeState.context);
                         const unlocked = badgeState.unlockedIds.has(badge.id);
                         const isNew = unlocked && isBadgeNew(account, badge.id);
+                        const selected = selectedIds.has(badge.id);
+                        const selectionFull = selectedIds.size >= 5;
                         return `
                             <label class="${unlocked ? "" : "locked"} ${isNew ? "badge-new" : ""}" data-badge-id="${escapeHtml(badge.id)}">
-                                <input type="checkbox" name="selectedBadges" value="${escapeHtml(badge.id)}" ${selectedIds.has(badge.id) ? "checked" : ""} ${unlocked ? "" : "disabled"}>
+                                <input type="checkbox" name="selectedBadges" value="${escapeHtml(badge.id)}" ${selected ? "checked" : ""} ${unlocked && (!selectionFull || selected) ? "" : "disabled"}>
                                 <span class="badge-picker-main">
                                     ${renderBadgeIcon(displayBadge)}
                                     <span>
@@ -1700,6 +1702,20 @@ function renderAccountCustomizeForm(account, badgeState) {
             <button type="submit" ${state.accountSaving || !state.authProfileExtended ? "disabled" : ""}>${state.accountSaving ? "Saving..." : "Save profile"}</button>
         </form>
     `;
+}
+
+function enforceBadgeSelectionLimit(form, changedInput) {
+    const inputs = [...form.querySelectorAll("input[name='selectedBadges']")];
+    let selected = inputs.filter((input) => input.checked);
+    if (selected.length > 5 && changedInput) {
+        changedInput.checked = false;
+        selected = inputs.filter((input) => input.checked);
+    }
+    const selectionFull = selected.length >= 5;
+    for (const input of inputs) {
+        const locked = input.closest("label")?.classList.contains("locked");
+        input.disabled = Boolean(locked || (selectionFull && !input.checked));
+    }
 }
 
 function updateAccountCustomizePreview(form) {
@@ -1761,59 +1777,8 @@ function replaceClassPrefix(element, prefix, nextClass) {
     if (nextClass) element.classList.add(nextClass);
 }
 
-function renderAccountMissions(account, profile, badgeState) {
-    const progress = accountProgress(account, profile);
-    return `
-        ${renderWeeklyMissions(profile)}
-        <section class="account-panel">
-            <div class="mission-head">
-                <div>
-                    <p class="panel-kicker">Achievements</p>
-                    <h3>Account level</h3>
-                </div>
-                <strong>LVL ${progress.level} / ${ACCOUNT_MAX_LEVEL}</strong>
-            </div>
-            <div class="account-level-card">
-                <div>
-                    <span>Total XP</span>
-                    <strong>${formatNumber(progress.totalXp)}</strong>
-                </div>
-                <div>
-                    <span>${progress.level >= ACCOUNT_MAX_LEVEL ? "Max level reached" : `Next level in ${formatNumber(progress.xpRemaining)} XP`}</span>
-                    <div class="mission-progress account-level-progress">
-                        <i style="width: ${Math.round(progress.levelProgress * 100)}%"></i>
-                    </div>
-                    <small>${formatNumber(progress.currentLevelXp)} / ${formatNumber(ACCOUNT_XP_PER_LEVEL)} XP</small>
-                </div>
-                <div>
-                    <span>Achievements</span>
-                    <strong>${progress.completedAchievements} / ${progress.totalAchievements}</strong>
-                </div>
-            </div>
-            <div class="achievement-groups">
-                ${progress.groups.map((group) => renderAchievementGroup(group)).join("")}
-            </div>
-            <p class="mode-empty">${badgeState.unlockedIds.size} badge${badgeState.unlockedIds.size === 1 ? "" : "s"} unlocked. Early achievements award modest XP; major long-term milestones can award multiple levels.</p>
-        </section>
-    `;
-}
-
 function renderWeeklyMissions(profile) {
     const missionState = state.weeklyMissions;
-    if (!profile) {
-        return `
-            <section class="account-panel">
-                <div class="mission-head">
-                    <div>
-                        <p class="panel-kicker">Renewable Missions</p>
-                        <h3>Weekly rotation</h3>
-                    </div>
-                    <strong>4 Easy / 3 Hard</strong>
-                </div>
-                <p class="mode-empty">Link your Minecraft account to receive missions based on newly tracked stats.</p>
-            </section>
-        `;
-    }
     if (missionState.loading && !missionState.row) {
         return `
             <section class="account-panel">
@@ -1838,7 +1803,7 @@ function renderWeeklyMissions(profile) {
                         <h3>Weekly rotation unavailable</h3>
                     </div>
                 </div>
-                <p class="mode-empty">${escapeHtml(missionState.message || "Missions will appear when the current stats finish loading.")}</p>
+                <p class="mode-empty">${escapeHtml(missionState.message || (profile ? "Missions will appear when the current stats finish loading." : "Your starter missions are being created. Link Minecraft to begin tracking progress."))}</p>
             </section>
         `;
     }
@@ -1861,6 +1826,7 @@ function renderWeeklyMissions(profile) {
                 <span><b>3</b> hard</span>
                 <span><b>${formatNumber(missions.reduce((sum, mission) => sum + number(mission.xp), 0))}</b> XP available</span>
             </div>
+            ${profile ? "" : `<p class="weekly-mission-link-note">Link Minecraft to begin tracking mission progress. Your mission baselines will be set when the account is linked.</p>`}
             <p class="weekly-mission-rule">Untouched missions rotate every week. If you cannot finish a mission by the end of the week, it will not change once you have started it. You can manually swap that mission once. This balances the fact that the server is not online 24/7 yet.</p>
             <div class="mission-list">
                 ${missions.map((mission) => renderWeeklyMissionRow(profile, mission, claimedIds)).join("")}
@@ -1921,17 +1887,19 @@ async function syncWeeklyMissions() {
     const missionState = state.weeklyMissions;
     const account = state.authProfile;
     const profile = linkedStatsProfile();
-    if (missionState.syncing || !state.authClient || !state.authSession?.user || !account?.id || !profile) return;
+    if (missionState.syncing || !state.authClient || !state.authSession?.user || !account?.id || !state.data) return;
 
     const cycle = weeklyMissionCycle();
-    if (missionState.source === "local" && missionState.row?.cycle_key === cycle.key) return;
+    if (missionState.source === "local"
+        && missionState.row?.cycle_key === cycle.key
+        && !(missionState.row.awaiting_link && profile)) return;
     missionState.syncing = true;
     missionState.loading = !missionState.row || missionState.row.cycle_key !== cycle.key;
     if (state.view === "account") renderAccountPage();
 
     try {
         let row = missionState.row?.cycle_key === cycle.key ? missionState.row : null;
-        if (!row) row = await loadRemoteWeeklyMissionRow(account, profile, cycle);
+        if (!row || (row.awaiting_link && profile)) row = await loadRemoteWeeklyMissionRow(account, profile, cycle);
         missionState.row = normalizeWeeklyMissionRow(row);
         missionState.source = "supabase";
         missionState.message = "";
@@ -1948,7 +1916,7 @@ async function syncWeeklyMissions() {
 }
 
 async function loadRemoteWeeklyMissionRow(account, profile, cycle) {
-    const columns = "user_id, cycle_key, cycle_ends_at, missions, claimed_ids, swapped_ids, created_at, updated_at";
+    const columns = "user_id, cycle_key, cycle_ends_at, missions, claimed_ids, swapped_ids, awaiting_link, created_at, updated_at";
     const existing = await state.authClient
         .from("profile_weekly_missions")
         .select(columns)
@@ -1956,7 +1924,13 @@ async function loadRemoteWeeklyMissionRow(account, profile, cycle) {
         .eq("cycle_key", cycle.key)
         .maybeSingle();
     if (existing.error) throw existing.error;
-    if (existing.data) return existing.data;
+    if (existing.data) {
+        const needsInitialization = !Array.isArray(existing.data.missions)
+            || existing.data.missions.length !== WEEKLY_MISSION_COUNT
+            || (existing.data.awaiting_link && profile);
+        if (!needsInitialization) return existing.data;
+        return initializeRemoteWeeklyMissionRow(account, profile, cycle, columns);
+    }
 
     const previousResult = await state.authClient
         .from("profile_weekly_missions")
@@ -1978,7 +1952,8 @@ async function loadRemoteWeeklyMissionRow(account, profile, cycle) {
             cycle_ends_at: cycle.endsAt,
             missions,
             claimed_ids: [],
-            swapped_ids: []
+            swapped_ids: [],
+            awaiting_link: !profile
         })
         .select(columns)
         .single();
@@ -1993,6 +1968,26 @@ async function loadRemoteWeeklyMissionRow(account, profile, cycle) {
         return raced.data;
     }
     return inserted.data;
+}
+
+async function initializeRemoteWeeklyMissionRow(account, profile, cycle, columns) {
+    const missions = generateWeeklyMissions(account, profile, cycle);
+    const initialized = await state.authClient.rpc("initialize_weekly_missions", {
+        p_cycle_key: cycle.key,
+        p_cycle_ends_at: cycle.endsAt,
+        p_missions: missions,
+        p_awaiting_link: !profile
+    });
+    if (initialized.error) throw initialized.error;
+
+    const refreshed = await state.authClient
+        .from("profile_weekly_missions")
+        .select(columns)
+        .eq("user_id", account.id)
+        .eq("cycle_key", cycle.key)
+        .single();
+    if (refreshed.error) throw refreshed.error;
+    return refreshed.data;
 }
 
 function loadLocalWeeklyMissionRow(account, profile, cycle) {
@@ -2013,7 +2008,8 @@ function loadLocalWeeklyMissionRow(account, profile, cycle) {
             cycle_ends_at: cycle.endsAt,
             missions: renewWeeklyMissions(previous, freshMissions, profile, cycle),
             claimed_ids: [],
-            swapped_ids: []
+            swapped_ids: [],
+            awaiting_link: !profile
         };
         parsed[storageId] = row;
         window.localStorage?.setItem(WEEKLY_MISSION_STORAGE_KEY, JSON.stringify(parsed));
@@ -2025,7 +2021,8 @@ function loadLocalWeeklyMissionRow(account, profile, cycle) {
             cycle_ends_at: cycle.endsAt,
             missions: generateWeeklyMissions(account, profile, cycle),
             claimed_ids: [],
-            swapped_ids: []
+            swapped_ids: [],
+            awaiting_link: !profile
         };
     }
 }
@@ -2035,7 +2032,8 @@ function normalizeWeeklyMissionRow(row) {
         ...row,
         missions: Array.isArray(row?.missions) ? row.missions.slice(0, WEEKLY_MISSION_COUNT) : [],
         claimed_ids: arrayField(row?.claimed_ids),
-        swapped_ids: arrayField(row?.swapped_ids)
+        swapped_ids: arrayField(row?.swapped_ids),
+        awaiting_link: Boolean(row?.awaiting_link)
     };
 }
 
@@ -2249,8 +2247,8 @@ function pickWeeklyMissions(candidates, count, rng) {
 }
 
 function weeklyMissionCandidates(profile, difficulty, rng) {
-    const mode = randomChoice(ACHIEVEMENT_MODES, rng);
-    const otherMode = ACHIEVEMENT_MODES.find((entry) => entry.id !== mode.id);
+    const mode = randomChoice(MISSION_MODES, rng);
+    const otherMode = MISSION_MODES.find((entry) => entry.id !== mode.id);
     const modeWeapons = weeklyEligibleWeapons(profile, mode.id);
     const weaponMode = modeWeapons.length ? mode.id : "overall";
     const weapon = randomChoice(modeWeapons.length ? modeWeapons : weeklyEligibleWeapons(profile, "overall"), rng);
@@ -2365,6 +2363,7 @@ function weeklyAvailableCategories(profile, mode) {
 }
 
 function weeklyWeaponEntries(profile, mode) {
+    if (!profile) return [];
     if (mode === "battleRoyale") return cleanWeaponEntries(profile?.battleRoyale?.details?.weapons || []);
     if (mode === "deathmatch") return cleanWeaponEntries(profile?.deathmatch?.details?.weapons || []);
     return combinedWeapons(profile);
@@ -2420,37 +2419,6 @@ function shuffleWithRandom(entries, rng) {
 function randomChoice(entries, rng) {
     if (!entries?.length) return null;
     return entries[Math.floor(rng() * entries.length)] || entries[0];
-}
-
-function renderAchievementGroup(group) {
-    return `
-        <section class="achievement-group">
-            <div class="achievement-group-head">
-                <h4>${escapeHtml(group.label)}</h4>
-                <span>${group.completed} / ${group.achievements.length}</span>
-            </div>
-            <div class="mission-list">
-                ${group.achievements.map((achievement) => renderAchievementRow(achievement)).join("")}
-            </div>
-        </section>
-    `;
-}
-
-function renderAchievementRow(achievement) {
-    const badgeText = achievement.badgeId ? " - badge unlock" : "";
-    return `
-        <article class="mission-row ${achievement.complete ? "complete" : ""}">
-            <div>
-                <strong>${escapeHtml(achievement.label)}</strong>
-                <span>${escapeHtml(`${achievement.description}${badgeText}`)}</span>
-            </div>
-            <div class="mission-progress">
-                <i style="width: ${Math.min(100, Math.round(achievement.progress * 100))}%"></i>
-            </div>
-            <small>${escapeHtml(achievement.status)}</small>
-            <span class="mission-xp">+${formatNumber(achievement.xp)} XP</span>
-        </article>
-    `;
 }
 
 function renderAccountUploadDialog() {
@@ -6263,8 +6231,8 @@ function markBadgeSeen(account, badgeId) {
     }
 }
 
-function renderAccountLevelPill(account, profile) {
-    const progress = accountProgress(account, profile);
+function renderAccountLevelPill(account) {
+    const progress = accountProgress(account);
     return `
         <div class="account-level-pill" title="${escapeHtml(`${formatNumber(progress.totalXp)} total XP`)}">
             <strong>LVL ${progress.level}</strong>
@@ -6273,14 +6241,9 @@ function renderAccountLevelPill(account, profile) {
     `;
 }
 
-function accountProgress(account, profile) {
-    const groups = accountAchievementGroups(account, profile);
-    const achievements = groups.flatMap((group) => group.achievements);
-    const achievementXp = achievements
-        .filter((achievement) => achievement.complete)
-        .reduce((sum, achievement) => sum + achievement.xp, 0);
+function accountProgress(account) {
     const storedXp = number(account?.xp);
-    const totalXp = Math.min(ACCOUNT_MAX_LEVEL * ACCOUNT_XP_PER_LEVEL, achievementXp + storedXp);
+    const totalXp = Math.min(ACCOUNT_MAX_LEVEL * ACCOUNT_XP_PER_LEVEL, storedXp);
     const level = Math.min(ACCOUNT_MAX_LEVEL, Math.floor(totalXp / ACCOUNT_XP_PER_LEVEL) + 1);
     const levelBaseXp = (level - 1) * ACCOUNT_XP_PER_LEVEL;
     const currentLevelXp = level >= ACCOUNT_MAX_LEVEL ? ACCOUNT_XP_PER_LEVEL : Math.max(0, totalXp - levelBaseXp);
@@ -6289,122 +6252,9 @@ function accountProgress(account, profile) {
         level,
         totalXp,
         storedXp,
-        achievementXp,
         currentLevelXp,
         xpRemaining,
-        levelProgress: level >= ACCOUNT_MAX_LEVEL ? 1 : currentLevelXp / ACCOUNT_XP_PER_LEVEL,
-        completedAchievements: achievements.filter((achievement) => achievement.complete).length,
-        totalAchievements: achievements.length,
-        groups
-    };
-}
-
-function accountAchievementGroups(account, profile) {
-    const overall = profile ? buildProfileOverall(profile) : null;
-    const br = profile ? normalizePlayer(profile.battleRoyale) : normalizePlayer(null);
-    const dm = profile ? normalizePlayer(profile.deathmatch) : normalizePlayer(null);
-    const stats = normalizeStats(overall?.stats);
-    const derived = normalizeDerived(overall?.derived, stats);
-    const groups = [
-        {
-            id: "account",
-            label: "Account",
-            achievements: [
-                achievement("account_create", "Create Account", "Login with Discord once.", account?.id ? 1 : 0, 1, 50),
-                achievement("account_link_minecraft", "Link Minecraft", "Pair Discord to Minecraft with /linkminecraft.", profile ? 1 : 0, 1, 150, { badgeId: "linked" }),
-                achievement("account_set_icon", "Set Your Icon", "Choose Discord, Minecraft, or upload a custom profile picture.", cleanAvatarSource(account?.avatar_source) !== "minecraft" || account?.custom_avatar_url ? 1 : 0, 1, 50),
-                achievement("account_pick_banner", "Pick a Banner", "Choose or upload a profile background.", cleanProfileBackground(account?.profile_background, account) !== "default" ? 1 : 0, 1, 50),
-                achievement("overall_first_game", "First Game", "Play one tracked match.", stats.games, 1, 75),
-                achievement("overall_first_kill", "First Kill", "Get one tracked kill.", stats.kills, 1, 75),
-                achievement("overall_first_hit", "First Hit", "Land one tracked hit.", stats.hits, 1, 50),
-                achievement("overall_first_win", "First Win", "Win any tracked match.", stats.wins, 1, 175, { badgeId: "first_win" }),
-                achievement("overall_play_both", "Play Both Modes", "Play at least one match in Battle Royale and Deathmatch.", br.stats.games > 0 && dm.stats.games > 0 ? 1 : 0, 1, 150),
-                achievement("overall_one_hour", "One Hour In", "Reach 1 hour of tracked playtime.", stats.playtimeSeconds, 3600, 200, { suffix: "s", formatter: formatDuration }),
-                achievement("overall_head_start", "Head Start", "Get your first headshot kill.", stats.headshotKills, 1, 100),
-                achievement("overall_sharpshooter", "Sharpshooter", "Reach 35% headshot rate after 20 hits.", stats.hits >= 20 ? derived.headshotRate : 0, 35, 300, { suffix: "%", badgeId: "sharpshooter" }),
-                achievement("overall_veteran", "Veteran", "Play 25 tracked games.", stats.games, 25, 350, { badgeId: "veteran" })
-            ]
-        },
-        ...ACHIEVEMENT_MODES.map((mode) => modeAchievementGroup(mode, mode.id === "battleRoyale" ? br : dm))
-    ];
-    return groups.map((group) => ({
-        ...group,
-        completed: group.achievements.filter((entry) => entry.complete).length
-    }));
-}
-
-function modeAchievementGroup(mode, player) {
-    const stats = normalizeStats(player?.stats);
-    const achievements = [
-        achievement(`${mode.id}_first_game`, `${mode.short} First Game`, `Play one ${mode.label} match.`, stats.games, 1, 75),
-        ...ACHIEVEMENT_WIN_MILESTONES.map((target) => achievement(
-            `${mode.id}_wins_${target}`,
-            `${mode.short} ${formatNumber(target)} ${target === 1 ? "Win" : "Wins"}`,
-            `Win ${formatNumber(target)} ${mode.label} ${target === 1 ? "game" : "games"}.`,
-            stats.wins,
-            target,
-            achievementXp("wins", target),
-            { badgeId: modeAchievementBadgeId(mode, "wins", target) }
-        )),
-        ...ACHIEVEMENT_KILL_MILESTONES.map((target) => achievement(
-            `${mode.id}_kills_${target}`,
-            `${mode.short} ${formatNumber(target)} Kills`,
-            `Score ${formatNumber(target)} ${mode.label} kills.`,
-            stats.kills,
-            target,
-            achievementXp("kills", target),
-            { badgeId: modeAchievementBadgeId(mode, "kills", target) }
-        )),
-        ...ACHIEVEMENT_MVP_MILESTONES.map((target) => achievement(
-            `${mode.id}_mvp_${target}`,
-            `${mode.short} MVP ${formatNumber(target)}`,
-            `Earn MVP ${formatNumber(target)} ${target === 1 ? "time" : "times"} in ${mode.label}.`,
-            stats.mvp,
-            target,
-            achievementXp("mvp", target),
-            { badgeId: modeAchievementBadgeId(mode, "mvp", target) }
-        ))
-    ];
-    return {
-        id: mode.id,
-        label: mode.label,
-        achievements
-    };
-}
-
-function modeAchievementBadgeId(mode, type, target) {
-    if (type === "wins") {
-        if (target === 1) return mode.id === "battleRoyale" ? "br_winner" : "dm_winner";
-        if (target === 10 || target === 50) return `${mode.badgePrefix}_wins_${target}`;
-        if (target === 100) return `${mode.badgePrefix}_wins_live`;
-    }
-    if (type === "kills" && (target === 1000 || target === 10000)) return `${mode.badgePrefix}_kills_${target}`;
-    if (type === "mvp" && (target === 10 || target === 100)) return `${mode.badgePrefix}_mvp_${target}`;
-    return "";
-}
-
-function achievementXp(type, target) {
-    const rewards = {
-        wins: { 1: 100, 5: 300, 10: 750, 20: 1500, 50: 5000, 100: 12000 },
-        kills: { 10: 100, 50: 200, 100: 400, 250: 800, 500: 1500, 1000: 3000, 2500: 6000, 5000: 12000, 10000: 20000 },
-        mvp: { 1: 150, 5: 400, 10: 800, 25: 2000, 50: 5000, 100: 12000 }
-    };
-    return rewards[type]?.[target] || 50;
-}
-
-function achievement(id, label, description, value, target, xp = 500, options = {}) {
-    const current = number(value);
-    const complete = current >= target;
-    const formatValue = options.formatter || ((entry) => `${formatNumber(entry)}${options.suffix || ""}`);
-    return {
-        id,
-        label,
-        description,
-        xp,
-        badgeId: options.badgeId || "",
-        complete,
-        progress: target > 0 ? current / target : 0,
-        status: complete ? "Complete" : `${formatValue(current)} / ${formatValue(target)}`
+        levelProgress: level >= ACCOUNT_MAX_LEVEL ? 1 : currentLevelXp / ACCOUNT_XP_PER_LEVEL
     };
 }
 
@@ -6525,7 +6375,7 @@ function renderPlayerProfileHero(profile) {
                     <h3>${escapeHtml(name)}</h3>
                     <span>${account ? escapeHtml(profile.name || "Linked Minecraft player") : "No website account linked yet"}</span>
                     ${account ? renderAccountSignedDate(account) : ""}
-                    ${account ? renderAccountLevelPill(account, profile) : ""}
+                    ${account ? renderAccountLevelPill(account) : ""}
                     <div class="account-badge-row">
                         ${badges.length ? badges.map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
                     </div>
