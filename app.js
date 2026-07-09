@@ -42,8 +42,11 @@ const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97,
 const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v2";
 const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
 const BADGE_SEEN_STORAGE_KEY = "cob_seen_badges_v1";
+const WEEKLY_MISSION_STORAGE_KEY = "cob_weekly_missions_v1";
 const ACCOUNT_MAX_LEVEL = 1000;
 const ACCOUNT_XP_PER_LEVEL = 10000;
+const WEEKLY_MISSION_COUNT = 7;
+const WEEKLY_EASY_MISSION_COUNT = 4;
 const ACHIEVEMENT_WIN_MILESTONES = [1, 5, 10, 20, 50, 100];
 const ACHIEVEMENT_KILL_MILESTONES = [10, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
 const ACHIEVEMENT_MVP_MILESTONES = [1, 5, 10, 25, 50, 100];
@@ -165,6 +168,17 @@ const state = {
     accountSaving: false,
     accountUploadDialog: "",
     accountUploading: false,
+    weeklyMissions: {
+        loading: false,
+        syncing: false,
+        row: null,
+        source: "",
+        message: "",
+        claimingId: "",
+        animatingId: "",
+        swapMissionId: "",
+        swapping: false
+    },
     pollMs: DEFAULT_API_POLL_MS,
     refreshTimer: null,
     dataSignature: "",
@@ -269,6 +283,7 @@ async function applyAuthSession(session, shouldRender = false) {
     if (!session?.user) {
         state.authProfile = null;
         state.authMessage = "";
+        resetWeeklyMissionState();
         resetPlaytestViewer();
         await loadAccountProfiles();
         await loadRemotePlaytests({ silent: true });
@@ -280,6 +295,7 @@ async function applyAuthSession(session, shouldRender = false) {
     await syncPlaytestProfile(session.user);
     await loadAccountProfiles();
     await loadRemotePlaytests({ silent: true });
+    await syncWeeklyMissions();
     consumePlaytestAuthReturn();
     if (shouldRender) render();
 }
@@ -319,6 +335,7 @@ async function signOutDiscord() {
     state.authProfile = null;
     state.accountMessage = "";
     state.authMessage = "";
+    resetWeeklyMissionState();
     resetPlaytestViewer();
     await loadAccountProfiles();
     await loadRemotePlaytests({ silent: true });
@@ -368,6 +385,27 @@ function bindStaticEvents() {
         if (confirmationClose || event.target.matches("[data-confirm-dialog-backdrop]")) {
             event.preventDefault();
             closeConfirmDialog();
+            return;
+        }
+
+        const missionSwapClose = event.target.closest("[data-weekly-swap-close]");
+        if (missionSwapClose || event.target.matches("[data-weekly-swap-backdrop]")) {
+            event.preventDefault();
+            closeWeeklyMissionSwapDialog();
+            return;
+        }
+
+        const missionClaim = event.target.closest("[data-weekly-claim]");
+        if (missionClaim) {
+            event.preventDefault();
+            void claimWeeklyMission(missionClaim.dataset.weeklyClaim);
+            return;
+        }
+
+        const missionSwap = event.target.closest("[data-weekly-swap]");
+        if (missionSwap) {
+            event.preventDefault();
+            openWeeklyMissionSwapDialog(missionSwap.dataset.weeklySwap);
             return;
         }
 
@@ -445,6 +483,12 @@ function bindStaticEvents() {
         if (event.target.matches("[data-account-upload-form]")) {
             event.preventDefault();
             void submitAccountUploadForm(event.target);
+            return;
+        }
+
+        if (event.target.matches("[data-weekly-swap-form]")) {
+            event.preventDefault();
+            void submitWeeklyMissionSwap();
             return;
         }
 
@@ -1229,6 +1273,7 @@ function applyData(data, preview, dataMode) {
     state.dataMode = dataMode;
     state.dataSignature = signature;
     rebuildCache();
+    void syncWeeklyMissions();
 
     if (previousSelectedId && profileById(previousSelectedId) && (state.view === "player" || state.profilePreviewOpen)) {
         state.selectedId = previousSelectedId;
@@ -1278,8 +1323,14 @@ function exportSignature(data) {
     const profileParts = (data.profiles || []).map((profile) => {
         const br = normalizeStats(profile.battleRoyale?.stats);
         const dm = normalizeStats(profile.deathmatch?.stats);
+        const weaponParts = ["battleRoyale", "deathmatch"].flatMap((mode) => (
+            (profile[mode]?.details?.weapons || []).map((weapon) => {
+                const stats = normalizeStats(weapon.stats);
+                return `${mode}:${weapon.id || weapon.label}:${stats.kills}:${stats.hits}:${stats.headshots}:${stats.headshotKills}:${stats.utilityKills}:${stats.vehicleKills}`;
+            })
+        )).join(";");
         const last = (profile.recentMatches || [])[0]?.endedAt || "";
-        return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.mvp}:${dm.games}:${dm.kills}:${dm.wins}:${dm.mvp}:${profile.recentMatches?.length || 0}:${last}`;
+        return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.hits}:${br.headshots}:${br.headshotKills}:${br.mvp}:${br.playtimeSeconds}:${br.utilityKills}:${br.vehicleKills}:${dm.games}:${dm.kills}:${dm.wins}:${dm.hits}:${dm.headshots}:${dm.headshotKills}:${dm.mvp}:${dm.playtimeSeconds}:${dm.utilityKills}:${dm.vehicleKills}:${profile.recentMatches?.length || 0}:${last}:${weaponParts}`;
     }).join(",");
     const live = data.liveStatus || {};
     const livePart = `${live.onlinePlayers ?? ""}:${live.state ?? ""}:${live.mode ?? ""}:${live.mapId ?? ""}:${live.redScore ?? ""}:${live.blueScore ?? ""}:${live.matchPlayers ?? ""}:${live.alivePlayers ?? ""}:${live.teamMode ?? ""}`;
@@ -1351,6 +1402,7 @@ function render() {
     renderAccountPage();
     renderPlaytestConfirmationDialog();
     renderAccountUploadDialog();
+    renderWeeklyMissionSwapDialog();
     renderMainViewTabs();
     renderModeTabs();
     renderSummary();
@@ -1712,6 +1764,7 @@ function replaceClassPrefix(element, prefix, nextClass) {
 function renderAccountMissions(account, profile, badgeState) {
     const progress = accountProgress(account, profile);
     return `
+        ${renderWeeklyMissions(profile)}
         <section class="account-panel">
             <div class="mission-head">
                 <div>
@@ -1740,9 +1793,633 @@ function renderAccountMissions(account, profile, badgeState) {
             <div class="achievement-groups">
                 ${progress.groups.map((group) => renderAchievementGroup(group)).join("")}
             </div>
-            <p class="mode-empty">${badgeState.unlockedIds.size} badge${badgeState.unlockedIds.size === 1 ? "" : "s"} unlocked. Permanent achievements are live now; daily and weekly missions can plug into this XP total later.</p>
+            <p class="mode-empty">${badgeState.unlockedIds.size} badge${badgeState.unlockedIds.size === 1 ? "" : "s"} unlocked. Early achievements award modest XP; major long-term milestones can award multiple levels.</p>
         </section>
     `;
+}
+
+function renderWeeklyMissions(profile) {
+    const missionState = state.weeklyMissions;
+    if (!profile) {
+        return `
+            <section class="account-panel">
+                <div class="mission-head">
+                    <div>
+                        <p class="panel-kicker">Renewable Missions</p>
+                        <h3>Weekly rotation</h3>
+                    </div>
+                    <strong>4 Easy / 3 Hard</strong>
+                </div>
+                <p class="mode-empty">Link your Minecraft account to receive missions based on newly tracked stats.</p>
+            </section>
+        `;
+    }
+    if (missionState.loading && !missionState.row) {
+        return `
+            <section class="account-panel">
+                <div class="mission-head">
+                    <div>
+                        <p class="panel-kicker">Renewable Missions</p>
+                        <h3>Preparing weekly rotation...</h3>
+                    </div>
+                </div>
+            </section>
+        `;
+    }
+
+    const row = missionState.row;
+    const missions = Array.isArray(row?.missions) ? row.missions : [];
+    if (!missions.length) {
+        return `
+            <section class="account-panel">
+                <div class="mission-head">
+                    <div>
+                        <p class="panel-kicker">Renewable Missions</p>
+                        <h3>Weekly rotation unavailable</h3>
+                    </div>
+                </div>
+                <p class="mode-empty">${escapeHtml(missionState.message || "Missions will appear when the current stats finish loading.")}</p>
+            </section>
+        `;
+    }
+
+    const claimedIds = new Set(arrayField(row.claimed_ids));
+    const completed = missions.filter((mission) => weeklyMissionProgress(profile, mission).complete).length;
+    const cycle = weeklyMissionCycle();
+    return `
+        <section class="account-panel weekly-missions-panel">
+            <div class="mission-head">
+                <div>
+                    <p class="panel-kicker">Renewable Missions</p>
+                    <h3>Weekly rotation</h3>
+                    <span>Resets ${escapeHtml(formatFullLocalDate(cycle.endsAt))}</span>
+                </div>
+                <strong>${completed} / ${missions.length}</strong>
+            </div>
+            <div class="weekly-mission-summary">
+                <span><b>4</b> easy</span>
+                <span><b>3</b> hard</span>
+                <span><b>${formatNumber(missions.reduce((sum, mission) => sum + number(mission.xp), 0))}</b> XP available</span>
+            </div>
+            <p class="weekly-mission-rule">Untouched missions rotate every week. If you cannot finish a mission by the end of the week, it will not change once you have started it. You can manually swap that mission once. This balances the fact that the server is not online 24/7 yet.</p>
+            <div class="mission-list">
+                ${missions.map((mission) => renderWeeklyMissionRow(profile, mission, claimedIds)).join("")}
+            </div>
+            ${missionState.message ? `<p class="mode-empty">${escapeHtml(missionState.message)}</p>` : ""}
+        </section>
+    `;
+}
+
+function renderWeeklyMissionRow(profile, mission, claimedIds) {
+    const progress = weeklyMissionProgress(profile, mission);
+    const claimed = claimedIds.has(mission.id);
+    const claiming = state.weeklyMissions.claimingId === mission.id;
+    const animating = state.weeklyMissions.animatingId === mission.id;
+    const canSwap = Boolean(mission.carried) && !mission.swapUsed && !claimed;
+    const action = claimed
+        ? `<span class="mission-xp claimed">Claimed</span>`
+        : progress.complete
+            ? `<button class="mission-claim-button" type="button" data-weekly-claim="${escapeHtml(mission.id)}" ${claiming || state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>${claiming ? "Claiming..." : `Claim ${formatNumber(mission.xp)} XP`}</button>`
+            : canSwap
+                ? `<button class="mission-swap-button" type="button" data-weekly-swap="${escapeHtml(mission.id)}" ${state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>Swap</button>`
+                : `<span class="mission-xp">+${formatNumber(mission.xp)} XP</span>`;
+    return `
+        <article class="mission-row weekly-mission-row ${progress.complete ? "complete" : ""} ${mission.carried ? "carried" : ""} ${animating ? "rewarding" : ""}">
+            <div>
+                <span class="mission-difficulty ${escapeHtml(mission.difficulty)}">${escapeHtml(mission.difficulty)}</span>
+                <strong>${escapeHtml(mission.label)}</strong>
+                <span>${escapeHtml(mission.description)}</span>
+                ${mission.carried ? `<small class="mission-carried-note">Carried over - progress preserved</small>` : ""}
+            </div>
+            <div class="mission-progress">
+                <i style="width: ${Math.min(100, Math.round(progress.progress * 100))}%"></i>
+            </div>
+            <small>${escapeHtml(progress.status)}</small>
+            <div class="mission-actions">
+                ${action}
+                ${animating ? `<span class="mission-claim-burst">+${formatNumber(mission.xp)} XP</span>` : ""}
+            </div>
+        </article>
+    `;
+}
+
+function resetWeeklyMissionState() {
+    state.weeklyMissions = {
+        loading: false,
+        syncing: false,
+        row: null,
+        source: "",
+        message: "",
+        claimingId: "",
+        animatingId: "",
+        swapMissionId: "",
+        swapping: false
+    };
+}
+
+async function syncWeeklyMissions() {
+    const missionState = state.weeklyMissions;
+    const account = state.authProfile;
+    const profile = linkedStatsProfile();
+    if (missionState.syncing || !state.authClient || !state.authSession?.user || !account?.id || !profile) return;
+
+    const cycle = weeklyMissionCycle();
+    if (missionState.source === "local" && missionState.row?.cycle_key === cycle.key) return;
+    missionState.syncing = true;
+    missionState.loading = !missionState.row || missionState.row.cycle_key !== cycle.key;
+    if (state.view === "account") renderAccountPage();
+
+    try {
+        let row = missionState.row?.cycle_key === cycle.key ? missionState.row : null;
+        if (!row) row = await loadRemoteWeeklyMissionRow(account, profile, cycle);
+        missionState.row = normalizeWeeklyMissionRow(row);
+        missionState.source = "supabase";
+        missionState.message = "";
+    } catch (error) {
+        console.warn("Weekly mission persistence is not available", error);
+        missionState.row = loadLocalWeeklyMissionRow(account, profile, cycle);
+        missionState.source = "local";
+        missionState.message = "Preview mode: run supabase-weekly-missions.sql to save mission progress and receive XP.";
+    } finally {
+        missionState.loading = false;
+        missionState.syncing = false;
+        if (state.view === "account") renderAccountPage();
+    }
+}
+
+async function loadRemoteWeeklyMissionRow(account, profile, cycle) {
+    const columns = "user_id, cycle_key, cycle_ends_at, missions, claimed_ids, swapped_ids, created_at, updated_at";
+    const existing = await state.authClient
+        .from("profile_weekly_missions")
+        .select(columns)
+        .eq("user_id", account.id)
+        .eq("cycle_key", cycle.key)
+        .maybeSingle();
+    if (existing.error) throw existing.error;
+    if (existing.data) return existing.data;
+
+    const previousResult = await state.authClient
+        .from("profile_weekly_missions")
+        .select(columns)
+        .eq("user_id", account.id)
+        .lt("cycle_key", cycle.key)
+        .order("cycle_key", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+    if (previousResult.error) throw previousResult.error;
+
+    const freshMissions = generateWeeklyMissions(account, profile, cycle);
+    const missions = renewWeeklyMissions(previousResult.data, freshMissions, profile, cycle);
+    const inserted = await state.authClient
+        .from("profile_weekly_missions")
+        .insert({
+            user_id: account.id,
+            cycle_key: cycle.key,
+            cycle_ends_at: cycle.endsAt,
+            missions,
+            claimed_ids: [],
+            swapped_ids: []
+        })
+        .select(columns)
+        .single();
+    if (inserted.error) {
+        const raced = await state.authClient
+            .from("profile_weekly_missions")
+            .select(columns)
+            .eq("user_id", account.id)
+            .eq("cycle_key", cycle.key)
+            .maybeSingle();
+        if (raced.error || !raced.data) throw inserted.error;
+        return raced.data;
+    }
+    return inserted.data;
+}
+
+function loadLocalWeeklyMissionRow(account, profile, cycle) {
+    const storageId = `${account.id}:${cycle.key}`;
+    try {
+        const parsed = JSON.parse(window.localStorage?.getItem(WEEKLY_MISSION_STORAGE_KEY) || "{}");
+        const existing = parsed?.[storageId];
+        if (existing?.cycle_key === cycle.key && Array.isArray(existing.missions)) {
+            return normalizeWeeklyMissionRow(existing);
+        }
+        const previous = Object.values(parsed)
+            .filter((entry) => entry?.user_id === account.id && entry?.cycle_key < cycle.key)
+            .sort((a, b) => String(b.cycle_key).localeCompare(String(a.cycle_key)))[0] || null;
+        const freshMissions = generateWeeklyMissions(account, profile, cycle);
+        const row = {
+            user_id: account.id,
+            cycle_key: cycle.key,
+            cycle_ends_at: cycle.endsAt,
+            missions: renewWeeklyMissions(previous, freshMissions, profile, cycle),
+            claimed_ids: [],
+            swapped_ids: []
+        };
+        parsed[storageId] = row;
+        window.localStorage?.setItem(WEEKLY_MISSION_STORAGE_KEY, JSON.stringify(parsed));
+        return row;
+    } catch (_error) {
+        return {
+            user_id: account.id,
+            cycle_key: cycle.key,
+            cycle_ends_at: cycle.endsAt,
+            missions: generateWeeklyMissions(account, profile, cycle),
+            claimed_ids: [],
+            swapped_ids: []
+        };
+    }
+}
+
+function normalizeWeeklyMissionRow(row) {
+    return {
+        ...row,
+        missions: Array.isArray(row?.missions) ? row.missions.slice(0, WEEKLY_MISSION_COUNT) : [],
+        claimed_ids: arrayField(row?.claimed_ids),
+        swapped_ids: arrayField(row?.swapped_ids)
+    };
+}
+
+function renewWeeklyMissions(previousRow, freshMissions, profile, cycle) {
+    if (!previousRow?.missions?.length) return freshMissions;
+    const claimedIds = new Set(arrayField(previousRow.claimed_ids));
+    return freshMissions.map((freshMission, index) => {
+        const previous = previousRow.missions[index];
+        if (!previous || previous.difficulty !== freshMission.difficulty || claimedIds.has(previous.id)) return freshMission;
+        const progress = weeklyMissionProgress(profile, previous);
+        if (progress.value <= 0) return freshMission;
+        return {
+            ...previous,
+            carried: true,
+            carriedFrom: previous.carriedFrom || previousRow.cycle_key,
+            carriedAt: cycle.startsAt
+        };
+    });
+}
+
+async function claimWeeklyMission(missionId) {
+    const missionState = state.weeklyMissions;
+    const profile = linkedStatsProfile();
+    if (!missionId || missionState.claimingId || missionState.source !== "supabase" || !missionState.row || !profile) return;
+    const claimedIds = new Set(arrayField(missionState.row.claimed_ids));
+    const mission = missionState.row.missions.find((entry) => entry.id === missionId);
+    if (!mission || claimedIds.has(mission.id) || !weeklyMissionProgress(profile, mission).complete) return;
+
+    missionState.claimingId = mission.id;
+    renderAccountPage();
+    try {
+        const { data, error } = await state.authClient.rpc("claim_weekly_mission", {
+            p_cycle_key: missionState.row.cycle_key,
+            p_mission_id: mission.id
+        });
+        if (error) throw error;
+        claimedIds.add(mission.id);
+        missionState.row.claimed_ids = [...claimedIds];
+        const xp = number(Array.isArray(data) ? data[0] : data);
+        if (xp || data === 0) applyAccountXp(xp);
+        missionState.message = "";
+        missionState.animatingId = mission.id;
+        window.setTimeout(() => {
+            if (state.weeklyMissions.animatingId !== mission.id) return;
+            state.weeklyMissions.animatingId = "";
+            if (state.view === "account") renderAccountPage();
+        }, 1400);
+    } catch (error) {
+        missionState.message = "That mission could not be claimed. Check the weekly mission Supabase function.";
+        console.warn("Could not claim weekly mission", mission.id, error);
+    } finally {
+        missionState.claimingId = "";
+        renderAccountPage();
+    }
+}
+
+function applyAccountXp(xp) {
+    if (!state.authProfile) return;
+    state.authProfile = { ...state.authProfile, xp };
+    state.accountProfiles = state.accountProfiles.map((account) => (
+        account.id === state.authProfile.id ? { ...account, xp } : account
+    ));
+}
+
+function openWeeklyMissionSwapDialog(missionId) {
+    const mission = state.weeklyMissions.row?.missions?.find((entry) => entry.id === missionId);
+    if (!mission?.carried || mission.swapUsed || state.weeklyMissions.row?.claimed_ids?.includes(missionId)) return;
+    state.weeklyMissions.swapMissionId = missionId;
+    renderWeeklyMissionSwapDialog();
+}
+
+function closeWeeklyMissionSwapDialog() {
+    if (state.weeklyMissions.swapping) return;
+    state.weeklyMissions.swapMissionId = "";
+    renderWeeklyMissionSwapDialog();
+}
+
+function renderWeeklyMissionSwapDialog() {
+    let host = document.getElementById("weekly-mission-dialog-host");
+    if (!host) {
+        host = document.createElement("div");
+        host.id = "weekly-mission-dialog-host";
+        document.body.appendChild(host);
+    }
+
+    const missionId = state.weeklyMissions.swapMissionId;
+    const mission = state.weeklyMissions.row?.missions?.find((entry) => entry.id === missionId);
+    if (!mission) {
+        host.innerHTML = "";
+        return;
+    }
+
+    host.innerHTML = `
+        <div class="account-upload-backdrop" data-weekly-swap-backdrop>
+            <form class="account-upload-dialog weekly-swap-dialog" data-weekly-swap-form>
+                <div class="date-card-topline">
+                    <p class="panel-kicker">Swap Mission</p>
+                    <button type="button" class="modal-icon-button" data-weekly-swap-close aria-label="Close swap confirmation">x</button>
+                </div>
+                <h3>Replace ${escapeHtml(mission.label)}?</h3>
+                <p>Your current progress will be discarded. The replacement will have the same difficulty and will start from your current stats. This mission slot can only be swapped once.</p>
+                <div class="date-admin-actions modal-actions">
+                    <button type="button" data-weekly-swap-close ${state.weeklyMissions.swapping ? "disabled" : ""}>Cancel</button>
+                    <button type="submit" ${state.weeklyMissions.swapping ? "disabled" : ""}>${state.weeklyMissions.swapping ? "Swapping..." : "Swap mission"}</button>
+                </div>
+            </form>
+        </div>
+    `;
+}
+
+async function submitWeeklyMissionSwap() {
+    const missionState = state.weeklyMissions;
+    const profile = linkedStatsProfile();
+    const mission = missionState.row?.missions?.find((entry) => entry.id === missionState.swapMissionId);
+    if (missionState.swapping || missionState.source !== "supabase" || !mission?.carried || mission.swapUsed || !profile) return;
+
+    const replacement = generateWeeklyMissionReplacement(mission, profile);
+    if (!replacement) {
+        missionState.message = "No different mission is available for this slot right now.";
+        closeWeeklyMissionSwapDialog();
+        renderAccountPage();
+        return;
+    }
+
+    missionState.swapping = true;
+    renderWeeklyMissionSwapDialog();
+    try {
+        const { data, error } = await state.authClient.rpc("swap_weekly_mission", {
+            p_cycle_key: missionState.row.cycle_key,
+            p_mission_id: mission.id,
+            p_replacement: replacement
+        });
+        if (error) throw error;
+        missionState.row.missions = Array.isArray(data) ? data : replacementMissionLocally(missionState.row.missions, mission.id, replacement);
+        missionState.row.swapped_ids = [...new Set([...arrayField(missionState.row.swapped_ids), mission.id])];
+        missionState.message = "Mission swapped. The new mission starts from your current stats.";
+        missionState.swapMissionId = "";
+    } catch (error) {
+        missionState.message = "That mission could not be swapped. Check the weekly mission Supabase function.";
+        console.warn("Could not swap weekly mission", mission.id, error);
+    } finally {
+        missionState.swapping = false;
+        renderWeeklyMissionSwapDialog();
+        renderAccountPage();
+    }
+}
+
+function generateWeeklyMissionReplacement(mission, profile) {
+    const cycle = weeklyMissionCycle();
+    const rng = seededRandom(`${state.authProfile?.id}:${cycle.key}:${mission.id}:${Date.now()}`);
+    const usedFamilies = new Set((state.weeklyMissions.row?.missions || []).map((entry) => entry.family));
+    const candidates = shuffleWithRandom(weeklyMissionCandidates(profile, mission.difficulty, rng), rng);
+    const candidate = candidates.find((entry) => entry.family !== mission.family && !usedFamilies.has(entry.family))
+        || candidates.find((entry) => entry.family !== mission.family);
+    if (!candidate) return null;
+    const replacement = {
+        ...candidate,
+        id: `${cycle.key}-${mission.difficulty}-swap-${Date.now()}`,
+        baseline: weeklyMissionMetric(profile, candidate),
+        swapUsed: true,
+        swappedFrom: mission.id
+    };
+    return replacement;
+}
+
+function replacementMissionLocally(missions, missionId, replacement) {
+    return (missions || []).map((mission) => mission.id === missionId ? replacement : mission);
+}
+
+function weeklyMissionCycle(now = new Date()) {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const daysSinceMonday = (start.getDay() + 6) % 7;
+    start.setDate(start.getDate() - daysSinceMonday);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    const key = [
+        start.getFullYear(),
+        String(start.getMonth() + 1).padStart(2, "0"),
+        String(start.getDate()).padStart(2, "0")
+    ].join("-");
+    return { key, startsAt: start.toISOString(), endsAt: end.toISOString() };
+}
+
+function generateWeeklyMissions(account, profile, cycle) {
+    const rng = seededRandom(`${account.id}:${cycle.key}`);
+    const easy = pickWeeklyMissions(weeklyMissionCandidates(profile, "easy", rng), WEEKLY_EASY_MISSION_COUNT, rng);
+    const hard = pickWeeklyMissions(
+        weeklyMissionCandidates(profile, "hard", rng),
+        WEEKLY_MISSION_COUNT - WEEKLY_EASY_MISSION_COUNT,
+        rng
+    );
+    return [...easy, ...hard].map((mission, index) => ({
+        ...mission,
+        id: `${cycle.key}-${mission.difficulty}-${index + 1}-${mission.family}`,
+        baseline: weeklyMissionMetric(profile, mission)
+    }));
+}
+
+function pickWeeklyMissions(candidates, count, rng) {
+    const shuffled = shuffleWithRandom(candidates.filter(Boolean), rng);
+    const selected = [];
+    const families = new Set();
+    for (const mission of shuffled) {
+        if (families.has(mission.family)) continue;
+        selected.push(mission);
+        families.add(mission.family);
+        if (selected.length >= count) break;
+    }
+    return selected;
+}
+
+function weeklyMissionCandidates(profile, difficulty, rng) {
+    const mode = randomChoice(ACHIEVEMENT_MODES, rng);
+    const otherMode = ACHIEVEMENT_MODES.find((entry) => entry.id !== mode.id);
+    const modeWeapons = weeklyEligibleWeapons(profile, mode.id);
+    const weaponMode = modeWeapons.length ? mode.id : "overall";
+    const weapon = randomChoice(modeWeapons.length ? modeWeapons : weeklyEligibleWeapons(profile, "overall"), rng);
+    const modeCategories = weeklyAvailableCategories(profile, mode.id);
+    const categoryMode = modeCategories.length ? mode.id : "overall";
+    const category = randomChoice(modeCategories.length ? modeCategories : weeklyAvailableCategories(profile, "overall"), rng);
+    const isEasy = difficulty === "easy";
+    const missions = isEasy
+        ? [
+            weeklyMission("matches_any", difficulty, "Play the Field", "Play 2 tracked matches.", "games", 2, 300, { mode: "overall" }),
+            weeklyMission("matches_mode", difficulty, `${mode.short} Warm-up`, `Play 1 ${mode.label} match.`, "games", 1, 300, { mode: mode.id }),
+            weeklyMission("kills_any", difficulty, "On the Board", "Get 5 kills in any mode.", "kills", 5, 350, { mode: "overall" }),
+            weeklyMission("kills_mode", difficulty, `${mode.short} Eliminations`, `Get 4 kills in ${mode.label}.`, "kills", 4, 400, { mode: mode.id }),
+            weeklyMission("hits_mode", difficulty, `${mode.short} Pressure`, `Land 25 hits in ${mode.label}.`, "hits", 25, 350, { mode: mode.id }),
+            weeklyMission("headshots", difficulty, "Keep It High", "Land 5 headshots in any mode.", "headshots", 5, 400, { mode: "overall" }),
+            weeklyMission("headshot_kills", difficulty, "Clean Finish", "Get 2 headshot kills in any mode.", "headshotKills", 2, 450, { mode: "overall" }),
+            weeklyMission("playtime", difficulty, "Stay in the Fight", "Play for 15 tracked minutes.", "playtimeSeconds", 900, 350, { mode: "overall" }),
+            weeklyMission("utility", difficulty, "Utility Check", "Get 1 utility kill.", "utilityKills", 1, 500, { mode: "overall" }),
+            weapon ? weeklyMission("weapon_hits", difficulty, `${weapon.label} Practice`, `Land 15 hits with the ${weapon.label}.`, "hits", 15, 450, { mode: weaponMode, weaponId: weapon.id }) : null,
+            category ? weeklyMission("category_hits", difficulty, `${weeklyCategoryLabel(category)} Practice`, `Land 25 hits with ${weeklyCategoryLabel(category).toLowerCase()} weapons.`, "hits", 25, 450, { mode: categoryMode, category }) : null,
+            weeklyMission("other_mode_hits", difficulty, `${otherMode.short} Switch-up`, `Land 20 hits in ${otherMode.label}.`, "hits", 20, 375, { mode: otherMode.id })
+        ]
+        : [
+            weeklyMission("matches_mode_hard", difficulty, `${mode.short} Regular`, `Play 5 ${mode.label} matches.`, "games", 5, 900, { mode: mode.id }),
+            weeklyMission("kills_any_hard", difficulty, "Heavy Week", "Get 30 kills in any mode.", "kills", 30, 1000, { mode: "overall" }),
+            weeklyMission("kills_mode_hard", difficulty, `${mode.short} Specialist`, `Get 20 kills in ${mode.label}.`, "kills", 20, 1100, { mode: mode.id }),
+            weeklyMission("hits_hard", difficulty, "Suppressing Fire", "Land 125 hits in any mode.", "hits", 125, 900, { mode: "overall" }),
+            weeklyMission("headshots_hard", difficulty, "Above the Shoulders", "Land 25 headshots in any mode.", "headshots", 25, 1000, { mode: "overall" }),
+            weeklyMission("headshot_kills_hard", difficulty, "Precision Week", "Get 8 headshot kills in any mode.", "headshotKills", 8, 1100, { mode: "overall" }),
+            weeklyMission("win_mode", difficulty, `${mode.short} Victory`, `Win 1 ${mode.label} match.`, "wins", 1, 1200, { mode: mode.id }),
+            weeklyStatSupported(profile, mode.id, "mvp")
+                ? weeklyMission("mvp_mode", difficulty, `${mode.short} Standout`, `Earn MVP once in ${mode.label}.`, "mvp", 1, 1300, { mode: mode.id })
+                : null,
+            weeklyMission("playtime_hard", difficulty, "Full Session", "Play for 60 tracked minutes.", "playtimeSeconds", 3600, 900, { mode: "overall" }),
+            weeklyMission("utility_hard", difficulty, "Utility Expert", "Get 3 utility kills.", "utilityKills", 3, 1200, { mode: "overall" }),
+            weeklyMission("vehicle_hard", difficulty, "Anti-Vehicle", "Get 1 vehicle kill.", "vehicleKills", 1, 1400, { mode: "overall" }),
+            weapon ? weeklyMission("weapon_kills", difficulty, `${weapon.label} Mastery`, `Get 10 kills with the ${weapon.label}.`, "kills", 10, 1200, { mode: weaponMode, weaponId: weapon.id }) : null,
+            category ? weeklyMission("category_kills", difficulty, `${weeklyCategoryLabel(category)} Mastery`, `Get 15 kills with ${weeklyCategoryLabel(category).toLowerCase()} weapons.`, "kills", 15, 1200, { mode: categoryMode, category }) : null
+        ];
+    return missions.filter(Boolean);
+}
+
+function weeklyMission(family, difficulty, label, description, metric, target, xp, options = {}) {
+    return {
+        family,
+        difficulty,
+        label,
+        description,
+        metric,
+        target,
+        xp,
+        mode: options.mode || "overall",
+        weaponId: options.weaponId || "",
+        category: options.category || ""
+    };
+}
+
+function weeklyStatSupported(profile, mode, metric) {
+    const stats = mode === "battleRoyale"
+        ? profile?.battleRoyale?.stats
+        : mode === "deathmatch"
+            ? profile?.deathmatch?.stats
+            : null;
+    if (!stats) return false;
+    if (metric === "mvp") {
+        return ["mvp", "mvps", "mvpCount", "mvpAwards"].some((key) => Object.hasOwn(stats, key));
+    }
+    return Object.hasOwn(stats, metric);
+}
+
+function weeklyMissionProgress(profile, mission) {
+    const current = weeklyMissionMetric(profile, mission);
+    const value = Math.max(0, current - number(mission.baseline));
+    const target = Math.max(1, number(mission.target));
+    const complete = value >= target;
+    const formatter = mission.metric === "playtimeSeconds" ? formatDuration : formatNumber;
+    return {
+        value,
+        target,
+        complete,
+        progress: value / target,
+        status: complete ? "Complete" : `${formatter(value)} / ${formatter(target)}`
+    };
+}
+
+function weeklyMissionMetric(profile, mission) {
+    if (!profile || !mission) return 0;
+    if (mission.weaponId || mission.category) {
+        const entries = weeklyWeaponEntries(profile, mission.mode);
+        return entries.reduce((sum, entry) => {
+            if (mission.weaponId && entry.id !== mission.weaponId) return sum;
+            if (mission.category && weeklyWeaponCategory(entry) !== mission.category) return sum;
+            return sum + number(normalizeStats(entry.stats)[mission.metric]);
+        }, 0);
+    }
+    const player = mission.mode === "battleRoyale"
+        ? normalizePlayer(profile.battleRoyale)
+        : mission.mode === "deathmatch"
+            ? normalizePlayer(profile.deathmatch)
+            : buildProfileOverall(profile);
+    return number(normalizeStats(player?.stats)[mission.metric]);
+}
+
+function weeklyEligibleWeapons(profile, mode) {
+    return weeklyWeaponEntries(profile, mode)
+        .filter((entry) => weeklyWeaponCategory(entry) !== "utility")
+        .sort((a, b) => normalizeStats(b.stats).hits - normalizeStats(a.stats).hits);
+}
+
+function weeklyAvailableCategories(profile, mode) {
+    return [...new Set(weeklyEligibleWeapons(profile, mode).map(weeklyWeaponCategory).filter(Boolean))];
+}
+
+function weeklyWeaponEntries(profile, mode) {
+    if (mode === "battleRoyale") return cleanWeaponEntries(profile?.battleRoyale?.details?.weapons || []);
+    if (mode === "deathmatch") return cleanWeaponEntries(profile?.deathmatch?.details?.weapons || []);
+    return combinedWeapons(profile);
+}
+
+function weeklyWeaponCategory(entry) {
+    const value = `${entry?.id || ""} ${entry?.label || ""}`.toLowerCase();
+    if (/grenade|smoke|knife|m320|launcher|mine|c4|rocket/.test(value)) return "utility";
+    if (/m1014|shotgun/.test(value)) return "shotgun";
+    if (/minigun|rpk|machine.?gun|lmg/.test(value)) return "lmg";
+    if (/uzi|p90|smg|mp5|vector/.test(value)) return "smg";
+    if (/deagle|b93|glock|m1911|pistol|revolver/.test(value)) return "pistol";
+    if (/awp|mk14|bocek|sniper|marksman|crossbow/.test(value)) return "marksman";
+    return "rifle";
+}
+
+function weeklyCategoryLabel(category) {
+    return {
+        rifle: "Rifle",
+        smg: "SMG",
+        pistol: "Pistol",
+        marksman: "Marksman",
+        shotgun: "Shotgun",
+        lmg: "LMG",
+        utility: "Utility"
+    }[category] || labelFromIdentifier(category);
+}
+
+function seededRandom(seed) {
+    let value = 2166136261;
+    for (const char of String(seed)) {
+        value ^= char.charCodeAt(0);
+        value = Math.imul(value, 16777619);
+    }
+    return () => {
+        value += 0x6D2B79F5;
+        let result = value;
+        result = Math.imul(result ^ (result >>> 15), result | 1);
+        result ^= result + Math.imul(result ^ (result >>> 7), result | 61);
+        return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function shuffleWithRandom(entries, rng) {
+    const shuffled = [...entries];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+        const swap = Math.floor(rng() * (index + 1));
+        [shuffled[index], shuffled[swap]] = [shuffled[swap], shuffled[index]];
+    }
+    return shuffled;
+}
+
+function randomChoice(entries, rng) {
+    if (!entries?.length) return null;
+    return entries[Math.floor(rng() * entries.length)] || entries[0];
 }
 
 function renderAchievementGroup(group) {
@@ -5633,19 +6310,19 @@ function accountAchievementGroups(account, profile) {
             id: "account",
             label: "Account",
             achievements: [
-                achievement("account_create", "Create Account", "Login with Discord once.", account?.id ? 1 : 0, 1, 500),
-                achievement("account_link_minecraft", "Link Minecraft", "Pair Discord to Minecraft with /linkminecraft.", profile ? 1 : 0, 1, 1000, { badgeId: "linked" }),
-                achievement("account_set_icon", "Set Your Icon", "Choose Discord, Minecraft, or upload a custom profile picture.", cleanAvatarSource(account?.avatar_source) !== "minecraft" || account?.custom_avatar_url ? 1 : 0, 1, 500),
-                achievement("account_pick_banner", "Pick a Banner", "Choose or upload a profile background.", cleanProfileBackground(account?.profile_background, account) !== "default" ? 1 : 0, 1, 500),
-                achievement("overall_first_game", "First Game", "Play one tracked match.", stats.games, 1, 750),
-                achievement("overall_first_kill", "First Kill", "Get one tracked kill.", stats.kills, 1, 750),
-                achievement("overall_first_hit", "First Hit", "Land one tracked hit.", stats.hits, 1, 500),
-                achievement("overall_first_win", "First Win", "Win any tracked match.", stats.wins, 1, 1500, { badgeId: "first_win" }),
-                achievement("overall_play_both", "Play Both Modes", "Play at least one match in Battle Royale and Deathmatch.", br.stats.games > 0 && dm.stats.games > 0 ? 1 : 0, 1, 1500),
-                achievement("overall_one_hour", "One Hour In", "Reach 1 hour of tracked playtime.", stats.playtimeSeconds, 3600, 2000, { suffix: "s", formatter: formatDuration }),
-                achievement("overall_head_start", "Head Start", "Get your first headshot kill.", stats.headshotKills, 1, 1000),
-                achievement("overall_sharpshooter", "Sharpshooter", "Reach 35% headshot rate after 20 hits.", stats.hits >= 20 ? derived.headshotRate : 0, 35, 4000, { suffix: "%", badgeId: "sharpshooter" }),
-                achievement("overall_veteran", "Veteran", "Play 25 tracked games.", stats.games, 25, 5000, { badgeId: "veteran" })
+                achievement("account_create", "Create Account", "Login with Discord once.", account?.id ? 1 : 0, 1, 50),
+                achievement("account_link_minecraft", "Link Minecraft", "Pair Discord to Minecraft with /linkminecraft.", profile ? 1 : 0, 1, 150, { badgeId: "linked" }),
+                achievement("account_set_icon", "Set Your Icon", "Choose Discord, Minecraft, or upload a custom profile picture.", cleanAvatarSource(account?.avatar_source) !== "minecraft" || account?.custom_avatar_url ? 1 : 0, 1, 50),
+                achievement("account_pick_banner", "Pick a Banner", "Choose or upload a profile background.", cleanProfileBackground(account?.profile_background, account) !== "default" ? 1 : 0, 1, 50),
+                achievement("overall_first_game", "First Game", "Play one tracked match.", stats.games, 1, 75),
+                achievement("overall_first_kill", "First Kill", "Get one tracked kill.", stats.kills, 1, 75),
+                achievement("overall_first_hit", "First Hit", "Land one tracked hit.", stats.hits, 1, 50),
+                achievement("overall_first_win", "First Win", "Win any tracked match.", stats.wins, 1, 175, { badgeId: "first_win" }),
+                achievement("overall_play_both", "Play Both Modes", "Play at least one match in Battle Royale and Deathmatch.", br.stats.games > 0 && dm.stats.games > 0 ? 1 : 0, 1, 150),
+                achievement("overall_one_hour", "One Hour In", "Reach 1 hour of tracked playtime.", stats.playtimeSeconds, 3600, 200, { suffix: "s", formatter: formatDuration }),
+                achievement("overall_head_start", "Head Start", "Get your first headshot kill.", stats.headshotKills, 1, 100),
+                achievement("overall_sharpshooter", "Sharpshooter", "Reach 35% headshot rate after 20 hits.", stats.hits >= 20 ? derived.headshotRate : 0, 35, 300, { suffix: "%", badgeId: "sharpshooter" }),
+                achievement("overall_veteran", "Veteran", "Play 25 tracked games.", stats.games, 25, 350, { badgeId: "veteran" })
             ]
         },
         ...ACHIEVEMENT_MODES.map((mode) => modeAchievementGroup(mode, mode.id === "battleRoyale" ? br : dm))
@@ -5659,7 +6336,7 @@ function accountAchievementGroups(account, profile) {
 function modeAchievementGroup(mode, player) {
     const stats = normalizeStats(player?.stats);
     const achievements = [
-        achievement(`${mode.id}_first_game`, `${mode.short} First Game`, `Play one ${mode.label} match.`, stats.games, 1, 750),
+        achievement(`${mode.id}_first_game`, `${mode.short} First Game`, `Play one ${mode.label} match.`, stats.games, 1, 75),
         ...ACHIEVEMENT_WIN_MILESTONES.map((target) => achievement(
             `${mode.id}_wins_${target}`,
             `${mode.short} ${formatNumber(target)} ${target === 1 ? "Win" : "Wins"}`,
@@ -5707,10 +6384,12 @@ function modeAchievementBadgeId(mode, type, target) {
 }
 
 function achievementXp(type, target) {
-    if (type === "wins") return Math.max(1500, target * 500);
-    if (type === "kills") return Math.max(1000, target * 15);
-    if (type === "mvp") return Math.max(2000, target * 1000);
-    return 500;
+    const rewards = {
+        wins: { 1: 100, 5: 300, 10: 750, 20: 1500, 50: 5000, 100: 12000 },
+        kills: { 10: 100, 50: 200, 100: 400, 250: 800, 500: 1500, 1000: 3000, 2500: 6000, 5000: 12000, 10000: 20000 },
+        mvp: { 1: 150, 5: 400, 10: 800, 25: 2000, 50: 5000, 100: 12000 }
+    };
+    return rewards[type]?.[target] || 50;
 }
 
 function achievement(id, label, description, value, target, xp = 500, options = {}) {

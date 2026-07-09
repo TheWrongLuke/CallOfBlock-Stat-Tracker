@@ -4103,6 +4103,41 @@ img.identity-avatar {
     white-space: nowrap;
 }
 
+.mission-head > div > span {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 0.82rem;
+}
+
+.weekly-mission-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.weekly-mission-summary span {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 10px;
+    background: rgba(0, 0, 0, 0.14);
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.weekly-mission-summary b {
+    color: var(--text);
+}
+
+.weekly-mission-rule {
+    margin: 0;
+    border-left: 3px solid rgba(255, 203, 107, 0.5);
+    padding: 4px 0 4px 12px;
+    color: var(--muted);
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+
 .account-level-card {
     display: grid;
     grid-template-columns: minmax(130px, 0.6fr) minmax(220px, 1fr) minmax(130px, 0.6fr);
@@ -4180,6 +4215,10 @@ img.identity-avatar {
     background: rgba(133, 232, 157, 0.08);
 }
 
+.mission-row.carried:not(.complete) {
+    border-color: rgba(255, 203, 107, 0.32);
+}
+
 .mission-row strong,
 .mission-row span {
     display: block;
@@ -4188,6 +4227,113 @@ img.identity-avatar {
 .mission-row span,
 .mission-row small {
     color: var(--muted);
+}
+
+.mission-row .mission-difficulty {
+    display: inline-block;
+    width: fit-content;
+    margin-bottom: 5px;
+    border: 1px solid rgba(126, 200, 255, 0.25);
+    border-radius: 5px;
+    padding: 2px 6px;
+    color: rgba(183, 222, 255, 0.9);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.mission-row .mission-difficulty.hard {
+    border-color: rgba(255, 203, 107, 0.34);
+    background: rgba(255, 203, 107, 0.08);
+    color: var(--gold);
+}
+
+.mission-carried-note {
+    display: block;
+    margin-top: 5px;
+    color: var(--gold) !important;
+}
+
+.mission-actions {
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    min-width: 108px;
+}
+
+.mission-claim-button,
+.mission-swap-button {
+    min-width: 92px;
+    border-radius: 6px;
+    padding: 7px 10px;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.mission-claim-button {
+    border-color: rgba(133, 232, 157, 0.45);
+    background: rgba(133, 232, 157, 0.12);
+    color: var(--green);
+}
+
+.mission-swap-button {
+    border-color: rgba(255, 203, 107, 0.38);
+    background: rgba(255, 203, 107, 0.08);
+    color: var(--gold);
+}
+
+.mission-row .mission-xp.claimed {
+    background: rgba(133, 232, 157, 0.14);
+    color: var(--green);
+}
+
+.mission-row.rewarding {
+    animation: mission-reward-flash 1.2s ease-out;
+}
+
+.mission-claim-burst {
+    position: absolute;
+    right: 8px;
+    bottom: 50%;
+    z-index: 2;
+    color: var(--green) !important;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    pointer-events: none;
+    animation: mission-xp-rise 1.25s ease-out forwards;
+}
+
+@keyframes mission-reward-flash {
+    0% {
+        border-color: rgba(133, 232, 157, 0.9);
+        box-shadow: 0 0 0 rgba(133, 232, 157, 0);
+    }
+    35% {
+        box-shadow: 0 0 24px rgba(133, 232, 157, 0.28);
+    }
+    100% {
+        border-color: rgba(133, 232, 157, 0.28);
+        box-shadow: 0 0 0 rgba(133, 232, 157, 0);
+    }
+}
+
+@keyframes mission-xp-rise {
+    0% {
+        opacity: 0;
+        transform: translateY(8px) scale(0.9);
+    }
+    20% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-34px) scale(1.08);
+    }
 }
 
 .mission-row .mission-xp {
@@ -4217,6 +4363,13 @@ img.identity-avatar {
     height: 100%;
     border-radius: inherit;
     background: linear-gradient(90deg, var(--green), var(--gold));
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .mission-row.rewarding,
+    .mission-claim-burst {
+        animation: none;
+    }
 }
 
 .player-tabs,
