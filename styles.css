@@ -366,6 +366,198 @@ a[aria-disabled="true"] {
     white-space: nowrap;
 }
 
+body.account-drawer-open {
+    overflow: hidden;
+}
+
+.profile-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 68;
+    background: rgba(3, 6, 10, 0.62);
+    backdrop-filter: blur(5px);
+    animation: profile-drawer-fade 180ms ease-out;
+}
+
+.profile-drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: min(520px, 100vw);
+    height: 100dvh;
+    overflow-y: auto;
+    border-left: 1px solid var(--line);
+    padding: 20px;
+    background: rgba(10, 16, 24, 0.99);
+    box-shadow: -24px 0 70px rgba(0, 0, 0, 0.48);
+    animation: profile-drawer-enter 220ms ease-out;
+}
+
+.profile-drawer-header {
+    position: sticky;
+    top: -20px;
+    z-index: 3;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    margin: -20px -20px 18px;
+    border-bottom: 1px solid var(--line);
+    padding: 16px 20px;
+    background: rgba(10, 16, 24, 0.96);
+    backdrop-filter: blur(12px);
+}
+
+.profile-drawer-header h2 {
+    margin: 0;
+    color: var(--gold);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.1rem;
+}
+
+.profile-drawer-close {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    font: 1.35rem/1 "Chakra Petch", sans-serif;
+}
+
+.profile-drawer-close:hover {
+    border-color: rgba(255, 203, 107, 0.45);
+    color: var(--gold);
+}
+
+.profile-drawer-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.profile-drawer-identity .account-avatar-frame {
+    width: 56px;
+    height: 56px;
+    flex: 0 0 56px;
+}
+
+.profile-drawer-identity > div {
+    min-width: 0;
+}
+
+.profile-drawer-identity > div > strong {
+    display: block;
+    overflow: hidden;
+    color: var(--text);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.05rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.profile-drawer-identity .account-level-pill {
+    margin-top: 5px;
+}
+
+.profile-drawer-customize {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid rgba(126, 200, 255, 0.32);
+    border-radius: 6px;
+    background: rgba(126, 200, 255, 0.08);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.86rem "Chakra Petch", sans-serif;
+}
+
+.profile-drawer-customize:hover {
+    border-color: rgba(255, 203, 107, 0.44);
+    background: rgba(255, 203, 107, 0.1);
+    color: var(--gold);
+}
+
+.profile-drawer-missions {
+    display: grid;
+    gap: 14px;
+    margin-top: 22px;
+}
+
+.profile-drawer-missions .mission-head {
+    align-items: center;
+}
+
+.profile-drawer-missions .mission-head h3 {
+    margin: 4px 0 0;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.1rem;
+}
+
+.profile-drawer-missions .mission-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 9px 12px;
+    border-radius: 8px;
+    padding: 11px;
+}
+
+.profile-drawer-missions .mission-row > div:first-child,
+.profile-drawer-missions .mission-progress {
+    grid-column: 1 / -1;
+}
+
+.profile-drawer-missions .mission-row > div:first-child {
+    min-width: 0;
+}
+
+.profile-drawer-missions .mission-row > small {
+    grid-column: 1;
+    align-self: center;
+}
+
+.profile-drawer-missions .mission-actions {
+    grid-column: 2;
+    min-width: 0;
+}
+
+@keyframes profile-drawer-enter {
+    from {
+        transform: translateX(100%);
+    }
+    to {
+        transform: translateX(0);
+    }
+}
+
+@keyframes profile-drawer-fade {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@media (max-width: 600px) {
+    .profile-drawer {
+        padding: 14px;
+    }
+
+    .profile-drawer-header {
+        top: -14px;
+        margin: -14px -14px 16px;
+        padding: 12px 14px;
+    }
+
+    .profile-drawer-missions .mission-head {
+        align-items: flex-start;
+    }
+}
+
 .account-avatar-frame,
 .player-avatar,
 .account-avatar-large,
@@ -4311,6 +4503,8 @@ img.identity-avatar {
 }
 
 @media (prefers-reduced-motion: reduce) {
+    .profile-drawer-backdrop,
+    .profile-drawer,
     .mission-row.rewarding,
     .mission-claim-burst {
         animation: none;

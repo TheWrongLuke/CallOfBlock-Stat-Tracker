@@ -165,6 +165,7 @@ const state = {
     accountSaving: false,
     accountUploadDialog: "",
     accountUploading: false,
+    accountPanelOpen: false,
     weeklyMissions: {
         loading: false,
         syncing: false,
@@ -280,6 +281,7 @@ async function applyAuthSession(session, shouldRender = false) {
     if (!session?.user) {
         state.authProfile = null;
         state.authMessage = "";
+        state.accountPanelOpen = false;
         resetWeeklyMissionState();
         resetPlaytestViewer();
         await loadAccountProfiles();
@@ -330,6 +332,7 @@ async function signOutDiscord() {
     }
     state.authSession = null;
     state.authProfile = null;
+    state.accountPanelOpen = false;
     state.accountMessage = "";
     state.authMessage = "";
     resetWeeklyMissionState();
@@ -389,6 +392,20 @@ function bindStaticEvents() {
         if (missionSwapClose || event.target.matches("[data-weekly-swap-backdrop]")) {
             event.preventDefault();
             closeWeeklyMissionSwapDialog();
+            return;
+        }
+
+        const accountPanelClose = event.target.closest("[data-account-panel-close]");
+        if (accountPanelClose || event.target.matches("[data-account-panel-backdrop]")) {
+            event.preventDefault();
+            closeAccountSidePanel();
+            return;
+        }
+
+        const accountPanelOpen = event.target.closest("[data-account-panel-open]");
+        if (accountPanelOpen) {
+            event.preventDefault();
+            openAccountSidePanel();
             return;
         }
 
@@ -519,6 +536,10 @@ function bindStaticEvents() {
         }
     });
 
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && state.accountPanelOpen) closeAccountSidePanel();
+    });
+
     document.addEventListener("mouseover", handleBadgeSeenEvent);
     document.addEventListener("focusin", handleBadgeSeenEvent);
 
@@ -622,6 +643,7 @@ function startChampionRotation() {
 }
 
 function applyRoute() {
+    state.accountPanelOpen = false;
     const hash = window.location.hash.replace(/^#/, "");
     if (!hash) {
         state.view = "home";
@@ -705,6 +727,7 @@ function updatePlayerHash() {
 }
 
 function routeTo(route) {
+    state.accountPanelOpen = false;
     if (route === "home") {
         state.view = "home";
         state.expandedMatchIds.clear();
@@ -1400,6 +1423,7 @@ function render() {
     renderPlaytests();
     renderCommunityAdminPage();
     renderAccountPage();
+    renderAccountSidePanel();
     renderPlaytestConfirmationDialog();
     renderAccountUploadDialog();
     renderWeeklyMissionSwapDialog();
@@ -1475,13 +1499,78 @@ function renderAccountWidget() {
     const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 64);
     const name = accountDisplayName(account);
     container.innerHTML = `
-        <a class="account-pill" href="#account" aria-label="${escapeHtml(`Open account for ${name}`)}">
+        <button class="account-pill" type="button" data-account-panel-open aria-label="${escapeHtml(`Open profile panel for ${name}`)}" aria-expanded="${state.accountPanelOpen ? "true" : "false"}">
             <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
                 <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
             </span>
             <span>${escapeHtml(name)}</span>
-        </a>
+        </button>
     `;
+}
+
+function openAccountSidePanel() {
+    if (!isDiscordLoggedIn()) return;
+    state.accountPanelOpen = true;
+    renderAccountWidget();
+    renderAccountSidePanel();
+    void syncWeeklyMissions();
+    window.requestAnimationFrame(() => {
+        document.querySelector("[data-account-panel-close]")?.focus();
+    });
+}
+
+function closeAccountSidePanel() {
+    state.accountPanelOpen = false;
+    renderAccountWidget();
+    renderAccountSidePanel();
+    window.requestAnimationFrame(() => {
+        document.querySelector("[data-account-panel-open]")?.focus();
+    });
+}
+
+function renderAccountSidePanel() {
+    let host = document.getElementById("account-side-panel-host");
+    if (!host) {
+        host = document.createElement("div");
+        host.id = "account-side-panel-host";
+        document.body.appendChild(host);
+    }
+
+    const open = state.accountPanelOpen && isDiscordLoggedIn();
+    document.body.classList.toggle("account-drawer-open", open);
+    if (!open) {
+        host.innerHTML = "";
+        return;
+    }
+
+    const account = state.authProfile || {};
+    const profile = linkedStatsProfile();
+    const avatarUrl = accountAvatarUrl(account, profile, 72);
+    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 72);
+    const previousScrollTop = host.querySelector(".profile-drawer")?.scrollTop || 0;
+    host.innerHTML = `
+        <div class="profile-drawer-backdrop" data-account-panel-backdrop>
+            <aside class="profile-drawer" role="dialog" aria-modal="true" aria-labelledby="profile-drawer-title">
+                <header class="profile-drawer-header">
+                    <h2 id="profile-drawer-title">PROFILE</h2>
+                    <button class="profile-drawer-close" type="button" data-account-panel-close aria-label="Close profile panel">&times;</button>
+                </header>
+                <div class="profile-drawer-identity">
+                    <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
+                        <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+                    </span>
+                    <div>
+                        <strong>${escapeHtml(accountDisplayName(account))}</strong>
+                        ${renderAccountLevelPill(account)}
+                    </div>
+                </div>
+                <button class="profile-drawer-customize" type="button" data-route="account">Customize profile</button>
+                ${renderWeeklyMissions(profile)}
+            </aside>
+        </div>
+    `;
+    const drawer = host.querySelector(".profile-drawer");
+    if (drawer) drawer.scrollTop = previousScrollTop;
 }
 
 function renderAccountPage() {
@@ -1539,7 +1628,6 @@ function renderAccountPage() {
         ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
         ${renderAccountLinkPanel(account, linkedProfile)}
         ${linkedProfile ? renderAccountStatsPanel(linkedProfile, overall) : ""}
-        ${renderWeeklyMissions(linkedProfile)}
         ${renderAccountCustomizeForm(account, badgeState)}
     `;
 }
@@ -1781,7 +1869,7 @@ function renderWeeklyMissions(profile) {
     const missionState = state.weeklyMissions;
     if (missionState.loading && !missionState.row) {
         return `
-            <section class="account-panel">
+            <section class="profile-drawer-missions">
                 <div class="mission-head">
                     <div>
                         <p class="panel-kicker">Renewable Missions</p>
@@ -1796,7 +1884,7 @@ function renderWeeklyMissions(profile) {
     const missions = Array.isArray(row?.missions) ? row.missions : [];
     if (!missions.length) {
         return `
-            <section class="account-panel">
+            <section class="profile-drawer-missions">
                 <div class="mission-head">
                     <div>
                         <p class="panel-kicker">Renewable Missions</p>
@@ -1812,7 +1900,7 @@ function renderWeeklyMissions(profile) {
     const completed = missions.filter((mission) => weeklyMissionProgress(profile, mission).complete).length;
     const cycle = weeklyMissionCycle();
     return `
-        <section class="account-panel weekly-missions-panel">
+        <section class="profile-drawer-missions weekly-missions-panel">
             <div class="mission-head">
                 <div>
                     <p class="panel-kicker">Renewable Missions</p>
@@ -1895,7 +1983,7 @@ async function syncWeeklyMissions() {
         && !(missionState.row.awaiting_link && profile)) return;
     missionState.syncing = true;
     missionState.loading = !missionState.row || missionState.row.cycle_key !== cycle.key;
-    if (state.view === "account") renderAccountPage();
+    renderAccountMissionViews();
 
     try {
         let row = missionState.row?.cycle_key === cycle.key ? missionState.row : null;
@@ -1911,8 +1999,13 @@ async function syncWeeklyMissions() {
     } finally {
         missionState.loading = false;
         missionState.syncing = false;
-        if (state.view === "account") renderAccountPage();
+        renderAccountMissionViews();
     }
+}
+
+function renderAccountMissionViews() {
+    if (state.view === "account") renderAccountPage();
+    if (state.accountPanelOpen) renderAccountSidePanel();
 }
 
 async function loadRemoteWeeklyMissionRow(account, profile, cycle) {
@@ -2063,7 +2156,7 @@ async function claimWeeklyMission(missionId) {
     if (!mission || claimedIds.has(mission.id) || !weeklyMissionProgress(profile, mission).complete) return;
 
     missionState.claimingId = mission.id;
-    renderAccountPage();
+    renderAccountMissionViews();
     try {
         const { data, error } = await state.authClient.rpc("claim_weekly_mission", {
             p_cycle_key: missionState.row.cycle_key,
@@ -2079,14 +2172,14 @@ async function claimWeeklyMission(missionId) {
         window.setTimeout(() => {
             if (state.weeklyMissions.animatingId !== mission.id) return;
             state.weeklyMissions.animatingId = "";
-            if (state.view === "account") renderAccountPage();
+            renderAccountMissionViews();
         }, 1400);
     } catch (error) {
         missionState.message = "That mission could not be claimed. Check the weekly mission Supabase function.";
         console.warn("Could not claim weekly mission", mission.id, error);
     } finally {
         missionState.claimingId = "";
-        renderAccountPage();
+        renderAccountMissionViews();
     }
 }
 
@@ -2154,7 +2247,7 @@ async function submitWeeklyMissionSwap() {
     if (!replacement) {
         missionState.message = "No different mission is available for this slot right now.";
         closeWeeklyMissionSwapDialog();
-        renderAccountPage();
+        renderAccountMissionViews();
         return;
     }
 
@@ -2177,7 +2270,7 @@ async function submitWeeklyMissionSwap() {
     } finally {
         missionState.swapping = false;
         renderWeeklyMissionSwapDialog();
-        renderAccountPage();
+        renderAccountMissionViews();
     }
 }
 
