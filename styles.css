@@ -4929,13 +4929,13 @@ code {
     }
 
     .leaderboard-table {
-        min-width: 760px;
-        font-size: 0.78rem;
+        min-width: 680px;
+        font-size: 0.72rem;
     }
 
     .leaderboard-table th,
     .leaderboard-table td {
-        padding: 8px 9px;
+        padding: 6px 7px;
     }
 
     .leaderboard-table th:first-child,
@@ -4943,19 +4943,19 @@ code {
         position: sticky;
         left: 0;
         z-index: 4;
-        width: 42px;
-        min-width: 42px;
+        width: 34px;
+        min-width: 34px;
         background: rgba(9, 15, 25, 0.98);
     }
 
     .leaderboard-table th:nth-child(2),
     .leaderboard-table td:nth-child(2) {
         position: sticky;
-        left: 42px;
+        left: 34px;
         z-index: 4;
-        width: 138px;
-        min-width: 138px;
-        max-width: 138px;
+        width: 120px;
+        min-width: 120px;
+        max-width: 120px;
         background: rgba(9, 15, 25, 0.98);
         box-shadow: 10px 0 18px rgba(0, 0, 0, 0.22);
     }
@@ -4967,19 +4967,19 @@ code {
     }
 
     .rank-badge {
-        min-width: 26px;
-        min-height: 26px;
-        font-size: 0.78rem;
+        min-width: 22px;
+        min-height: 22px;
+        font-size: 0.68rem;
     }
 
     .leaderboard-player {
-        gap: 8px;
+        gap: 6px;
     }
 
     .leaderboard-avatar {
-        width: 32px;
-        height: 32px;
-        border-radius: 9px;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
     }
 
     .leaderboard-player .player-name {
@@ -4989,19 +4989,19 @@ code {
     }
 
     .leaderboard-player .player-name strong {
-        font-size: 0.82rem;
-        max-width: 82px;
+        font-size: 0.74rem;
+        max-width: 72px;
     }
 
     .leaderboard-player .profile-link {
         min-height: 0;
-        font-size: 0.62rem;
+        font-size: 0.56rem;
         letter-spacing: 0.05em;
     }
 
     .sort-header {
-        min-height: 34px;
-        font-size: 0.68rem;
+        min-height: 30px;
+        font-size: 0.62rem;
     }
 
     .playtests-view,
@@ -5033,16 +5033,16 @@ code {
     }
 
     .weapon-row {
-        min-width: 660px;
-        grid-template-columns: minmax(130px, 1.15fr) repeat(6, minmax(62px, 0.55fr));
-        gap: 8px;
+        min-width: 600px;
+        grid-template-columns: minmax(120px, 1.15fr) repeat(6, minmax(56px, 0.55fr));
+        gap: 6px;
         margin: 0;
         border: 0;
         border-bottom: 1px solid var(--line);
         border-radius: 0;
-        padding: 9px 10px;
+        padding: 6px 7px;
         background: rgba(0, 0, 0, 0.08);
-        font-size: 0.78rem;
+        font-size: 0.72rem;
     }
 
     .weapon-row:last-child {
@@ -5063,8 +5063,8 @@ code {
         z-index: 2;
         display: flex;
         align-items: center;
-        min-height: 30px;
-        padding-right: 8px;
+        min-height: 28px;
+        padding-right: 7px;
         background: rgba(9, 15, 25, 0.98);
         box-shadow: 10px 0 18px rgba(0, 0, 0, 0.18);
     }
@@ -5075,8 +5075,8 @@ code {
     }
 
     .weapon-sort-header {
-        min-height: 30px;
-        font-size: 0.66rem;
+        min-height: 28px;
+        font-size: 0.62rem;
     }
 
     .weapon-row strong,
