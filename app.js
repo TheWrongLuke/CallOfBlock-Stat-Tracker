@@ -83,6 +83,7 @@ const PROFILE_ACCOUNT_COLUMNS = [
     "xp"
 ];
 const PROFILE_SELECT_COLUMNS = `${PROFILE_BASE_COLUMNS}, ${PROFILE_ACCOUNT_COLUMNS.join(", ")}`;
+const PUBLIC_PROFILE_TABLE = "public_profiles";
 const PUBLIC_PROFILE_SELECT_COLUMNS = [
     "id",
     "username",
@@ -1008,10 +1009,7 @@ async function loadAccountProfiles() {
     }
 
     try {
-        const { data, error } = await state.authClient
-            .from("profiles")
-            .select(PUBLIC_PROFILE_SELECT_COLUMNS)
-            .limit(1000);
+        const { data, error } = await fetchPublicProfiles({ limit: 1000 });
         if (error) throw error;
         state.accountProfiles = Array.isArray(data) ? data : [];
         state.accountProfilesReady = true;
@@ -1104,10 +1102,7 @@ async function loadProfilesForVoteRows(availabilityRows) {
     const userIds = [...new Set((availabilityRows || []).map((row) => row.user_id).filter(Boolean))];
     if (!userIds.length || !state.authClient) return new Map();
 
-    const extended = await state.authClient
-        .from("profiles")
-        .select(PUBLIC_PROFILE_SELECT_COLUMNS)
-        .in("id", userIds);
+    const extended = await fetchPublicProfiles({ userIds });
     let rows = extended.data;
     if (extended.error) {
         const base = await state.authClient
@@ -1118,6 +1113,21 @@ async function loadProfilesForVoteRows(availabilityRows) {
     }
 
     return new Map((rows || []).map((profile) => [profile.id, profile]));
+}
+
+async function fetchPublicProfiles({ userIds = null, limit = 0 } = {}) {
+    if (!state.authClient) return { data: [], error: null };
+
+    const run = async (table) => {
+        let query = state.authClient.from(table).select(PUBLIC_PROFILE_SELECT_COLUMNS);
+        if (Array.isArray(userIds) && userIds.length) query = query.in("id", userIds);
+        if (limit) query = query.limit(limit);
+        return query;
+    };
+
+    const viewResult = await run(PUBLIC_PROFILE_TABLE);
+    if (!viewResult.error) return viewResult;
+    return run("profiles");
 }
 
 function mapRemotePlaytests(playtestRows, slotRows, availabilityRows, profileMap) {
