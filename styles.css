@@ -4565,30 +4565,12 @@ img.identity-avatar {
 .weapon-table {
     display: grid;
     gap: 8px;
-}
-
-.weapon-sort-section {
-    gap: 10px;
-}
-
-.weapon-sort-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.weapon-sort-tabs {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.weapon-sort-tabs .tab-pill {
-    min-height: 38px;
-    padding: 8px 12px;
-    font-size: 0.84rem;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
 }
 
 .weapon-row {
@@ -4602,11 +4584,40 @@ img.identity-avatar {
     background: rgba(0, 0, 0, 0.14);
 }
 
+.weapon-row > * {
+    min-width: 0;
+}
+
+.weapon-row strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.weapon-row span {
+    text-align: right;
+}
+
 .weapon-row.heading {
     color: var(--muted);
     text-transform: uppercase;
     letter-spacing: 0.08em;
     font-size: 0.72rem;
+}
+
+.weapon-row.heading span {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.weapon-row.heading span:first-child {
+    justify-content: flex-start;
+}
+
+.weapon-sort-header {
+    min-height: 30px;
+    justify-content: flex-end;
+    font-size: inherit;
 }
 
 .history-card {
@@ -4819,7 +4830,6 @@ code {
     }
 
     .history-row,
-    .weapon-row,
     .roster-row {
         grid-template-columns: 1fr;
     }
@@ -4842,8 +4852,7 @@ code {
     .tab-row,
     .view-tabs,
     .player-tabs,
-    .history-filters,
-    .weapon-sort-tabs {
+    .history-filters {
         max-width: 100%;
         overflow-x: auto;
         overflow-y: hidden;
@@ -4857,8 +4866,7 @@ code {
     .tab-row .tab-pill,
     .view-tabs .tab-pill,
     .player-tabs .tab-pill,
-    .history-filters .tab-pill,
-    .weapon-sort-tabs .tab-pill {
+    .history-filters .tab-pill {
         flex: 0 0 auto;
         white-space: nowrap;
         scroll-snap-align: start;
@@ -5009,23 +5017,71 @@ code {
     .player-profile-hero,
     .player-tabs,
     .detail-section,
-    .weapon-table,
-    .weapon-row,
-    .weapon-sort-head,
-    .weapon-sort-tabs {
+    .weapon-table {
         min-width: 0;
         max-width: 100%;
     }
 
-    .detail-section,
-    .weapon-row {
+    .detail-section {
         overflow: hidden;
+    }
+
+    .weapon-table {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(0, 0, 0, 0.12);
+    }
+
+    .weapon-row {
+        min-width: 660px;
+        grid-template-columns: minmax(130px, 1.15fr) repeat(6, minmax(62px, 0.55fr));
+        gap: 8px;
+        margin: 0;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        padding: 9px 10px;
+        background: rgba(0, 0, 0, 0.08);
+        font-size: 0.78rem;
+    }
+
+    .weapon-row:last-child {
+        border-bottom: 0;
+    }
+
+    .weapon-row.heading {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: rgba(7, 14, 24, 0.98);
+        font-size: 0.66rem;
+    }
+
+    .weapon-row > :first-child {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        min-height: 30px;
+        padding-right: 8px;
+        background: rgba(9, 15, 25, 0.98);
+        box-shadow: 10px 0 18px rgba(0, 0, 0, 0.18);
+    }
+
+    .weapon-row.heading > :first-child {
+        z-index: 4;
+        background: rgba(7, 14, 24, 1);
+    }
+
+    .weapon-sort-header {
+        min-height: 30px;
+        font-size: 0.66rem;
     }
 
     .weapon-row strong,
     .weapon-row span {
         min-width: 0;
-        overflow-wrap: anywhere;
     }
 
     .playtests-hero,

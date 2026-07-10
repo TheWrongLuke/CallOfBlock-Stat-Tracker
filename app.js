@@ -227,6 +227,7 @@ const state = {
     playerTab: "overview",
     historyFilter: "battleRoyale",
     profileWeaponSort: "kills",
+    profileWeaponSortDirection: "desc",
     expandedMatchIds: new Set(),
     championMode: "battleRoyale",
     championTimer: null,
@@ -628,7 +629,12 @@ function bindStaticEvents() {
         if (weaponSort) {
             const sort = weaponSort.dataset.profileWeaponSort;
             if (PROFILE_WEAPON_SORTS[sort]) {
-                state.profileWeaponSort = sort;
+                if (state.profileWeaponSort === sort) {
+                    state.profileWeaponSortDirection = state.profileWeaponSortDirection === "desc" ? "asc" : "desc";
+                } else {
+                    state.profileWeaponSort = sort;
+                    state.profileWeaponSortDirection = "desc";
+                }
                 render();
             }
             return;
@@ -6738,19 +6744,10 @@ function renderWeaponsTab(profile) {
     const dm = normalizePlayer(profile.deathmatch).details?.weapons || [];
     if (!br.length && !dm.length) return renderEmptyDetail("No weapon stats yet. Weapon tables start filling in after the updated server jar records new hits and kills.");
     const sort = PROFILE_WEAPON_SORTS[state.profileWeaponSort] ? state.profileWeaponSort : "kills";
+    const direction = state.profileWeaponSortDirection === "asc" ? "asc" : "desc";
     return `
-        <section class="detail-section weapon-sort-section">
-            <div class="weapon-sort-head">
-                <h3>Weapon Stats</h3>
-                <div class="weapon-sort-tabs" role="group" aria-label="Sort weapon stats">
-                    ${Object.entries(PROFILE_WEAPON_SORTS).map(([id, label]) => `
-                        <button class="tab-pill ${sort === id ? "active" : ""}" type="button" data-profile-weapon-sort="${escapeHtml(id)}" aria-pressed="${sort === id ? "true" : "false"}">${escapeHtml(label)}</button>
-                    `).join("")}
-                </div>
-            </div>
-        </section>
-        ${br.length ? renderWeaponTable("Battle Royale Weapons", br, sort) : ""}
-        ${dm.length ? renderWeaponTable("Deathmatch Weapons", dm, sort) : ""}
+        ${br.length ? renderWeaponTable("Battle Royale Weapons", br, sort, direction) : ""}
+        ${dm.length ? renderWeaponTable("Deathmatch Weapons", dm, sort, direction) : ""}
     `;
 }
 
@@ -6923,8 +6920,8 @@ function renderBreakdownRow(entry) {
     `;
 }
 
-function renderWeaponTable(title, weapons, sort = "kills") {
-    const rows = sortProfileWeapons(cleanWeaponEntries(weapons), sort);
+function renderWeaponTable(title, weapons, sort = "kills", direction = "desc") {
+    const rows = sortProfileWeapons(cleanWeaponEntries(weapons), sort, direction);
     if (rows.length === 0) return "";
     return `
         <section class="detail-section">
@@ -6932,12 +6929,12 @@ function renderWeaponTable(title, weapons, sort = "kills") {
             <div class="weapon-table">
                 <div class="weapon-row heading">
                     <span>Weapon</span>
-                    <span>Kills</span>
-                    <span>Hits</span>
-                    <span>HS%</span>
-                    <span>HS Kills</span>
-                    <span>Utility</span>
-                    <span>Vehicle</span>
+                    <span>${renderProfileWeaponSortButton("kills")}</span>
+                    <span>${renderProfileWeaponSortButton("hits")}</span>
+                    <span>${renderProfileWeaponSortButton("headshotRate")}</span>
+                    <span>${renderProfileWeaponSortButton("headshotKills")}</span>
+                    <span>${renderProfileWeaponSortButton("utilityKills")}</span>
+                    <span>${renderProfileWeaponSortButton("vehicleKills")}</span>
                 </div>
                 ${rows.map(renderWeaponRow).join("")}
             </div>
@@ -6945,10 +6942,27 @@ function renderWeaponTable(title, weapons, sort = "kills") {
     `;
 }
 
-function sortProfileWeapons(rows, sort) {
+function renderProfileWeaponSortButton(sort) {
+    const safeSort = escapeHtml(sort);
+    const active = state.profileWeaponSort === sort;
+    const direction = state.profileWeaponSortDirection === "asc" ? "asc" : "desc";
+    const currentDirection = direction === "desc" ? "descending" : "ascending";
+    const nextDirection = active && direction === "desc" ? "ascending" : "descending";
+    const label = PROFILE_WEAPON_SORTS[sort] || sort;
+    return `
+        <button class="sort-header weapon-sort-header ${active ? "active" : ""}" type="button" data-profile-weapon-sort="${safeSort}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(active
+            ? `${label}, sorted ${currentDirection}. Activate to sort ${nextDirection}.`
+            : `${label}, not sorted. Activate to sort descending.`)}">
+            ${escapeHtml(label)} <span aria-hidden="true">${active ? (direction === "desc" ? "v" : "^") : ""}</span>
+        </button>
+    `;
+}
+
+function sortProfileWeapons(rows, sort, directionId = "desc") {
     const sortId = PROFILE_WEAPON_SORTS[sort] ? sort : "kills";
+    const direction = directionId === "asc" ? 1 : -1;
     return [...rows].sort((a, b) => {
-        const primary = weaponSortValue(b, sortId) - weaponSortValue(a, sortId);
+        const primary = (weaponSortValue(a, sortId) - weaponSortValue(b, sortId)) * direction;
         if (primary) return primary;
         const kills = weaponSortValue(b, "kills") - weaponSortValue(a, "kills");
         if (kills) return kills;
