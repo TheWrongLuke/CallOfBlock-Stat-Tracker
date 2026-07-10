@@ -4,6 +4,11 @@ const MODE_LABELS = {
     deathmatch: "Deathmatch"
 };
 
+const PUBLIC_MODE_LABELS = {
+    battleRoyale: "Battle Royale",
+    deathmatch: "Deathmatch"
+};
+
 const SORT_LABELS = {
     wins: "Wins",
     kills: "Kills",
@@ -18,6 +23,15 @@ const SORT_LABELS = {
     headshotKills: "Headshot Kills",
     utilityKills: "Utility Kills",
     vehicleKills: "Vehicle Kills"
+};
+
+const PROFILE_WEAPON_SORTS = {
+    kills: "Kills",
+    hits: "Hits",
+    headshotRate: "HS%",
+    headshotKills: "HS Kills",
+    utilityKills: "Utility",
+    vehicleKills: "Vehicle"
 };
 
 const PLAYER_TABS = {
@@ -69,6 +83,25 @@ const PROFILE_ACCOUNT_COLUMNS = [
     "xp"
 ];
 const PROFILE_SELECT_COLUMNS = `${PROFILE_BASE_COLUMNS}, ${PROFILE_ACCOUNT_COLUMNS.join(", ")}`;
+const PUBLIC_PROFILE_SELECT_COLUMNS = [
+    "id",
+    "username",
+    "avatar_url",
+    "created_at",
+    "display_name",
+    "minecraft_player_name",
+    "minecraft_player_id",
+    "avatar_source",
+    "custom_avatar_url",
+    "custom_background_url",
+    "profile_background",
+    "pfp_border",
+    "selected_badges",
+    "unlocked_badges",
+    "unlocked_backgrounds",
+    "unlocked_pfp_borders",
+    "xp"
+].join(", ");
 const PROFILE_MEDIA_BUCKET = "profile-media";
 const MAX_PROFILE_UPLOAD_BYTES = 1024 * 1024;
 const PLAYTEST_SELECT_COLUMNS = "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
@@ -161,6 +194,7 @@ const state = {
     authMessage: "",
     accountProfiles: [],
     accountProfilesReady: false,
+    accountProfileIndex: emptyAccountProfileIndex(),
     accountMessage: "",
     accountSaving: false,
     accountUploadDialog: "",
@@ -180,7 +214,7 @@ const state = {
     pollMs: DEFAULT_API_POLL_MS,
     refreshTimer: null,
     dataSignature: "",
-    mode: "overall",
+    mode: "battleRoyale",
     mainView: "players",
     sort: "wins",
     sortDirection: "desc",
@@ -191,7 +225,8 @@ const state = {
     view: "home",
     profilePreviewOpen: false,
     playerTab: "overview",
-    historyFilter: "overall",
+    historyFilter: "battleRoyale",
+    profileWeaponSort: "kills",
     expandedMatchIds: new Set(),
     championMode: "battleRoyale",
     championTimer: null,
@@ -589,6 +624,16 @@ function bindStaticEvents() {
             return;
         }
 
+        const weaponSort = event.target.closest("[data-profile-weapon-sort]");
+        if (weaponSort) {
+            const sort = weaponSort.dataset.profileWeaponSort;
+            if (PROFILE_WEAPON_SORTS[sort]) {
+                state.profileWeaponSort = sort;
+                render();
+            }
+            return;
+        }
+
         const matchToggle = event.target.closest("[data-match-toggle]");
         if (matchToggle) {
             const matchId = matchToggle.dataset.matchToggle;
@@ -691,7 +736,8 @@ function applyRoute() {
         const board = params.get("board") || (route === "weapons" || route === "maps" ? route : state.mainView);
         if (MAIN_VIEWS[board]) state.mainView = board;
         const mode = params.get("mode");
-        if (MODE_LABELS[mode]) state.mode = mode;
+        if (PUBLIC_MODE_LABELS[mode]) state.mode = mode;
+        if (!PUBLIC_MODE_LABELS[state.mode]) state.mode = "battleRoyale";
         const sort = params.get("sort");
         if (SORT_LABELS[sort]) state.sort = sort;
         state.page = 1;
@@ -721,9 +767,13 @@ function routeToPlayer(playerId, tab = state.playerTab || "overview") {
 function updatePlayerHash() {
     if (!state.selectedId) return;
     const hash = `player=${encodeURIComponent(state.selectedId)}&tab=${encodeURIComponent(state.playerTab)}`;
-    if (window.location.hash.replace(/^#/, "") !== hash) {
-        window.location.hash = hash;
-    }
+    setRouteHash(hash);
+}
+
+function setRouteHash(hash) {
+    if (window.location.hash.replace(/^#/, "") === hash) return false;
+    window.location.hash = hash;
+    return true;
 }
 
 function routeTo(route) {
@@ -738,32 +788,28 @@ function routeTo(route) {
     if (route === "help") {
         state.view = "home";
         state.pendingScrollTarget = "help";
-        window.location.hash = "help";
-        render();
+        if (!setRouteHash("help")) render();
         return;
     }
     if (route === "admin-help") {
         state.view = "adminHelp";
         state.selectedId = null;
         state.profilePreviewOpen = false;
-        window.location.hash = "admin-help";
-        render();
+        if (!setRouteHash("admin-help")) render();
         return;
     }
     if (route === "playtests") {
         state.view = "playtests";
         state.selectedId = null;
         state.profilePreviewOpen = false;
-        window.location.hash = "playtests";
-        render();
+        if (!setRouteHash("playtests")) render();
         return;
     }
     if (route === "account") {
         state.view = "account";
         state.selectedId = null;
         state.profilePreviewOpen = false;
-        window.location.hash = "account";
-        render();
+        if (!setRouteHash("account")) render();
         return;
     }
     if (route === "community-dates") {
@@ -771,19 +817,17 @@ function routeTo(route) {
             state.view = "playtests";
             state.selectedId = null;
             state.profilePreviewOpen = false;
-            window.location.hash = "playtests";
-            render();
+            if (!setRouteHash("playtests")) render();
             return;
         }
         state.view = "communityAdmin";
         state.selectedId = null;
         state.profilePreviewOpen = false;
-        window.location.hash = "community-dates";
-        render();
+        if (!setRouteHash("community-dates")) render();
         return;
     }
     if (route === "weapons") {
-        routeToLeaderboard({ mainView: "weapons", mode: "overall", sort: "kills" });
+        routeToLeaderboard({ mainView: "weapons", mode: "battleRoyale", sort: "kills" });
         return;
     }
     if (route === "maps") {
@@ -803,15 +847,12 @@ function routeToLeaderboardWithOptions(options) {
     state.selectedId = null;
     state.profilePreviewOpen = false;
     if (MAIN_VIEWS[options.mainView]) state.mainView = options.mainView;
-    if (MODE_LABELS[options.mode]) state.mode = options.mode;
+    if (PUBLIC_MODE_LABELS[options.mode]) state.mode = options.mode;
+    if (!PUBLIC_MODE_LABELS[state.mode]) state.mode = "battleRoyale";
     if (SORT_LABELS[options.sort]) state.sort = options.sort;
     state.page = 1;
     const hash = `view=leaderboards&board=${encodeURIComponent(state.mainView)}&mode=${encodeURIComponent(state.mode)}&sort=${encodeURIComponent(state.sort)}`;
-    if (window.location.hash.replace(/^#/, "") !== hash) {
-        window.location.hash = hash;
-    } else {
-        render();
-    }
+    if (!setRouteHash(hash)) render();
 }
 
 async function loadData() {
@@ -956,21 +997,24 @@ async function loadAccountProfiles() {
     if (!state.authClient) {
         state.accountProfiles = [];
         state.accountProfilesReady = true;
+        rebuildAccountProfileIndex();
         return;
     }
 
     try {
         const { data, error } = await state.authClient
             .from("profiles")
-            .select(PROFILE_SELECT_COLUMNS)
+            .select(PUBLIC_PROFILE_SELECT_COLUMNS)
             .limit(1000);
         if (error) throw error;
         state.accountProfiles = Array.isArray(data) ? data : [];
         state.accountProfilesReady = true;
+        rebuildAccountProfileIndex();
     } catch (error) {
         console.warn("Could not load account profiles", error);
         state.accountProfiles = state.authProfile ? [state.authProfile] : [];
         state.accountProfilesReady = true;
+        rebuildAccountProfileIndex();
     }
 }
 
@@ -1056,13 +1100,13 @@ async function loadProfilesForVoteRows(availabilityRows) {
 
     const extended = await state.authClient
         .from("profiles")
-        .select(PROFILE_SELECT_COLUMNS)
+        .select(PUBLIC_PROFILE_SELECT_COLUMNS)
         .in("id", userIds);
     let rows = extended.data;
     if (extended.error) {
         const base = await state.authClient
             .from("profiles")
-            .select(PROFILE_BASE_COLUMNS)
+            .select("id, username, avatar_url, created_at")
             .in("id", userIds);
         rows = base.error ? [] : base.data;
     }
@@ -1204,6 +1248,7 @@ function remotePlaytestErrorMessage(error) {
 
 function applyPlaytestProfile(profile) {
     state.authProfile = profile || null;
+    rebuildAccountProfileIndex();
     if (!profile) return;
     PLAYTEST_VIEWER.userId = profile.id || PLAYTEST_VIEWER.userId;
     PLAYTEST_VIEWER.discordId = profile.discord_id || PLAYTEST_VIEWER.discordId;
@@ -1390,6 +1435,38 @@ function emptyCache() {
     };
 }
 
+function emptyAccountProfileIndex() {
+    return {
+        ready: false,
+        candidates: [],
+        byPlayerId: new Map(),
+        byName: new Map()
+    };
+}
+
+function rebuildAccountProfileIndex() {
+    const index = emptyAccountProfileIndex();
+    const seen = new Set();
+
+    for (const account of [state.authProfile, ...(state.accountProfiles || [])]) {
+        if (!account?.id || seen.has(account.id)) continue;
+        seen.add(account.id);
+        index.candidates.push(account);
+
+        for (const id of [account.minecraft_player_id, account.minecraft_player_uuid]) {
+            const key = String(id || "").trim();
+            if (key && !index.byPlayerId.has(key)) index.byPlayerId.set(key, account);
+        }
+
+        for (const key of accountMinecraftNameKeys(account)) {
+            if (key && !index.byName.has(key)) index.byName.set(key, account);
+        }
+    }
+
+    index.ready = true;
+    state.accountProfileIndex = index;
+}
+
 function rebuildCache() {
     const profiles = Array.isArray(state.data?.profiles) ? state.data.profiles : [];
     const overallPlayers = profiles.map(buildOverallPlayer).filter(Boolean);
@@ -1419,21 +1496,41 @@ function render() {
     renderHeroStatus();
     renderTopNav();
     renderAccountWidget();
-    renderHome();
-    renderPlaytests();
-    renderCommunityAdminPage();
-    renderAccountPage();
     renderAccountSidePanel();
     renderPlaytestConfirmationDialog();
     renderAccountUploadDialog();
     renderWeeklyMissionSwapDialog();
+
+    switch (state.view) {
+        case "home":
+            renderHome();
+            break;
+        case "playtests":
+            renderPlaytests();
+            break;
+        case "communityAdmin":
+            renderCommunityAdminPage();
+            break;
+        case "account":
+            renderAccountPage();
+            break;
+        case "leaderboard":
+            renderLeaderboardView();
+            break;
+        default:
+            break;
+    }
+
+    renderRoute();
+}
+
+function renderLeaderboardView() {
     renderMainViewTabs();
     renderModeTabs();
     renderSummary();
     renderTable();
     renderSortHeaders();
     renderProfilePreview();
-    renderRoute();
 }
 
 function renderRoute() {
@@ -1495,13 +1592,13 @@ function renderAccountWidget() {
     }
 
     const account = state.authProfile || {};
-    const avatarUrl = accountAvatarUrl(account, linkedStatsProfile(), 64);
-    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 64);
+    const profile = linkedStatsProfile();
+    const avatarUrl = accountAvatarUrl(account, profile, 64);
     const name = accountDisplayName(account);
     container.innerHTML = `
         <button class="account-pill" type="button" data-account-panel-open aria-label="${escapeHtml(`Open profile panel for ${name}`)}" aria-expanded="${state.accountPanelOpen ? "true" : "false"}">
             <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
-                <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+                ${renderAvatarImage(avatarUrl, account, profile, 64, "eager")}
             </span>
             <span>${escapeHtml(name)}</span>
         </button>
@@ -1546,7 +1643,6 @@ function renderAccountSidePanel() {
     const account = state.authProfile || {};
     const profile = linkedStatsProfile();
     const avatarUrl = accountAvatarUrl(account, profile, 72);
-    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 72);
     const previousScrollTop = host.querySelector(".profile-drawer")?.scrollTop || 0;
     host.innerHTML = `
         <div class="profile-drawer-backdrop" data-account-panel-backdrop>
@@ -1557,7 +1653,7 @@ function renderAccountSidePanel() {
                 </header>
                 <div class="profile-drawer-identity">
                     <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
-                        <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+                        ${renderAvatarImage(avatarUrl, account, profile, 72, "eager")}
                     </span>
                     <div>
                         <strong>${escapeHtml(accountDisplayName(account))}</strong>
@@ -1589,11 +1685,9 @@ function renderAccountPage() {
 
     const account = state.authProfile || {};
     const linkedProfile = linkedStatsProfile();
-    const overall = linkedProfile ? buildProfileOverall(linkedProfile) : null;
     const badgeState = accountBadgeState(account, linkedProfile);
     const selectedBadges = selectedAccountBadges(account, badgeState);
     const avatarUrl = accountAvatarUrl(account, linkedProfile, 128);
-    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 128);
     const linkedName = linkedProfile?.name || account.minecraft_player_name || "";
     const schemaNote = state.authProfileExtended
         ? ""
@@ -1603,7 +1697,7 @@ function renderAccountPage() {
         <section class="account-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)}>
             <div class="account-hero-main">
                 <span class="account-avatar-large ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
-                    <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+                    ${renderAvatarImage(avatarUrl, account, linkedProfile, 128, "eager")}
                 </span>
                 <div>
                     <p class="panel-kicker">Account</p>
@@ -1627,7 +1721,7 @@ function renderAccountPage() {
         ${schemaNote}
         ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
         ${renderAccountLinkPanel(account, linkedProfile)}
-        ${linkedProfile ? renderAccountStatsPanel(linkedProfile, overall) : ""}
+        ${linkedProfile ? renderAccountStatsPanel(linkedProfile) : ""}
         ${renderAccountCustomizeForm(account, badgeState)}
     `;
 }
@@ -1676,8 +1770,9 @@ function renderAccountLinkPanel(account, linkedProfile) {
     `;
 }
 
-function renderAccountStatsPanel(profile, overall) {
-    const player = normalizePlayer(overall);
+function renderAccountStatsPanel(profile) {
+    const br = normalizePlayer(profile.battleRoyale);
+    const dm = normalizePlayer(profile.deathmatch);
     const name = playerDisplayName(profile, profile);
     return `
         <section class="account-panel">
@@ -1686,10 +1781,10 @@ function renderAccountStatsPanel(profile, overall) {
                 <h3>${escapeHtml(name)}</h3>
             </div>
             <div class="account-stat-grid">
-                ${renderStatCard("Wins", player.stats.wins)}
-                ${renderStatCard("Kills", player.stats.kills)}
-                ${renderStatCard("Games", player.stats.games)}
-                ${renderStatCard("Playtime", formatDuration(player.stats.playtimeSeconds))}
+                ${renderStatCard("BR Wins", br.stats.wins)}
+                ${renderStatCard("BR Kills", br.stats.kills)}
+                ${renderStatCard("DM Wins", dm.stats.wins)}
+                ${renderStatCard("DM Kills", dm.stats.kills)}
             </div>
         </section>
     `;
@@ -1702,7 +1797,6 @@ function renderAccountCustomizeForm(account, badgeState) {
     const selectedIds = selectedAccountBadgeIds(account, badgeState.unlockedIds);
     const linkedProfile = linkedStatsProfile();
     const avatarUrl = accountAvatarUrl(account, linkedProfile, 180);
-    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, 180);
 
     return `
         <form class="account-panel account-form" data-account-form>
@@ -1753,7 +1847,7 @@ function renderAccountCustomizeForm(account, badgeState) {
                 </div>
                 <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Profile preview" data-account-preview>
                     <span class="account-preview-avatar ${avatarFrameClass(account)}" data-account-preview-avatar${avatarFrameStyle(account)}>
-                        <img src="${escapeHtml(avatarUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-account-preview-img onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+                        ${renderAvatarImage(avatarUrl, account, linkedProfile, 180, "eager", "data-account-preview-img")}
                     </span>
                     <div>
                         <p class="panel-kicker">Preview</p>
@@ -1828,6 +1922,7 @@ function updateAccountCustomizePreview(form) {
 
     const image = preview.querySelector("[data-account-preview-img]");
     const avatarUrl = accountPreviewAvatarUrl(previewAccount, account, linkedProfile, 180);
+    setAvatarFallbacks(image, avatarUrl, previewAccount, linkedProfile, 180);
     if (image && image.getAttribute("src") !== avatarUrl) {
         image.src = avatarUrl;
     }
@@ -2189,6 +2284,7 @@ function applyAccountXp(xp) {
     state.accountProfiles = state.accountProfiles.map((account) => (
         account.id === state.authProfile.id ? { ...account, xp } : account
     ));
+    rebuildAccountProfileIndex();
 }
 
 function openWeeklyMissionSwapDialog(missionId) {
@@ -5579,20 +5675,21 @@ function renderModeTabs() {
     const container = document.getElementById("mode-tabs");
     container.innerHTML = "";
     container.classList.toggle("hidden", state.mainView === "maps");
-    for (const modeId of Object.keys(MODE_LABELS)) {
-        const button = createPill(MODE_LABELS[modeId], state.mode === modeId, () => {
+    if (!PUBLIC_MODE_LABELS[state.mode]) state.mode = "battleRoyale";
+    for (const modeId of Object.keys(PUBLIC_MODE_LABELS)) {
+        const button = createPill(PUBLIC_MODE_LABELS[modeId], state.mode === modeId, () => {
             state.mode = modeId;
             state.page = 1;
             render();
         });
         button.classList.add("tab-pill");
-        button.setAttribute("aria-label", `${MODE_LABELS[modeId]} mode${state.mode === modeId ? ", selected" : ""}`);
+        button.setAttribute("aria-label", `${PUBLIC_MODE_LABELS[modeId]} mode${state.mode === modeId ? ", selected" : ""}`);
         container.appendChild(button);
     }
     const title = state.mainView === "players"
-        ? `${MODE_LABELS[state.mode]} ranking`
+        ? `${PUBLIC_MODE_LABELS[state.mode]} ranking`
         : state.mainView === "weapons"
-            ? `${MODE_LABELS[state.mode]} weapon stats`
+            ? `${PUBLIC_MODE_LABELS[state.mode]} weapon stats`
             : "Deathmatch map stats";
     document.getElementById("leaderboard-title").textContent = title;
 }
@@ -5633,7 +5730,7 @@ function renderSummary() {
 
     if (state.mainView === "weapons") {
         const noun = rows.length === 1 ? "weapon" : "weapons";
-        const modeLabel = state.mode === "overall" ? "across all modes" : `in ${MODE_LABELS[state.mode]}`;
+        const modeLabel = `in ${PUBLIC_MODE_LABELS[state.mode] || MODE_LABELS[state.mode] || "this mode"}`;
         count.textContent = `${rows.length} tracked ${noun} ${modeLabel}`;
         return;
     }
@@ -5645,7 +5742,7 @@ function renderSummary() {
     }
 
     const noun = rows.length === 1 ? "player" : "players";
-    const modeLabel = state.mode === "overall" ? "across all modes" : `in ${MODE_LABELS[state.mode]}`;
+    const modeLabel = `in ${PUBLIC_MODE_LABELS[state.mode] || MODE_LABELS[state.mode] || "this mode"}`;
     count.textContent = `${rows.length} tracked ${noun} ${modeLabel}`;
 }
 
@@ -6064,16 +6161,16 @@ function accountLinkedStatsProfile(account) {
 }
 
 function accountProfileForPlayer(player, profile) {
+    if (!state.accountProfileIndex?.ready) rebuildAccountProfileIndex();
     const playerIds = new Set([player?.playerId, profile?.playerId]
         .map((id) => String(id || "").trim())
         .filter(Boolean));
     const nameKey = normalizePlayerName(player?.name || profile?.name || "");
-    return accountProfileCandidates().find((account) => {
-        if (account.minecraft_player_id && playerIds.has(String(account.minecraft_player_id).trim())) return true;
-        if (account.minecraft_player_uuid && playerIds.has(String(account.minecraft_player_uuid).trim())) return true;
-        if (nameKey && accountMinecraftNameKeys(account).has(nameKey)) return true;
-        return false;
-    }) || null;
+    for (const playerId of playerIds) {
+        const account = state.accountProfileIndex.byPlayerId.get(playerId);
+        if (account) return account;
+    }
+    return nameKey ? state.accountProfileIndex.byName.get(nameKey) || null : null;
 }
 
 function accountMinecraftNameKeys(account) {
@@ -6112,14 +6209,8 @@ async function saveInferredMinecraftLink(payload) {
 }
 
 function accountProfileCandidates() {
-    const accounts = [];
-    const seen = new Set();
-    for (const account of [state.authProfile, ...(state.accountProfiles || [])]) {
-        if (!account?.id || seen.has(account.id)) continue;
-        seen.add(account.id);
-        accounts.push(account);
-    }
-    return accounts;
+    if (!state.accountProfileIndex?.ready) rebuildAccountProfileIndex();
+    return state.accountProfileIndex.candidates;
 }
 
 function accountDisplayName(account) {
@@ -6134,12 +6225,58 @@ function playerDisplayName(player, profile) {
 function renderPlayerAvatar(player, profile, size = 64, extraClass = "") {
     const account = accountProfileForPlayer(player, profile);
     const url = accountAvatarUrl(account, profile || player, size);
-    const fallbackSkin = skinHeadUrl(DEFAULT_SKIN_NAME, size);
     return `
         <span class="player-avatar ${avatarFrameClass(account)} ${escapeHtml(extraClass)}"${avatarFrameStyle(account)}>
-            <img src="${escapeHtml(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.src='${escapeHtml(fallbackSkin)}';">
+            ${renderAvatarImage(url, account, profile || player, size)}
         </span>
     `;
+}
+
+function renderAvatarImage(url, account, profile, size, loading = "lazy", extraAttributes = "") {
+    const currentUrl = String(url || skinHeadUrl(accountMinecraftName(account, profile), size));
+    const fallbacks = avatarFallbackUrls(currentUrl, account, profile, size);
+    const fallbackAttr = escapeHtml(JSON.stringify(fallbacks));
+    const attrs = extraAttributes ? ` ${extraAttributes}` : "";
+    return `<img src="${escapeHtml(currentUrl)}" alt="" loading="${escapeHtml(loading)}" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackAttr}" onerror="handleAvatarFallback(this);"${attrs}>`;
+}
+
+function avatarFallbackUrls(currentUrl, account, profile, size) {
+    const name = accountMinecraftName(account, profile);
+    const urls = [
+        skinHeadUrl(name, size),
+        alternateSkinHeadUrl(name, size),
+        skinHeadUrl(DEFAULT_SKIN_NAME, size),
+        alternateSkinHeadUrl(DEFAULT_SKIN_NAME, size)
+    ];
+    const seen = new Set([String(currentUrl || "")]);
+    return urls.filter((entry) => {
+        if (!entry || seen.has(entry)) return false;
+        seen.add(entry);
+        return true;
+    });
+}
+
+function setAvatarFallbacks(image, currentUrl, account, profile, size) {
+    if (!image) return;
+    image.dataset.avatarFallbacks = JSON.stringify(avatarFallbackUrls(currentUrl, account, profile, size));
+    image.onerror = () => handleAvatarFallback(image);
+}
+
+function handleAvatarFallback(image) {
+    if (!image) return;
+    let fallbacks = [];
+    try {
+        fallbacks = JSON.parse(image.dataset.avatarFallbacks || "[]");
+    } catch (_error) {
+        fallbacks = [];
+    }
+    const next = fallbacks.shift();
+    if (next) {
+        image.dataset.avatarFallbacks = JSON.stringify(fallbacks);
+        image.src = next;
+        return;
+    }
+    image.onerror = null;
 }
 
 function accountAvatarUrl(account, profile, size = 64) {
@@ -6408,7 +6545,6 @@ function renderProfilePreview() {
         return;
     }
 
-    const overall = buildProfileOverall(profile);
     const account = accountProfileForPlayer(profile, profile);
     const name = playerDisplayName(profile, profile);
     const badges = selectedAccountBadges(account, accountBadgeState(account, profile));
@@ -6424,7 +6560,6 @@ function renderProfilePreview() {
             </div>
         </div>
         <button class="primary-action" type="button" id="open-full-profile">Open Full Profile</button>
-        ${renderModeBlock("Overall", overall, { compact: true })}
         ${renderModeBlock("Battle Royale", profile.battleRoyale, { compact: true })}
         ${renderModeBlock("Deathmatch", profile.deathmatch, { compact: true })}
     `;
@@ -6455,8 +6590,8 @@ function renderPlayerDetail() {
 function renderPlayerProfileHero(profile) {
     const account = accountProfileForPlayer(profile, profile);
     const name = playerDisplayName(profile, profile);
-    const overall = buildProfileOverall(profile);
-    const player = normalizePlayer(overall);
+    const br = normalizePlayer(profile.battleRoyale);
+    const dm = normalizePlayer(profile.deathmatch);
     const badgeState = accountBadgeState(account, profile);
     const badges = selectedAccountBadges(account, badgeState);
     return `
@@ -6475,9 +6610,10 @@ function renderPlayerProfileHero(profile) {
                 </div>
             </div>
             <div class="player-profile-quickstats">
-                ${renderStatCard("Wins", player.stats.wins)}
-                ${renderStatCard("Kills", player.stats.kills)}
-                ${renderStatCard("Games", player.stats.games)}
+                ${renderStatCard("BR Wins", br.stats.wins)}
+                ${renderStatCard("BR Kills", br.stats.kills)}
+                ${renderStatCard("DM Wins", dm.stats.wins)}
+                ${renderStatCard("DM Kills", dm.stats.kills)}
             </div>
         </section>
     `;
@@ -6515,34 +6651,36 @@ function renderPlayerTabContent(profile) {
 }
 
 function renderOverviewTab(profile) {
-    const overall = buildProfileOverall(profile);
     const br = normalizePlayer(profile.battleRoyale);
     const dm = normalizePlayer(profile.deathmatch);
-    const weapons = combinedWeapons(profile);
-    const favoriteWeapon = weapons[0] || null;
-    const stats = normalizeStats(overall?.stats);
-    const derived = normalizeDerived(overall?.derived, stats);
+    const brWeapon = cleanWeaponEntries(br.details?.weapons || [])[0] || null;
+    const dmWeapon = cleanWeaponEntries(dm.details?.weapons || [])[0] || null;
 
     return `
         <section class="detail-grid">
-            ${renderStatCard("Wins", stats.wins)}
-            ${renderStatCard("Kills", stats.kills)}
-            ${renderStatCard("Games", stats.games)}
-            ${renderStatCard("Playtime", formatDuration(stats.playtimeSeconds))}
-            ${renderStatCard("Win Rate", formatPercent(derived.winRate))}
-            ${renderStatCard("HS%", formatPercent(derived.headshotRate))}
-            ${renderStatCard("Highest Streak", Math.max(br.stats.bestKillStreak, dm.stats.bestKillStreak))}
+            ${renderStatCard("BR Wins", br.stats.wins)}
+            ${renderStatCard("BR Kills", br.stats.kills)}
+            ${renderStatCard("BR Games", br.stats.games)}
+            ${renderStatCard("BR Playtime", formatDuration(br.stats.playtimeSeconds))}
+            ${renderStatCard("DM Wins", dm.stats.wins)}
+            ${renderStatCard("DM Kills", dm.stats.kills)}
+            ${renderStatCard("DM Games", dm.stats.games)}
+            ${renderStatCard("DM Playtime", formatDuration(dm.stats.playtimeSeconds))}
+            ${renderStatCard("DM Win Rate", formatPercent(dm.derived.winRate))}
+            ${renderStatCard("DM HS%", formatPercent(dm.derived.headshotRate))}
+            ${renderStatCard("DM Highest Streak", dm.stats.bestKillStreak)}
             ${renderStatCard("Top DM Kills", dm.stats.topMatchKills)}
         </section>
         <section class="detail-section">
             <h3>Profile Snapshot</h3>
             <div class="snapshot-grid">
-                ${renderSnapshotItem("Favorite Weapon", favoriteWeapon ? favoriteWeapon.label : "-")}
                 ${renderSnapshotItem("BR Best Placement", br.details?.battleRoyalePlacement?.best ? `#${br.details.battleRoyalePlacement.best}` : "-")}
+                ${renderSnapshotItem("BR Top Weapon", brWeapon ? brWeapon.label : "-")}
+                ${renderSnapshotItem("BR Vehicle Kills", br.stats.vehicleKills)}
                 ${renderSnapshotItem("Favorite DM Kit", dm.details?.favoriteKit?.label || "-")}
-                ${renderSnapshotItem("Utility Kills", stats.utilityKills)}
-                ${renderSnapshotItem("Vehicle Kills", stats.vehicleKills)}
-                ${renderSnapshotItem("Headshot Kills", stats.headshotKills)}
+                ${renderSnapshotItem("Favorite DM Map", dm.details?.favoriteMap?.label || "-")}
+                ${renderSnapshotItem("DM Top Weapon", dmWeapon ? dmWeapon.label : "-")}
+                ${renderSnapshotItem("DM Headshot Kills", dm.stats.headshotKills)}
             </div>
         </section>
     `;
@@ -6596,18 +6734,28 @@ function renderMapsTab(profile) {
 }
 
 function renderWeaponsTab(profile) {
-    const overall = combinedWeapons(profile);
     const br = normalizePlayer(profile.battleRoyale).details?.weapons || [];
     const dm = normalizePlayer(profile.deathmatch).details?.weapons || [];
-    if (overall.length === 0) return renderEmptyDetail("No weapon stats yet. Weapon tables start filling in after the updated server jar records new hits and kills.");
+    if (!br.length && !dm.length) return renderEmptyDetail("No weapon stats yet. Weapon tables start filling in after the updated server jar records new hits and kills.");
+    const sort = PROFILE_WEAPON_SORTS[state.profileWeaponSort] ? state.profileWeaponSort : "kills";
     return `
-        ${renderWeaponTable("All Weapons", overall)}
-        ${renderWeaponTable("Battle Royale Weapons", br)}
-        ${renderWeaponTable("Deathmatch Weapons", dm)}
+        <section class="detail-section weapon-sort-section">
+            <div class="weapon-sort-head">
+                <h3>Weapon Stats</h3>
+                <div class="weapon-sort-tabs" role="group" aria-label="Sort weapon stats">
+                    ${Object.entries(PROFILE_WEAPON_SORTS).map(([id, label]) => `
+                        <button class="tab-pill ${sort === id ? "active" : ""}" type="button" data-profile-weapon-sort="${escapeHtml(id)}" aria-pressed="${sort === id ? "true" : "false"}">${escapeHtml(label)}</button>
+                    `).join("")}
+                </div>
+            </div>
+        </section>
+        ${br.length ? renderWeaponTable("Battle Royale Weapons", br, sort) : ""}
+        ${dm.length ? renderWeaponTable("Deathmatch Weapons", dm, sort) : ""}
     `;
 }
 
 function renderHistoryTab(profile) {
+    if (!PUBLIC_MODE_LABELS[state.historyFilter]) state.historyFilter = "battleRoyale";
     return `
         <section class="detail-section">
             <div class="history-heading">
@@ -6615,7 +6763,7 @@ function renderHistoryTab(profile) {
                 <span>Local time: ${escapeHtml(viewerTimeZoneLabel())}</span>
             </div>
             <div class="history-filters">
-                ${Object.entries(MODE_LABELS).map(([id, label]) => {
+                ${Object.entries(PUBLIC_MODE_LABELS).map(([id, label]) => {
                     const active = state.historyFilter === id;
                     return `
                         <button class="tab-pill ${active ? "active" : ""}" type="button" data-history-filter="${escapeHtml(id)}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(`${label} match history${active ? ", selected" : ""}`)}">${escapeHtml(label)}</button>
@@ -6775,8 +6923,8 @@ function renderBreakdownRow(entry) {
     `;
 }
 
-function renderWeaponTable(title, weapons) {
-    const rows = cleanWeaponEntries(weapons);
+function renderWeaponTable(title, weapons, sort = "kills") {
+    const rows = sortProfileWeapons(cleanWeaponEntries(weapons), sort);
     if (rows.length === 0) return "";
     return `
         <section class="detail-section">
@@ -6795,6 +6943,37 @@ function renderWeaponTable(title, weapons) {
             </div>
         </section>
     `;
+}
+
+function sortProfileWeapons(rows, sort) {
+    const sortId = PROFILE_WEAPON_SORTS[sort] ? sort : "kills";
+    return [...rows].sort((a, b) => {
+        const primary = weaponSortValue(b, sortId) - weaponSortValue(a, sortId);
+        if (primary) return primary;
+        const kills = weaponSortValue(b, "kills") - weaponSortValue(a, "kills");
+        if (kills) return kills;
+        return weaponLabel(a).localeCompare(weaponLabel(b));
+    });
+}
+
+function weaponSortValue(entry, sort) {
+    const stats = normalizeStats(entry.stats);
+    const derived = normalizeDerived(entry.derived, stats);
+    switch (sort) {
+        case "hits":
+            return stats.hits;
+        case "headshotRate":
+            return derived.headshotRate;
+        case "headshotKills":
+            return stats.headshotKills;
+        case "utilityKills":
+            return stats.utilityKills;
+        case "vehicleKills":
+            return stats.vehicleKills;
+        case "kills":
+        default:
+            return stats.kills;
+    }
 }
 
 function renderWeaponRow(entry) {
@@ -7327,6 +7506,12 @@ function skinHeadUrl(name, size) {
     const safeName = String(name || DEFAULT_SKIN_NAME).trim() || DEFAULT_SKIN_NAME;
     const safeSize = Math.max(16, Math.min(256, Math.round(number(size) || 96)));
     return `https://api.mcheads.org/head/${encodeURIComponent(safeName)}/${safeSize}`;
+}
+
+function alternateSkinHeadUrl(name, size) {
+    const safeName = String(name || DEFAULT_SKIN_NAME).trim() || DEFAULT_SKIN_NAME;
+    const safeSize = Math.max(16, Math.min(256, Math.round(number(size) || 96)));
+    return `https://mc-heads.net/avatar/${encodeURIComponent(safeName)}/${safeSize}`;
 }
 
 function openContactEmail() {

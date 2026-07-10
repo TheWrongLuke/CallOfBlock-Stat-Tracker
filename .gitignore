@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 !discord-bot/.env.example
+.vs/
 node_modules/
 .bot-state.json
 discord-bot/.bot-state.json

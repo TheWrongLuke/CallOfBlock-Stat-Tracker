@@ -3972,8 +3972,8 @@ img.identity-avatar {
 }
 
 .player-profile-quickstats {
-    grid-template-columns: repeat(3, minmax(110px, 1fr));
-    min-width: min(420px, 100%);
+    grid-template-columns: repeat(4, minmax(110px, 1fr));
+    min-width: min(560px, 100%);
 }
 
 .account-form label,
@@ -4567,6 +4567,30 @@ img.identity-avatar {
     gap: 8px;
 }
 
+.weapon-sort-section {
+    gap: 10px;
+}
+
+.weapon-sort-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.weapon-sort-tabs {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.weapon-sort-tabs .tab-pill {
+    min-height: 38px;
+    padding: 8px 12px;
+    font-size: 0.84rem;
+}
+
 .weapon-row {
     display: grid;
     grid-template-columns: minmax(180px, 1.3fr) repeat(6, minmax(72px, 0.5fr));
@@ -4680,6 +4704,17 @@ code {
     .calendar-vote-grid,
     .playtest-analytics-grid {
         grid-template-columns: 1fr;
+    }
+
+    .account-hero,
+    .player-profile-hero {
+        display: grid;
+        align-items: start;
+    }
+
+    .player-profile-quickstats {
+        width: 100%;
+        min-width: 0;
     }
 
     .playtests-layout,
@@ -4804,11 +4839,193 @@ code {
         grid-template-columns: 1fr;
     }
 
+    .tab-row,
+    .view-tabs,
+    .player-tabs,
+    .history-filters,
+    .weapon-sort-tabs {
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        flex-wrap: nowrap;
+        padding-bottom: 6px;
+        scroll-snap-type: x proximity;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
+    }
+
+    .tab-row .tab-pill,
+    .view-tabs .tab-pill,
+    .player-tabs .tab-pill,
+    .history-filters .tab-pill,
+    .weapon-sort-tabs .tab-pill {
+        flex: 0 0 auto;
+        white-space: nowrap;
+        scroll-snap-align: start;
+        padding: 9px 13px;
+        font-size: 0.9rem;
+    }
+
+    .player-profile-hero {
+        gap: 14px;
+        padding: 16px;
+    }
+
+    .player-profile-identity {
+        align-items: flex-start;
+    }
+
+    .player-profile-avatar {
+        width: 82px;
+        height: 82px;
+        border-radius: 18px;
+    }
+
+    .player-profile-hero h3 {
+        font-size: clamp(2rem, 10vw, 3.1rem);
+        line-height: 0.92;
+        overflow-wrap: anywhere;
+    }
+
+    .player-profile-quickstats,
+    .detail-grid,
+    .snapshot-grid,
+    .profile-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .detail-stat,
+    .snapshot-item,
+    .profile-stat {
+        padding: 12px;
+        min-width: 0;
+    }
+
+    .detail-stat span,
+    .snapshot-item span,
+    .profile-stat span {
+        font-size: 0.78rem;
+    }
+
+    .detail-stat strong,
+    .snapshot-item strong,
+    .profile-stat strong {
+        font-size: 1.08rem;
+        line-height: 1.05;
+        overflow-wrap: anywhere;
+    }
+
+    .table-wrap {
+        border-radius: 16px;
+    }
+
+    .leaderboard-table {
+        min-width: 760px;
+        font-size: 0.78rem;
+    }
+
+    .leaderboard-table th,
+    .leaderboard-table td {
+        padding: 8px 9px;
+    }
+
+    .leaderboard-table th:first-child,
+    .leaderboard-table td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 4;
+        width: 42px;
+        min-width: 42px;
+        background: rgba(9, 15, 25, 0.98);
+    }
+
+    .leaderboard-table th:nth-child(2),
+    .leaderboard-table td:nth-child(2) {
+        position: sticky;
+        left: 42px;
+        z-index: 4;
+        width: 138px;
+        min-width: 138px;
+        max-width: 138px;
+        background: rgba(9, 15, 25, 0.98);
+        box-shadow: 10px 0 18px rgba(0, 0, 0, 0.22);
+    }
+
+    .leaderboard-table th:first-child,
+    .leaderboard-table th:nth-child(2) {
+        z-index: 6;
+        background: rgba(7, 14, 24, 1);
+    }
+
+    .rank-badge {
+        min-width: 26px;
+        min-height: 26px;
+        font-size: 0.78rem;
+    }
+
+    .leaderboard-player {
+        gap: 8px;
+    }
+
+    .leaderboard-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+    }
+
+    .leaderboard-player .player-name {
+        display: grid;
+        gap: 2px;
+        justify-content: stretch;
+    }
+
+    .leaderboard-player .player-name strong {
+        font-size: 0.82rem;
+        max-width: 82px;
+    }
+
+    .leaderboard-player .profile-link {
+        min-height: 0;
+        font-size: 0.62rem;
+        letter-spacing: 0.05em;
+    }
+
+    .sort-header {
+        min-height: 34px;
+        font-size: 0.68rem;
+    }
+
     .playtests-view,
     .community-admin-view,
-    .account-view {
+    .account-view,
+    .player-view {
         width: min(100vw - 16px, 100%);
         margin-top: 12px;
+    }
+
+    .player-view,
+    .player-detail-body,
+    .player-profile-hero,
+    .player-tabs,
+    .detail-section,
+    .weapon-table,
+    .weapon-row,
+    .weapon-sort-head,
+    .weapon-sort-tabs {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    .detail-section,
+    .weapon-row {
+        overflow: hidden;
+    }
+
+    .weapon-row strong,
+    .weapon-row span {
+        min-width: 0;
+        overflow-wrap: anywhere;
     }
 
     .playtests-hero,
