@@ -66,7 +66,7 @@ const MISSION_MODES = [
     { id: "deathmatch", label: "Deathmatch", short: "DM" }
 ];
 const PROFILE_BASE_COLUMNS = "id, discord_id, username, avatar_url, is_admin, banned_from_voting, created_at";
-const PROFILE_ACCOUNT_COLUMNS = [
+const PROFILE_ACCOUNT_COLUMNS_LEGACY = [
     "display_name",
     "minecraft_player_uuid",
     "minecraft_player_name",
@@ -82,9 +82,16 @@ const PROFILE_ACCOUNT_COLUMNS = [
     "unlocked_pfp_borders",
     "xp"
 ];
+const PROFILE_ACCOUNT_COLUMNS = [
+    ...PROFILE_ACCOUNT_COLUMNS_LEGACY,
+    "profile_title",
+    "unlocked_icons",
+    "unlocked_titles"
+];
 const PROFILE_SELECT_COLUMNS = `${PROFILE_BASE_COLUMNS}, ${PROFILE_ACCOUNT_COLUMNS.join(", ")}`;
+const PROFILE_SELECT_COLUMNS_LEGACY = `${PROFILE_BASE_COLUMNS}, ${PROFILE_ACCOUNT_COLUMNS_LEGACY.join(", ")}`;
 const PUBLIC_PROFILE_TABLE = "public_profiles";
-const PUBLIC_PROFILE_SELECT_COLUMNS = [
+const PUBLIC_PROFILE_COLUMNS_LEGACY = [
     "id",
     "username",
     "avatar_url",
@@ -102,53 +109,81 @@ const PUBLIC_PROFILE_SELECT_COLUMNS = [
     "unlocked_backgrounds",
     "unlocked_pfp_borders",
     "xp"
+];
+const PUBLIC_PROFILE_SELECT_COLUMNS = [
+    ...PUBLIC_PROFILE_COLUMNS_LEGACY,
+    "profile_title",
+    "unlocked_icons",
+    "unlocked_titles"
 ].join(", ");
+const PUBLIC_PROFILE_SELECT_COLUMNS_LEGACY = PUBLIC_PROFILE_COLUMNS_LEGACY.join(", ");
 const PROFILE_MEDIA_BUCKET = "profile-media";
 const MAX_PROFILE_UPLOAD_BYTES = 1024 * 1024;
 const PLAYTEST_SELECT_COLUMNS = "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
 const PLAYTEST_SLOT_SELECT_COLUMNS = "id, playtest_id, start_datetime, end_datetime, label, is_main, source, confirmed_at, confirmed_by, created_at";
 const AVAILABILITY_SELECT_COLUMNS = "id, playtest_id, slot_id, user_id, status, mode_preference, available_start_datetime, available_end_datetime, created_at, updated_at";
 const NOTIFICATION_SELECT_COLUMNS = "id, playtest_id, slot_id, user_id, notify_on_confirmation, created_at, updated_at";
-const AVATAR_SOURCE_OPTIONS = [
-    { id: "discord", label: "Discord picture" },
-    { id: "minecraft", label: "Minecraft skin" },
-    { id: "custom", label: "Custom upload" }
+const RARITY_ORDER = ["common", "rare", "epic", "legendary", "mythic"];
+const RARITY_LABELS = {
+    common: "Common",
+    rare: "Rare",
+    epic: "Epic",
+    legendary: "Legendary",
+    mythic: "Mythic"
+};
+const COSMETIC_CATEGORY_ORDER = ["Default", "Game Modes", "Milestones", "Personal", "Legacy"];
+const PROFILE_ICONS = [
+    { id: "default", label: "Call of Block", category: "Default", rarity: "common", image: "./Icon.png", unlock: "default" },
+    { id: "discord", label: "Discord picture", category: "Default", rarity: "common", source: "discord", unlock: "default" },
+    { id: "minecraft", label: "Minecraft skin", category: "Default", rarity: "common", source: "minecraft", unlock: "default" }
 ];
 const PROFILE_BACKGROUNDS = [
-    { id: "default", label: "Default", unlock: "default", image: "./assets/profile-backgrounds/default.png" },
-    { id: "br", label: "Battle Royale", unlock: "br_winner", image: "./assets/profile-backgrounds/battle-royale.png" },
-    { id: "dm", label: "Deathmatch", unlock: "dm_winner", image: "./assets/profile-backgrounds/deathmatch.png" },
-    { id: "night", label: "Night Ops", unlock: "veteran", image: "./assets/profile-backgrounds/night-ops.png" },
-    { id: "custom", label: "Custom PNG", unlock: "custom" }
+    { id: "default", label: "Default", category: "Default", rarity: "common", unlock: "default", image: "./assets/profile-backgrounds/default.png" },
+    { id: "br", label: "Battle Royale", category: "Game Modes", rarity: "rare", unlock: "br_winner", image: "./assets/profile-backgrounds/battle-royale.png" },
+    { id: "dm", label: "Deathmatch", category: "Game Modes", rarity: "rare", unlock: "dm_winner", image: "./assets/profile-backgrounds/deathmatch.png" },
+    { id: "night", label: "Night Ops", category: "Milestones", rarity: "epic", unlock: "veteran", image: "./assets/profile-backgrounds/night-ops.png" },
+    { id: "custom", label: "Custom image", category: "Personal", rarity: "common", unlock: "custom" }
 ];
 const PFP_BORDERS = [
-    { id: "none", label: "None", unlock: "default", image: "./assets/pfp-borders/none.png" },
-    { id: "gold", label: "Gold", unlock: "first_win", image: "./assets/pfp-borders/gold.png" },
-    { id: "green", label: "Green", unlock: "linked", image: "./assets/pfp-borders/green.png" },
-    { id: "blue", label: "Blue", unlock: "dm_winner", image: "./assets/pfp-borders/blue.png" },
-    { id: "red", label: "Red", unlock: "br_winner", image: "./assets/pfp-borders/red.png" }
+    { id: "none", label: "None", category: "Default", rarity: "common", unlock: "default", image: "./assets/pfp-borders/none.png", inset: 0 },
+    { id: "green", label: "Linked Green", category: "Milestones", rarity: "common", unlock: "linked", image: "./assets/pfp-borders/green.png", inset: 8 },
+    { id: "gold", label: "First Win Gold", category: "Milestones", rarity: "rare", unlock: "first_win", image: "./assets/pfp-borders/gold.png", inset: 8 },
+    { id: "blue", label: "Deathmatch Blue", category: "Game Modes", rarity: "rare", unlock: "dm_winner", image: "./assets/pfp-borders/blue.png", inset: 8 },
+    { id: "red", label: "Battle Royale Red", category: "Game Modes", rarity: "rare", unlock: "br_winner", image: "./assets/pfp-borders/red.png", inset: 8 }
+];
+const PROFILE_TITLES = [
+    { id: "none", label: "No title", text: "", category: "Default", rarity: "common", unlock: "default" },
+    { id: "linked_operative", label: "Linked Operative", text: "Linked Operative", category: "Milestones", rarity: "common", unlock: "linked" },
+    { id: "br_survivor", label: "BR Survivor", text: "Battle Royale Survivor", category: "Game Modes", rarity: "rare", unlock: "br_winner" },
+    { id: "dm_victor", label: "DM Victor", text: "Deathmatch Victor", category: "Game Modes", rarity: "rare", unlock: "dm_winner" },
+    { id: "veteran", label: "Veteran", text: "Veteran", category: "Milestones", rarity: "rare", unlock: "veteran" },
+    { id: "sharpshooter", label: "Sharpshooter", text: "Sharpshooter", category: "Milestones", rarity: "epic", unlock: "sharpshooter" },
+    { id: "br_champion", label: "BR Champion", text: "Battle Royale Champion", category: "Game Modes", rarity: "legendary", unlock: "br_wins_live" },
+    { id: "dm_champion", label: "DM Champion", text: "Deathmatch Champion", category: "Game Modes", rarity: "legendary", unlock: "dm_wins_live" },
+    { id: "br_apex", label: "BR Apex", text: "Battle Royale Apex", category: "Game Modes", rarity: "mythic", unlock: "br_kills_10000" },
+    { id: "dm_apex", label: "DM Apex", text: "Deathmatch Apex", category: "Game Modes", rarity: "mythic", unlock: "dm_kills_10000" }
 ];
 const BADGE_CATALOG = [
-    { id: "linked", label: "Linked", description: "Discord and Minecraft account paired.", test: ({ linked }) => linked },
-    { id: "first_win", label: "First Win", description: "Win at least one match.", test: ({ stats }) => stats.wins >= 1 },
-    { id: "br_winner", label: "BR Survivor", description: "Win a Battle Royale game.", test: ({ br }) => br.stats.wins >= 1 },
-    { id: "dm_winner", label: "DM Victor", description: "Win a Deathmatch game.", test: ({ dm }) => dm.stats.wins >= 1 },
-    { id: "br_wins_10", label: "BR 10 Wins", description: "Win 10 Battle Royale games.", test: ({ br }) => br.stats.wins >= 10 },
-    { id: "br_wins_50", label: "BR 50 Wins", description: "Win 50 Battle Royale games.", test: ({ br }) => br.stats.wins >= 50 },
-    { id: "br_wins_live", label: "BR Wins", description: "Dynamic badge unlocked at 100 Battle Royale wins.", dynamic: { mode: "battleRoyale", stat: "wins" }, test: ({ br }) => br.stats.wins >= 100 },
-    { id: "dm_wins_10", label: "DM 10 Wins", description: "Win 10 Deathmatch games.", test: ({ dm }) => dm.stats.wins >= 10 },
-    { id: "dm_wins_50", label: "DM 50 Wins", description: "Win 50 Deathmatch games.", test: ({ dm }) => dm.stats.wins >= 50 },
-    { id: "dm_wins_live", label: "DM Wins", description: "Dynamic badge unlocked at 100 Deathmatch wins.", dynamic: { mode: "deathmatch", stat: "wins" }, test: ({ dm }) => dm.stats.wins >= 100 },
-    { id: "br_kills_1000", label: "BR 1K Kills", description: "Score 1,000 Battle Royale kills.", test: ({ br }) => br.stats.kills >= 1000 },
-    { id: "br_kills_10000", label: "BR 10K Kills", description: "Score 10,000 Battle Royale kills.", test: ({ br }) => br.stats.kills >= 10000 },
-    { id: "dm_kills_1000", label: "DM 1K Kills", description: "Score 1,000 Deathmatch kills.", test: ({ dm }) => dm.stats.kills >= 1000 },
-    { id: "dm_kills_10000", label: "DM 10K Kills", description: "Score 10,000 Deathmatch kills.", test: ({ dm }) => dm.stats.kills >= 10000 },
-    { id: "br_mvp_10", label: "BR MVP 10", description: "Earn MVP 10 times in Battle Royale.", test: ({ br }) => br.stats.mvp >= 10 },
-    { id: "br_mvp_100", label: "BR MVP 100", description: "Earn MVP 100 times in Battle Royale.", test: ({ br }) => br.stats.mvp >= 100 },
-    { id: "dm_mvp_10", label: "DM MVP 10", description: "Earn MVP 10 times in Deathmatch.", test: ({ dm }) => dm.stats.mvp >= 10 },
-    { id: "dm_mvp_100", label: "DM MVP 100", description: "Earn MVP 100 times in Deathmatch.", test: ({ dm }) => dm.stats.mvp >= 100 },
-    { id: "sharpshooter", label: "Sharpshooter", description: "Reach 35% headshot rate with at least 20 hits.", test: ({ stats, derived }) => stats.hits >= 20 && derived.headshotRate >= 35 },
-    { id: "veteran", label: "Veteran", description: "Play 25 games.", test: ({ stats }) => stats.games >= 25 }
+    { id: "linked", label: "Linked", rarity: "common", description: "Discord and Minecraft account paired.", progress: { type: "linked" }, test: ({ linked }) => linked },
+    { id: "first_win", label: "First Win", rarity: "common", description: "Win at least one match.", progress: { scope: "overall", stat: "wins", target: 1, unit: "win" }, test: ({ stats }) => stats.wins >= 1 },
+    { id: "br_winner", label: "BR Survivor", rarity: "common", description: "Win a Battle Royale game.", progress: { scope: "battleRoyale", stat: "wins", target: 1, unit: "BR win" }, test: ({ br }) => br.stats.wins >= 1 },
+    { id: "dm_winner", label: "DM Victor", rarity: "common", description: "Win a Deathmatch game.", progress: { scope: "deathmatch", stat: "wins", target: 1, unit: "DM win" }, test: ({ dm }) => dm.stats.wins >= 1 },
+    { id: "br_wins_10", label: "BR 10 Wins", rarity: "rare", description: "Win 10 Battle Royale games.", progress: { scope: "battleRoyale", stat: "wins", target: 10, unit: "BR wins" }, test: ({ br }) => br.stats.wins >= 10 },
+    { id: "br_wins_50", label: "BR 50 Wins", rarity: "epic", description: "Win 50 Battle Royale games.", progress: { scope: "battleRoyale", stat: "wins", target: 50, unit: "BR wins" }, test: ({ br }) => br.stats.wins >= 50 },
+    { id: "br_wins_live", label: "BR Wins", rarity: "legendary", description: "Dynamic badge unlocked at 100 Battle Royale wins.", dynamic: { mode: "battleRoyale", stat: "wins" }, progress: { scope: "battleRoyale", stat: "wins", target: 100, unit: "BR wins", live: true }, test: ({ br }) => br.stats.wins >= 100 },
+    { id: "dm_wins_10", label: "DM 10 Wins", rarity: "rare", description: "Win 10 Deathmatch games.", progress: { scope: "deathmatch", stat: "wins", target: 10, unit: "DM wins" }, test: ({ dm }) => dm.stats.wins >= 10 },
+    { id: "dm_wins_50", label: "DM 50 Wins", rarity: "epic", description: "Win 50 Deathmatch games.", progress: { scope: "deathmatch", stat: "wins", target: 50, unit: "DM wins" }, test: ({ dm }) => dm.stats.wins >= 50 },
+    { id: "dm_wins_live", label: "DM Wins", rarity: "legendary", description: "Dynamic badge unlocked at 100 Deathmatch wins.", dynamic: { mode: "deathmatch", stat: "wins" }, progress: { scope: "deathmatch", stat: "wins", target: 100, unit: "DM wins", live: true }, test: ({ dm }) => dm.stats.wins >= 100 },
+    { id: "br_kills_1000", label: "BR 1K Kills", rarity: "epic", description: "Score 1,000 Battle Royale kills.", progress: { scope: "battleRoyale", stat: "kills", target: 1000, unit: "BR kills" }, test: ({ br }) => br.stats.kills >= 1000 },
+    { id: "br_kills_10000", label: "BR 10K Kills", rarity: "mythic", description: "Score 10,000 Battle Royale kills.", progress: { scope: "battleRoyale", stat: "kills", target: 10000, unit: "BR kills" }, test: ({ br }) => br.stats.kills >= 10000 },
+    { id: "dm_kills_1000", label: "DM 1K Kills", rarity: "epic", description: "Score 1,000 Deathmatch kills.", progress: { scope: "deathmatch", stat: "kills", target: 1000, unit: "DM kills" }, test: ({ dm }) => dm.stats.kills >= 1000 },
+    { id: "dm_kills_10000", label: "DM 10K Kills", rarity: "mythic", description: "Score 10,000 Deathmatch kills.", progress: { scope: "deathmatch", stat: "kills", target: 10000, unit: "DM kills" }, test: ({ dm }) => dm.stats.kills >= 10000 },
+    { id: "br_mvp_10", label: "BR MVP 10", rarity: "rare", description: "Earn MVP 10 times in Battle Royale.", progress: { scope: "battleRoyale", stat: "mvp", target: 10, unit: "BR MVP awards" }, test: ({ br }) => br.stats.mvp >= 10 },
+    { id: "br_mvp_100", label: "BR MVP 100", rarity: "legendary", description: "Earn MVP 100 times in Battle Royale.", progress: { scope: "battleRoyale", stat: "mvp", target: 100, unit: "BR MVP awards" }, test: ({ br }) => br.stats.mvp >= 100 },
+    { id: "dm_mvp_10", label: "DM MVP 10", rarity: "rare", description: "Earn MVP 10 times in Deathmatch.", progress: { scope: "deathmatch", stat: "mvp", target: 10, unit: "DM MVP awards" }, test: ({ dm }) => dm.stats.mvp >= 10 },
+    { id: "dm_mvp_100", label: "DM MVP 100", rarity: "legendary", description: "Earn MVP 100 times in Deathmatch.", progress: { scope: "deathmatch", stat: "mvp", target: 100, unit: "DM MVP awards" }, test: ({ dm }) => dm.stats.mvp >= 100 },
+    { id: "sharpshooter", label: "Sharpshooter", rarity: "epic", description: "Reach 35% headshot rate with at least 20 hits.", progress: { type: "sharpshooter", rateTarget: 35, hitsTarget: 20 }, test: ({ stats, derived }) => stats.hits >= 20 && derived.headshotRate >= 35 },
+    { id: "veteran", label: "Veteran", rarity: "rare", description: "Play 25 games.", progress: { scope: "overall", stat: "games", target: 25, unit: "games" }, test: ({ stats }) => stats.games >= 25 }
 ];
 const DEFAULT_PLAYTEST_VIEWER = {
     userId: "local-preview-user",
@@ -192,15 +227,22 @@ const state = {
     authSession: null,
     authProfile: null,
     authProfileExtended: true,
+    authCosmeticInventoryExtended: true,
     authMessage: "",
     accountProfiles: [],
     accountProfilesReady: false,
     accountProfileIndex: emptyAccountProfileIndex(),
+    cosmeticOwnershipCache: new Map(),
     accountMessage: "",
     accountSaving: false,
     accountUploadDialog: "",
     accountUploading: false,
     accountPanelOpen: false,
+    cosmeticPicker: {
+        type: "",
+        showUnowned: false,
+        rarityDirection: "asc"
+    },
     weeklyMissions: {
         loading: false,
         syncing: false,
@@ -237,6 +279,7 @@ const state = {
     playtests: emptyPlaytestState(),
     cache: emptyCache()
 };
+let activeBadgeProgressHost = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
@@ -494,13 +537,33 @@ function bindStaticEvents() {
             return;
         }
 
-        const customAvatarChoice = event.target.closest("[data-avatar-source-choice='custom']");
-        if (customAvatarChoice) {
-            const customAvatarInput = customAvatarChoice.querySelector("[name='avatarSource']");
-            if (customAvatarInput?.checked) {
-                openAccountUploadDialog("avatar");
-                return;
-            }
+        const cosmeticPickerClose = event.target.closest("[data-cosmetic-picker-close]");
+        if (cosmeticPickerClose || event.target.matches("[data-cosmetic-picker-backdrop]")) {
+            event.preventDefault();
+            closeCosmeticPicker();
+            return;
+        }
+
+        const cosmeticPickerOpen = event.target.closest("[data-cosmetic-picker-open]");
+        if (cosmeticPickerOpen) {
+            event.preventDefault();
+            openCosmeticPicker(cosmeticPickerOpen.dataset.cosmeticPickerOpen);
+            return;
+        }
+
+        const cosmeticOption = event.target.closest("[data-cosmetic-option]");
+        if (cosmeticOption) {
+            event.preventDefault();
+            selectCosmeticOption(cosmeticOption.dataset.cosmeticType, cosmeticOption.dataset.cosmeticOption);
+            return;
+        }
+
+        const cosmeticSort = event.target.closest("[data-cosmetic-sort]");
+        if (cosmeticSort) {
+            event.preventDefault();
+            state.cosmeticPicker.rarityDirection = state.cosmeticPicker.rarityDirection === "asc" ? "desc" : "asc";
+            renderCosmeticPicker(true);
+            return;
         }
 
         const uploadOpenButton = event.target.closest("[data-account-upload-open]");
@@ -550,19 +613,17 @@ function bindStaticEvents() {
 
     document.addEventListener("change", (event) => {
         const accountForm = event.target.closest("[data-account-form]");
-        if (accountForm && event.target.matches("[name='avatarSource'], [name='profileBackground'], [name='pfpBorder']")) {
+        if (accountForm && event.target.matches("[name='avatarSource'], [name='profileBackground'], [name='pfpBorder'], [name='profileTitle']")) {
             updateAccountCustomizePreview(accountForm);
         }
         if (accountForm && event.target.matches("[name='selectedBadges']")) {
             enforceBadgeSelectionLimit(accountForm, event.target);
         }
 
-        if (event.target.matches("[name='avatarSource']") && event.target.value === "custom") {
-            openAccountUploadDialog("avatar");
+        if (event.target.matches("[data-cosmetic-show-unowned]")) {
+            state.cosmeticPicker.showUnowned = Boolean(event.target.checked);
+            renderCosmeticPicker(true);
             return;
-        }
-        if (event.target.matches("[name='profileBackground']") && event.target.value === "custom") {
-            openAccountUploadDialog("background");
         }
     });
 
@@ -574,11 +635,26 @@ function bindStaticEvents() {
     });
 
     document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && state.accountPanelOpen) closeAccountSidePanel();
+        if (event.key !== "Escape") return;
+        if (state.cosmeticPicker.type) {
+            closeCosmeticPicker();
+            return;
+        }
+        if (state.accountUploadDialog) {
+            closeAccountUploadDialog();
+            return;
+        }
+        if (state.accountPanelOpen) closeAccountSidePanel();
     });
 
     document.addEventListener("mouseover", handleBadgeSeenEvent);
     document.addEventListener("focusin", handleBadgeSeenEvent);
+    document.addEventListener("mouseover", handleBadgeProgressEnter);
+    document.addEventListener("mouseout", handleBadgeProgressLeave);
+    document.addEventListener("focusin", handleBadgeProgressEnter);
+    document.addEventListener("focusout", handleBadgeProgressLeave);
+    window.addEventListener("scroll", hideBadgeProgressTooltip, true);
+    window.addEventListener("resize", hideBadgeProgressTooltip);
 
     const search = document.getElementById("player-search");
     search.addEventListener("input", (event) => {
@@ -943,8 +1019,9 @@ async function syncPlaytestProfile(user) {
     const username = discordUsernameFromUser(user);
     const avatarUrl = discordAvatarFromUser(user);
     try {
-        const { data: existing, error: selectError, extended } = await selectOwnProfile(user.id);
+        const { data: existing, error: selectError, extended, cosmeticsExtended } = await selectOwnProfile(user.id);
         state.authProfileExtended = extended;
+        state.authCosmeticInventoryExtended = cosmeticsExtended;
         if (selectError) throw selectError;
 
         if (existing) {
@@ -954,7 +1031,7 @@ async function syncPlaytestProfile(user) {
                 .from("profiles")
                 .update(updatePayload)
                 .eq("id", user.id)
-                .select(state.authProfileExtended ? PROFILE_SELECT_COLUMNS : PROFILE_BASE_COLUMNS)
+                .select(ownProfileSelectColumns())
                 .single();
             if (error) throw error;
             applyPlaytestProfile(data);
@@ -970,7 +1047,7 @@ async function syncPlaytestProfile(user) {
                 avatar_url: avatarUrl || null,
                 ...(state.authProfileExtended ? { display_name: username, avatar_source: "discord" } : {})
             })
-            .select(state.authProfileExtended ? PROFILE_SELECT_COLUMNS : PROFILE_BASE_COLUMNS)
+            .select(ownProfileSelectColumns())
             .single();
         if (error) throw error;
         applyPlaytestProfile(data);
@@ -990,14 +1067,26 @@ async function selectOwnProfile(userId) {
         .select(PROFILE_SELECT_COLUMNS)
         .eq("id", userId)
         .maybeSingle();
-    if (!extendedResult.error) return { ...extendedResult, extended: true };
+    if (!extendedResult.error) return { ...extendedResult, extended: true, cosmeticsExtended: true };
+
+    const legacyResult = await state.authClient
+        .from("profiles")
+        .select(PROFILE_SELECT_COLUMNS_LEGACY)
+        .eq("id", userId)
+        .maybeSingle();
+    if (!legacyResult.error) return { ...legacyResult, extended: true, cosmeticsExtended: false };
 
     const baseResult = await state.authClient
         .from("profiles")
         .select(PROFILE_BASE_COLUMNS)
         .eq("id", userId)
         .maybeSingle();
-    return { ...baseResult, extended: false };
+    return { ...baseResult, extended: false, cosmeticsExtended: false };
+}
+
+function ownProfileSelectColumns() {
+    if (!state.authProfileExtended) return PROFILE_BASE_COLUMNS;
+    return state.authCosmeticInventoryExtended ? PROFILE_SELECT_COLUMNS : PROFILE_SELECT_COLUMNS_LEGACY;
 }
 
 async function loadAccountProfiles() {
@@ -1020,6 +1109,10 @@ async function loadAccountProfiles() {
         state.accountProfilesReady = true;
         rebuildAccountProfileIndex();
     }
+
+    // Stats and public account data load independently. Refresh account-backed
+    // surfaces when the latter arrives so an already-open preview is not stale.
+    if (state.data) render();
 }
 
 async function loadRemotePlaytests(options = {}) {
@@ -1118,16 +1211,22 @@ async function loadProfilesForVoteRows(availabilityRows) {
 async function fetchPublicProfiles({ userIds = null, limit = 0 } = {}) {
     if (!state.authClient) return { data: [], error: null };
 
-    const run = async (table) => {
-        let query = state.authClient.from(table).select(PUBLIC_PROFILE_SELECT_COLUMNS);
+    const run = async (table, columns) => {
+        let query = state.authClient.from(table).select(columns);
         if (Array.isArray(userIds) && userIds.length) query = query.in("id", userIds);
         if (limit) query = query.limit(limit);
         return query;
     };
 
-    const viewResult = await run(PUBLIC_PROFILE_TABLE);
-    if (!viewResult.error) return viewResult;
-    return run("profiles");
+    const viewResult = await run(PUBLIC_PROFILE_TABLE, PUBLIC_PROFILE_SELECT_COLUMNS);
+    if (!viewResult.error) return { ...viewResult, cosmeticsExtended: true };
+    const legacyViewResult = await run(PUBLIC_PROFILE_TABLE, PUBLIC_PROFILE_SELECT_COLUMNS_LEGACY);
+    if (!legacyViewResult.error) return { ...legacyViewResult, cosmeticsExtended: false };
+
+    const profileResult = await run("profiles", PUBLIC_PROFILE_SELECT_COLUMNS);
+    if (!profileResult.error) return { ...profileResult, cosmeticsExtended: true };
+    const legacyProfileResult = await run("profiles", PUBLIC_PROFILE_SELECT_COLUMNS_LEGACY);
+    return { ...legacyProfileResult, cosmeticsExtended: false };
 }
 
 function mapRemotePlaytests(playtestRows, slotRows, availabilityRows, profileMap) {
@@ -1463,6 +1562,7 @@ function emptyAccountProfileIndex() {
 function rebuildAccountProfileIndex() {
     const index = emptyAccountProfileIndex();
     const seen = new Set();
+    state.cosmeticOwnershipCache.clear();
 
     for (const account of [state.authProfile, ...(state.accountProfiles || [])]) {
         if (!account?.id || seen.has(account.id)) continue;
@@ -1485,6 +1585,7 @@ function rebuildAccountProfileIndex() {
 
 function rebuildCache() {
     const profiles = Array.isArray(state.data?.profiles) ? state.data.profiles : [];
+    state.cosmeticOwnershipCache.clear();
     const overallPlayers = profiles.map(buildOverallPlayer).filter(Boolean);
     applyRanks(overallPlayers);
 
@@ -1537,6 +1638,7 @@ function render() {
             break;
     }
 
+    renderCosmeticPicker();
     renderRoute();
 }
 
@@ -1613,7 +1715,7 @@ function renderAccountWidget() {
     const name = accountDisplayName(account);
     container.innerHTML = `
         <button class="account-pill" type="button" data-account-panel-open aria-label="${escapeHtml(`Open profile panel for ${name}`)}" aria-expanded="${state.accountPanelOpen ? "true" : "false"}">
-            <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
+            <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
                 ${renderAvatarImage(avatarUrl, account, profile, 64, "eager")}
             </span>
             <span>${escapeHtml(name)}</span>
@@ -1668,11 +1770,12 @@ function renderAccountSidePanel() {
                     <button class="profile-drawer-close" type="button" data-account-panel-close aria-label="Close profile panel">&times;</button>
                 </header>
                 <div class="profile-drawer-identity">
-                    <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
+                    <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
                         ${renderAvatarImage(avatarUrl, account, profile, 72, "eager")}
                     </span>
                     <div>
                         <strong>${escapeHtml(accountDisplayName(account))}</strong>
+                        ${renderProfileTitle(account, { compact: true })}
                         ${renderAccountLevelPill(account)}
                     </div>
                 </div>
@@ -1708,16 +1811,20 @@ function renderAccountPage() {
     const schemaNote = state.authProfileExtended
         ? ""
         : `<p class="account-warning">Run the updated Supabase schema to unlock profile customization and Minecraft linking on the website.</p>`;
+    const cosmeticSchemaNote = state.authProfileExtended && !state.authCosmeticInventoryExtended
+        ? `<p class="account-warning">Run <code>supabase/cosmetic-titles.sql</code> in Supabase to enable equipable titles and future icon inventories. Existing customization remains available.</p>`
+        : "";
 
     body.innerHTML = `
-        <section class="account-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)}>
+        <section class="account-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} ${backgroundCosmeticOwnershipDataAttributes(account)}>
             <div class="account-hero-main">
-                <span class="account-avatar-large ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
+                <span class="account-avatar-large ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
                     ${renderAvatarImage(avatarUrl, account, linkedProfile, 128, "eager")}
                 </span>
                 <div>
                     <p class="panel-kicker">Account</p>
                     <h2>${escapeHtml(accountDisplayName(account))}</h2>
+                    ${renderProfileTitle(account)}
                     <p>${linkedName ? `Linked to ${escapeHtml(linkedName)}` : "Minecraft account not linked yet."}</p>
                     ${renderAccountSignedDate(account)}
                     ${renderAccountLevelPill(account)}
@@ -1735,6 +1842,7 @@ function renderAccountPage() {
         </section>
 
         ${schemaNote}
+        ${cosmeticSchemaNote}
         ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
         ${renderAccountLinkPanel(account, linkedProfile)}
         ${linkedProfile ? renderAccountStatsPanel(linkedProfile) : ""}
@@ -1810,6 +1918,7 @@ function renderAccountCustomizeForm(account, badgeState) {
     const avatarSource = cleanAvatarSource(account.avatar_source);
     const background = cleanProfileBackground(account.profile_background, account, badgeState);
     const border = cleanPfpBorder(account.pfp_border, account, badgeState);
+    const title = cleanProfileTitle(account.profile_title, account, badgeState);
     const selectedIds = selectedAccountBadgeIds(account, badgeState.unlockedIds);
     const linkedProfile = linkedStatsProfile();
     const avatarUrl = accountAvatarUrl(account, linkedProfile, 180);
@@ -1826,80 +1935,451 @@ function renderAccountCustomizeForm(account, badgeState) {
                         <span>Display name</span>
                         <input name="displayName" type="text" maxlength="32" value="${escapeHtml(account.display_name || account.username || "")}" placeholder="Display name">
                     </label>
-                    <fieldset>
-                        <legend>Profile picture</legend>
-                        <div class="account-option-row compact">
-                            ${AVATAR_SOURCE_OPTIONS.map((option) => `
-                                <label${option.id === "custom" ? ` data-avatar-source-choice="custom"` : ""}>
-                                    <input type="radio" name="avatarSource" value="${escapeHtml(option.id)}" ${avatarSource === option.id ? "checked" : ""}>
-                                    <span>${escapeHtml(option.label)}</span>
-                                </label>
-                            `).join("")}
-                        </div>
-                    </fieldset>
-                    <div class="account-form-grid">
-                        <label>
-                            <span>Background</span>
-                            <select name="profileBackground">
-                                ${PROFILE_BACKGROUNDS.map((option) => {
-                                    const unlocked = option.id === "custom" || profileBackgroundUnlocked(option.id, account, badgeState);
-                                    const label = option.id === "custom" && !account.custom_background_url
-                                        ? `${option.label} - upload`
-                                        : unlocked ? option.label : `${option.label} - locked`;
-                                    return `<option value="${escapeHtml(option.id)}" ${background === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(label)}</option>`;
-                                }).join("")}
-                            </select>
-                        </label>
-                        <label>
-                            <span>PFP border</span>
-                            <select name="pfpBorder">
-                                ${PFP_BORDERS.map((option) => {
-                                    const unlocked = pfpBorderUnlocked(option.id, account, badgeState);
-                                    return `<option value="${escapeHtml(option.id)}" ${border === option.id ? "selected" : ""} ${unlocked ? "" : "disabled"}>${escapeHtml(unlocked ? option.label : `${option.label} - locked`)}</option>`;
-                                }).join("")}
-                            </select>
-                        </label>
+                    <div class="cosmetic-field-grid">
+                        ${renderCosmeticFieldButton("icon", "Icon", account, linkedProfile, badgeState, selectedIds)}
+                        ${renderCosmeticFieldButton("background", "Background", account, linkedProfile, badgeState, selectedIds)}
+                        ${renderCosmeticFieldButton("border", "Icon border", account, linkedProfile, badgeState, selectedIds)}
+                        ${renderCosmeticFieldButton("title", "Title", account, linkedProfile, badgeState, selectedIds)}
+                        ${renderCosmeticFieldButton("badges", "Badges", account, linkedProfile, badgeState, selectedIds)}
+                    </div>
+                    <div class="cosmetic-form-values" hidden>
+                        <input type="hidden" name="avatarSource" value="${escapeHtml(avatarSource)}">
+                        <input type="hidden" name="profileBackground" value="${escapeHtml(background)}">
+                        <input type="hidden" name="pfpBorder" value="${escapeHtml(border)}">
+                        <input type="hidden" name="profileTitle" value="${escapeHtml(title)}">
+                        ${BADGE_CATALOG.map((badge) => {
+                            const unlocked = badgeState.unlockedIds.has(badge.id);
+                            return `<input type="checkbox" name="selectedBadges" value="${escapeHtml(badge.id)}" data-cosmetic-owned="${unlocked ? "true" : "false"}" ${selectedIds.has(badge.id) ? "checked" : ""} ${unlocked ? "" : "disabled"}>`;
+                        }).join("")}
                     </div>
                 </div>
-                <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Profile preview" data-account-preview>
-                    <span class="account-preview-avatar ${avatarFrameClass(account)}" data-account-preview-avatar${avatarFrameStyle(account)}>
+                <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Profile preview" data-account-preview ${backgroundCosmeticOwnershipDataAttributes(account)}>
+                    <span class="account-preview-avatar ${avatarFrameClass(account)}" data-account-preview-avatar${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
                         ${renderAvatarImage(avatarUrl, account, linkedProfile, 180, "eager", "data-account-preview-img")}
                     </span>
                     <div>
                         <p class="panel-kicker">Preview</p>
                         <strong data-account-preview-name>${escapeHtml(accountDisplayName(account))}</strong>
-                        <span data-account-preview-meta>${escapeHtml(avatarSourceLabel(avatarSource))} icon - ${escapeHtml(backgroundLabel(background))}</span>
+                        <div data-account-preview-title>${renderProfileTitle(account, { empty: true })}</div>
+                        <span data-account-preview-meta>${escapeHtml(avatarSourceLabel(avatarSource))} - ${escapeHtml(backgroundLabel(background))} - ${escapeHtml(pfpBorderLabel(border))} - ${escapeHtml(profileTitleLabel(title))}</span>
                     </div>
                 </aside>
             </div>
-            <fieldset>
-                <legend>Equip badges</legend>
-                <small>${badgeState.unlockedIds.size} unlocked. Equip up to 5 badges on your public profile. Recommended badge icon: 256x256 transparent PNG/WebP.</small>
-                <div class="badge-picker">
-                    ${BADGE_CATALOG.map((badge) => {
-                        const displayBadge = badgeDisplay(badge, badgeState.context);
-                        const unlocked = badgeState.unlockedIds.has(badge.id);
-                        const isNew = unlocked && isBadgeNew(account, badge.id);
-                        const selected = selectedIds.has(badge.id);
-                        const selectionFull = selectedIds.size >= 5;
-                        return `
-                            <label class="${unlocked ? "" : "locked"} ${isNew ? "badge-new" : ""}" data-badge-id="${escapeHtml(badge.id)}">
-                                <input type="checkbox" name="selectedBadges" value="${escapeHtml(badge.id)}" ${selected ? "checked" : ""} ${unlocked && (!selectionFull || selected) ? "" : "disabled"}>
-                                <span class="badge-picker-main">
-                                    ${renderBadgeIcon(displayBadge)}
-                                    <span>
-                                        <strong>${escapeHtml(displayBadge.label)}</strong>
-                                        <small>${escapeHtml(unlocked ? displayBadge.description : `Locked: ${displayBadge.description}`)}</small>
-                                    </span>
-                                </span>
-                            </label>
-                        `;
-                    }).join("")}
-                </div>
-            </fieldset>
             <button type="submit" ${state.accountSaving || !state.authProfileExtended ? "disabled" : ""}>${state.accountSaving ? "Saving..." : "Save profile"}</button>
         </form>
     `;
+}
+
+function renderCosmeticFieldButton(type, label, account, profile, badgeState, selectedIds) {
+    const disabled = type === "title" && !state.authCosmeticInventoryExtended;
+    return `
+        <button class="cosmetic-field-button" type="button" data-cosmetic-picker-open="${escapeHtml(type)}" aria-label="${escapeHtml(`Choose ${label.toLowerCase()}`)}" ${disabled ? "disabled" : ""}>
+            <span class="cosmetic-field-media" data-cosmetic-field-media="${escapeHtml(type)}">
+                ${renderCosmeticFieldMedia(type, account, profile, badgeState, selectedIds)}
+            </span>
+            <span class="cosmetic-field-copy">
+                <small>${escapeHtml(label)}</small>
+                <strong data-cosmetic-field-label="${escapeHtml(type)}">${escapeHtml(cosmeticSelectionLabel(type, account, selectedIds))}</strong>
+            </span>
+        </button>
+    `;
+}
+
+function renderCosmeticFieldMedia(type, account, profile, badgeState, selectedIds) {
+    if (type === "background") {
+        const url = profileBackgroundImageUrl(account);
+        return renderCosmeticImage(url, backgroundLabel(account?.profile_background), "background");
+    }
+
+    if (type === "border") {
+        const avatarUrl = accountAvatarUrl(account, profile, 72);
+        return `
+            <span class="cosmetic-mini-avatar ${avatarFrameClass(account)}"${avatarFrameStyle(account)}>
+                ${renderAvatarImage(avatarUrl, account, profile, 72)}
+            </span>
+        `;
+    }
+
+    if (type === "title") {
+        return `<span class="cosmetic-mini-title">${renderProfileTitle(account, { empty: true, compact: true, interactive: false })}</span>`;
+    }
+
+    if (type === "badges") {
+        const ids = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
+        const badges = BADGE_CATALOG
+            .filter((badge) => ids.has(badge.id))
+            .slice(0, 3)
+            .map((badge) => badgeDisplay(badge, badgeState.context, true));
+        return `
+            <span class="cosmetic-mini-badges">
+                ${badges.length ? badges.map(renderBadgeIcon).join("") : `<span class="cosmetic-empty-count">0</span>`}
+            </span>
+        `;
+    }
+
+    const avatarUrl = accountAvatarUrl(account, profile, 72);
+    return renderCosmeticImage(avatarUrl, avatarSourceLabel(account?.avatar_source), "icon");
+}
+
+function renderCosmeticImage(url, label, mediaClass = "") {
+    const safeUrl = String(url || "").trim();
+    return `
+        <span class="cosmetic-image ${escapeHtml(mediaClass)}">
+            ${safeUrl ? `<img src="${escapeHtml(safeUrl)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">` : ""}
+            <span class="cosmetic-image-fallback" ${safeUrl ? "hidden" : ""}>${escapeHtml(badgeInitials(label || "Cosmetic"))}</span>
+        </span>
+    `;
+}
+
+function cosmeticSelectionLabel(type, account, selectedIds = new Set()) {
+    if (type === "icon") return avatarSourceLabel(cleanAvatarSource(account?.avatar_source));
+    if (type === "background") return backgroundLabel(cleanProfileBackground(account?.profile_background, account));
+    if (type === "border") return pfpBorderLabel(cleanPfpBorder(account?.pfp_border, account));
+    if (type === "title") return profileTitleLabel(cleanProfileTitle(account?.profile_title, account));
+    const count = selectedIds instanceof Set ? selectedIds.size : new Set(selectedIds || []).size;
+    return `${count} / 5 equipped`;
+}
+
+function updateCosmeticFieldButtons(form, account, profile, badgeState) {
+    const selectedIds = new Set([...form.querySelectorAll("input[name='selectedBadges']:checked")].map((input) => input.value));
+    for (const type of ["icon", "background", "border", "title", "badges"]) {
+        const media = form.querySelector(`[data-cosmetic-field-media='${type}']`);
+        if (media) media.innerHTML = renderCosmeticFieldMedia(type, account, profile, badgeState, selectedIds);
+        const label = form.querySelector(`[data-cosmetic-field-label='${type}']`);
+        if (label) label.textContent = cosmeticSelectionLabel(type, account, selectedIds);
+    }
+}
+
+function openCosmeticPicker(type) {
+    if (!["icon", "background", "border", "title", "badges"].includes(type)) return;
+    if (type === "title" && !state.authCosmeticInventoryExtended) return;
+    if (!isDiscordLoggedIn() || !document.querySelector("[data-account-form]")) return;
+    state.cosmeticPicker.type = type;
+    renderCosmeticPicker();
+    window.requestAnimationFrame(() => document.querySelector("[data-cosmetic-picker-close]")?.focus());
+}
+
+function closeCosmeticPicker() {
+    const type = state.cosmeticPicker.type;
+    state.cosmeticPicker.type = "";
+    document.body.classList.remove("cosmetic-picker-open");
+    hideBadgeProgressTooltip();
+    const host = document.getElementById("cosmetic-picker-host");
+    if (host) host.innerHTML = "";
+    window.requestAnimationFrame(() => document.querySelector(`[data-cosmetic-picker-open='${type}']`)?.focus());
+}
+
+function renderCosmeticPicker(preserveScroll = false) {
+    const host = cosmeticPickerHost();
+    if (!host) return;
+    const type = state.cosmeticPicker.type;
+    const form = document.querySelector("[data-account-form]");
+    if (!["icon", "background", "border", "title", "badges"].includes(type) || !form || state.view !== "account") {
+        host.innerHTML = "";
+        document.body.classList.remove("cosmetic-picker-open");
+        if (!form || state.view !== "account") state.cosmeticPicker.type = "";
+        return;
+    }
+
+    hideBadgeProgressTooltip();
+    const previousScrollTop = preserveScroll ? host.querySelector("[data-cosmetic-picker-scroll]")?.scrollTop || 0 : 0;
+    const account = state.authProfile || {};
+    const profile = linkedStatsProfile();
+    const badgeState = accountBadgeState(account, profile);
+    const draft = readAccountFormDraft(form);
+    const selectedIds = new Set(draft.selectedBadges);
+    const previewAccount = {
+        ...account,
+        display_name: String(draft.displayName || "").trim() || accountDisplayName(account),
+        avatar_source: draft.avatarSource,
+        profile_background: draft.profileBackground,
+        pfp_border: draft.pfpBorder,
+        profile_title: draft.profileTitle
+    };
+    const items = cosmeticPickerItems(type, account).map((item) => {
+        const owned = cosmeticItemOwned(type, item, account, badgeState);
+        const selected = cosmeticOptionSelected(type, item.id, draft, selectedIds);
+        return {
+            ...item,
+            rarity: cleanRarity(item.rarity),
+            owned,
+            selected,
+            displayItem: type === "badges" ? badgeDisplay(item, badgeState.context, owned) : item
+        };
+    });
+    const visibleItems = items.filter((item) => state.cosmeticPicker.showUnowned || item.owned || item.selected);
+
+    host.innerHTML = `
+        <div class="cosmetic-picker-backdrop" data-cosmetic-picker-backdrop>
+            <section class="cosmetic-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="cosmetic-picker-title">
+                <header class="cosmetic-picker-header">
+                    <div>
+                        <p class="panel-kicker">Profile cosmetics</p>
+                        <h3 id="cosmetic-picker-title">${escapeHtml(cosmeticTypeTitle(type))}</h3>
+                    </div>
+                    <button type="button" class="modal-icon-button" data-cosmetic-picker-close aria-label="Close cosmetic picker">x</button>
+                </header>
+                <div class="cosmetic-picker-scroll" data-cosmetic-picker-scroll>
+                    ${renderCosmeticPickerPreview(previewAccount, profile, badgeState, selectedIds, type)}
+                    <div class="cosmetic-picker-controls">
+                        <label class="cosmetic-owned-toggle">
+                            <input type="checkbox" data-cosmetic-show-unowned ${state.cosmeticPicker.showUnowned ? "checked" : ""}>
+                            <span>Show unowned</span>
+                        </label>
+                        <button type="button" data-cosmetic-sort>${state.cosmeticPicker.rarityDirection === "asc" ? "Rarity: Common first" : "Rarity: Mythic first"}</button>
+                        ${type === "background" ? `<button type="button" data-account-upload-open="background">Upload background</button>` : ""}
+                    </div>
+                    <div class="cosmetic-collection">
+                        ${renderCosmeticGroups(type, visibleItems, previewAccount, profile, badgeState, selectedIds)}
+                    </div>
+                </div>
+            </section>
+        </div>
+    `;
+    const scroll = host.querySelector("[data-cosmetic-picker-scroll]");
+    if (scroll) scroll.scrollTop = previousScrollTop;
+    document.body.classList.add("cosmetic-picker-open");
+}
+
+function cosmeticPickerHost() {
+    let host = document.getElementById("cosmetic-picker-host");
+    if (host) return host;
+    if (!document.body) return null;
+    host = document.createElement("div");
+    host.id = "cosmetic-picker-host";
+    document.body.appendChild(host);
+    return host;
+}
+
+function renderCosmeticPickerPreview(account, profile, badgeState, selectedIds, type) {
+    const avatarUrl = accountAvatarUrl(account, profile, 112);
+    const badges = BADGE_CATALOG
+        .filter((badge) => selectedIds.has(badge.id))
+        .slice(0, 5)
+        .map((badge) => badgeDisplay(badge, badgeState.context, true));
+    return `
+        <section class="cosmetic-picker-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Current cosmetic preview" ${backgroundCosmeticOwnershipDataAttributes(account)}>
+            <div class="cosmetic-picker-preview-identity">
+                <span class="cosmetic-picker-preview-avatar ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
+                    ${renderAvatarImage(avatarUrl, account, profile, 112, "eager")}
+                </span>
+                <div>
+                    <small>${escapeHtml(cosmeticTypeTitle(type))}</small>
+                    <strong>${escapeHtml(accountDisplayName(account))}</strong>
+                    ${renderProfileTitle(account, { empty: true })}
+                    <div class="account-badge-row compact">
+                        ${badges.length ? badges.map(renderProfileBadge).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
+                    </div>
+                </div>
+            </div>
+            <span class="cosmetic-preview-selection">${escapeHtml(cosmeticSelectionLabel(type, account, selectedIds))}</span>
+        </section>
+    `;
+}
+
+function cosmeticPickerItems(type, account) {
+    if (type === "icon") {
+        const legacy = account?.custom_avatar_url
+            ? [{ id: "custom", label: "Uploaded icon", category: "Legacy", rarity: "common", image: account.custom_avatar_url, unlock: "custom" }]
+            : [];
+        return [...PROFILE_ICONS, ...legacy];
+    }
+    if (type === "background") return PROFILE_BACKGROUNDS;
+    if (type === "border") return PFP_BORDERS;
+    if (type === "title") return PROFILE_TITLES;
+    return BADGE_CATALOG;
+}
+
+function cosmeticItemOwned(type, item, account, badgeState) {
+    if (type === "icon") return profileIconUnlocked(item.id, account, badgeState);
+    if (type === "background") return profileBackgroundUnlocked(item.id, account, badgeState);
+    if (type === "border") return pfpBorderUnlocked(item.id, account, badgeState);
+    if (type === "title") return profileTitleUnlocked(item.id, account, badgeState);
+    return badgeState.unlockedIds.has(item.id);
+}
+
+function cosmeticOptionSelected(type, id, draft, selectedIds) {
+    if (type === "icon") return draft.avatarSource === id;
+    if (type === "background") return draft.profileBackground === id;
+    if (type === "border") return draft.pfpBorder === id;
+    if (type === "title") return draft.profileTitle === id;
+    return selectedIds.has(id);
+}
+
+function renderCosmeticGroups(type, items, account, profile, badgeState, selectedIds) {
+    if (!items.length) return `<p class="mode-empty">No owned cosmetics in this collection.</p>`;
+    if (type === "badges") {
+        const rarities = state.cosmeticPicker.rarityDirection === "asc" ? [...RARITY_ORDER] : [...RARITY_ORDER].reverse();
+        return rarities.map((rarity) => {
+            const group = items
+                .filter((item) => item.rarity === rarity)
+                .sort((a, b) => a.label.localeCompare(b.label));
+            return group.length ? renderCosmeticGroup(RARITY_LABELS[rarity], type, group, account, profile, badgeState, selectedIds) : "";
+        }).join("");
+    }
+
+    const categories = [...new Set(items.map((item) => item.category || "Other"))]
+        .sort((a, b) => cosmeticCategoryRank(a) - cosmeticCategoryRank(b) || a.localeCompare(b));
+    return categories.map((category) => {
+        const group = items
+            .filter((item) => (item.category || "Other") === category)
+            .sort(cosmeticRarityCompare);
+        return renderCosmeticGroup(category, type, group, account, profile, badgeState, selectedIds);
+    }).join("");
+}
+
+function renderCosmeticGroup(label, type, items, account, profile, badgeState, selectedIds) {
+    return `
+        <section class="cosmetic-group">
+            <div class="cosmetic-group-heading">
+                <h4>${escapeHtml(label)}</h4>
+                <span>${items.length}</span>
+            </div>
+            <div class="cosmetic-grid ${type === "background" ? "background-grid" : ""}">
+                ${items.map((item) => renderCosmeticOption(type, item, account, profile, badgeState, selectedIds)).join("")}
+            </div>
+        </section>
+    `;
+}
+
+function renderCosmeticOption(type, item, account, profile, badgeState, selectedIds) {
+    const rarity = cleanRarity(item.rarity);
+    const selectionFull = type === "badges" && selectedIds.size >= 5 && !item.selected;
+    const unavailable = !item.owned || selectionFull;
+    const isNew = type === "badges" && item.owned && isBadgeNew(account, item.id);
+    const displayItem = item.displayItem || item;
+    const badgeAttributes = type === "badges"
+        ? `data-badge-id="${escapeHtml(item.id)}" ${badgeProgressDataAttributes(displayItem)}`
+        : "";
+    const ownershipAttributes = cosmeticOwnershipDataAttributes(
+        type,
+        item.id,
+        item.label,
+        item.description || `${RARITY_LABELS[rarity]} ${cosmeticTypeNoun(type)}`
+    );
+    const stateLabel = item.selected ? (type === "badges" ? "Equipped" : "Selected") : item.owned ? "Owned" : "Unowned";
+    return `
+        <button type="button"
+            class="cosmetic-option rarity-${rarity} ${item.selected ? "selected" : ""} ${item.owned ? "owned" : "unowned"} ${isNew ? "badge-new" : ""}"
+            data-cosmetic-type="${escapeHtml(type)}"
+            data-cosmetic-option="${escapeHtml(item.id)}"
+            data-cosmetic-owned="${item.owned ? "true" : "false"}"
+            aria-pressed="${item.selected ? "true" : "false"}"
+            aria-disabled="${unavailable ? "true" : "false"}"
+            ${badgeAttributes}
+            ${ownershipAttributes}>
+            ${renderCosmeticOptionMedia(type, displayItem, account, profile)}
+            <span class="cosmetic-option-copy">
+                <strong>${escapeHtml(item.label)}</strong>
+                <small><span>${escapeHtml(RARITY_LABELS[rarity])}</span><span>${escapeHtml(stateLabel)}</span></small>
+            </span>
+        </button>
+    `;
+}
+
+function renderCosmeticOptionMedia(type, item, account, profile) {
+    if (type === "badges") {
+        return `<span class="cosmetic-option-media badge-media">${renderBadgeIcon(item)}</span>`;
+    }
+    if (type === "border") {
+        const avatarUrl = accountAvatarUrl(account, profile, 96);
+        const hasFrame = item.id !== "none" && item.image;
+        const frameStyle = hasFrame
+            ? ` style="--avatar-frame-image: url('${escapeHtml(safeCssUrl(item.image))}'); --avatar-frame-inset: ${number(item.inset)}%"`
+            : "";
+        return `
+            <span class="cosmetic-option-media border-media">
+                <span class="cosmetic-option-avatar ${hasFrame ? "avatar-frame-image" : ""}"${frameStyle}>
+                    ${renderAvatarImage(avatarUrl, account, profile, 96)}
+                </span>
+            </span>
+        `;
+    }
+    if (type === "title") {
+        return `
+            <span class="cosmetic-option-media title-media">
+                ${renderTitleCosmetic(item, { empty: true, large: true, interactive: false })}
+            </span>
+        `;
+    }
+    const url = type === "icon"
+        ? profileIconOptionUrl(item, account, profile, 160)
+        : profileBackgroundOptionUrl(item, account);
+    return `<span class="cosmetic-option-media ${escapeHtml(type)}-media">${renderCosmeticImage(url, item.label, type)}</span>`;
+}
+
+function profileIconOptionUrl(item, account, profile, size) {
+    if (item.id === "discord") return account?.avatar_url || skinHeadUrl(accountMinecraftName(account, profile), size);
+    if (item.id === "minecraft") return skinHeadUrl(accountMinecraftName(account, profile), size);
+    if (item.id === "custom") return account?.custom_avatar_url || "";
+    return item.image || "";
+}
+
+function profileBackgroundOptionUrl(item, account) {
+    if (item.id === "custom") return account?.custom_background_url || "";
+    return item.image || "";
+}
+
+function cosmeticCategoryRank(category) {
+    const index = COSMETIC_CATEGORY_ORDER.indexOf(category);
+    return index < 0 ? COSMETIC_CATEGORY_ORDER.length : index;
+}
+
+function cosmeticRarityCompare(a, b) {
+    const direction = state.cosmeticPicker.rarityDirection === "desc" ? -1 : 1;
+    const rarityDifference = RARITY_ORDER.indexOf(cleanRarity(a.rarity)) - RARITY_ORDER.indexOf(cleanRarity(b.rarity));
+    return rarityDifference * direction || a.label.localeCompare(b.label);
+}
+
+function cosmeticTypeTitle(type) {
+    if (type === "icon") return "Choose icon";
+    if (type === "background") return "Choose background";
+    if (type === "border") return "Choose icon border";
+    if (type === "title") return "Choose title";
+    return "Equip badges";
+}
+
+function cosmeticTypeNoun(type) {
+    if (type === "icon") return "profile icon";
+    if (type === "background") return "profile background";
+    if (type === "border") return "icon border";
+    if (type === "title") return "profile title";
+    return "badge";
+}
+
+function selectCosmeticOption(type, id) {
+    if (type !== state.cosmeticPicker.type) return;
+    const form = document.querySelector("[data-account-form]");
+    if (!form) return;
+    const account = state.authProfile || {};
+    const profile = linkedStatsProfile();
+    const badgeState = accountBadgeState(account, profile);
+    const item = cosmeticPickerItems(type, account).find((entry) => entry.id === id);
+    if (!item || !cosmeticItemOwned(type, item, account, badgeState)) return;
+
+    if (type === "badges") {
+        const inputs = [...form.querySelectorAll("input[name='selectedBadges']")];
+        const input = inputs.find((entry) => entry.value === id);
+        if (!input) return;
+        const selectedCount = inputs.filter((entry) => entry.checked).length;
+        if (!input.checked && selectedCount >= 5) return;
+        input.checked = !input.checked;
+        enforceBadgeSelectionLimit(form, input);
+    } else {
+        const fieldName = type === "icon"
+            ? "avatarSource"
+            : type === "background"
+                ? "profileBackground"
+                : type === "border"
+                    ? "pfpBorder"
+                    : "profileTitle";
+        const input = form.elements[fieldName];
+        if (!input) return;
+        input.value = id;
+    }
+
+    updateAccountCustomizePreview(form);
+    renderCosmeticPicker(true);
 }
 
 function enforceBadgeSelectionLimit(form, changedInput) {
@@ -1911,7 +2391,7 @@ function enforceBadgeSelectionLimit(form, changedInput) {
     }
     const selectionFull = selected.length >= 5;
     for (const input of inputs) {
-        const locked = input.closest("label")?.classList.contains("locked");
+        const locked = input.dataset.cosmeticOwned === "false";
         input.disabled = Boolean(locked || (selectionFull && !input.checked));
     }
 }
@@ -1927,13 +2407,15 @@ function updateAccountCustomizePreview(form) {
     const avatarSource = cleanAvatarSource(form.elements.avatarSource?.value);
     const background = cleanProfileBackground(form.elements.profileBackground?.value, account, badgeState);
     const border = cleanPfpBorder(form.elements.pfpBorder?.value, account, badgeState);
+    const title = cleanProfileTitle(form.elements.profileTitle?.value, account, badgeState);
     const displayName = String(form.elements.displayName?.value || "").trim().replace(/\s+/g, " ") || accountDisplayName(account);
     const previewAccount = {
         ...account,
         display_name: displayName,
         avatar_source: avatarSource,
         profile_background: background,
-        pfp_border: border
+        pfp_border: border,
+        profile_title: title
     };
 
     const image = preview.querySelector("[data-account-preview-img]");
@@ -1946,7 +2428,9 @@ function updateAccountCustomizePreview(form) {
     const avatarFrame = preview.querySelector("[data-account-preview-avatar]");
     replaceClassPrefix(avatarFrame, "avatar-frame-", avatarFrameClass(previewAccount));
     setAvatarFrameImage(avatarFrame, previewAccount);
+    setCosmeticTooltipData(avatarFrame, avatarCosmeticOwnershipTooltip(previewAccount));
     replaceClassPrefix(preview, "profile-bg-", profileBackgroundClass(previewAccount));
+    setCosmeticTooltipData(preview, backgroundCosmeticOwnershipTooltip(previewAccount));
 
     const backgroundUrl = profileBackgroundImageUrl(previewAccount);
     if (backgroundUrl) {
@@ -1957,8 +2441,12 @@ function updateAccountCustomizePreview(form) {
 
     const name = preview.querySelector("[data-account-preview-name]");
     if (name) name.textContent = displayName;
+    const titleHost = preview.querySelector("[data-account-preview-title]");
+    if (titleHost) titleHost.innerHTML = renderProfileTitle(previewAccount, { empty: true });
     const meta = preview.querySelector("[data-account-preview-meta]");
-    if (meta) meta.textContent = `${avatarSourceLabel(avatarSource)} icon - ${backgroundLabel(background)}`;
+    if (meta) meta.textContent = `${avatarSourceLabel(avatarSource)} - ${backgroundLabel(background)} - ${pfpBorderLabel(border)} - ${profileTitleLabel(title)}`;
+
+    updateCosmeticFieldButtons(form, previewAccount, linkedProfile, badgeState);
 }
 
 function accountPreviewAvatarUrl(previewAccount, savedAccount, profile, size) {
@@ -2630,26 +3118,21 @@ function renderAccountUploadDialog() {
     const host = accountUploadHost();
     const type = state.accountUploadDialog;
     if (!host) return;
-    if (type !== "avatar" && type !== "background") {
+    if (type !== "background") {
         host.innerHTML = "";
         return;
     }
-    const isAvatar = type === "avatar";
-    const title = isAvatar ? "Upload custom icon" : "Upload custom background";
-    const help = isAvatar
-        ? "Use a 512x512 square PNG/WebP under 1 MB. This icon is used on your account, leaderboard row, preview, and full stats profile."
-        : "Use a 1600x500 PNG/WebP banner under 1 MB, or 1920x600 for sharper wide screens. The image fills the profile header.";
     host.innerHTML = `
         <div class="account-upload-backdrop" data-account-upload-backdrop>
             <form class="account-upload-dialog" data-account-upload-form="${escapeHtml(type)}">
                 <div class="date-card-topline">
-                    <p class="panel-kicker">${escapeHtml(isAvatar ? "Profile Icon" : "Profile Banner")}</p>
+                    <p class="panel-kicker">Profile Banner</p>
                     <button type="button" class="modal-icon-button" data-account-upload-close aria-label="Close upload dialog">x</button>
                 </div>
-                <h3>${escapeHtml(title)}</h3>
-                <p>${escapeHtml(help)}</p>
+                <h3>Upload custom background</h3>
+                <p>Use a 1600x500 PNG, WebP, or GIF under 1 MB, or 1920x600 for sharper wide screens.</p>
                 <label>
-                    <span>${escapeHtml(isAvatar ? "Icon image" : "Banner image")}</span>
+                    <span>Banner image</span>
                     <input name="mediaFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required>
                 </label>
                 <div class="date-admin-actions modal-actions">
@@ -2672,11 +3155,20 @@ function accountUploadHost() {
 }
 
 function avatarSourceLabel(value) {
-    return AVATAR_SOURCE_OPTIONS.find((option) => option.id === value)?.label || "Minecraft skin";
+    if (value === "custom") return "Uploaded icon";
+    return PROFILE_ICONS.find((option) => option.id === value)?.label || "Minecraft skin";
 }
 
 function backgroundLabel(value) {
     return PROFILE_BACKGROUNDS.find((option) => option.id === value)?.label || "Default";
+}
+
+function pfpBorderLabel(value) {
+    return PFP_BORDERS.find((option) => option.id === value)?.label || "None";
+}
+
+function profileTitleLabel(value) {
+    return PROFILE_TITLES.find((option) => option.id === value)?.label || "No title";
 }
 
 function renderHome() {
@@ -2782,6 +3274,7 @@ function renderFeaturedPlayer(player, rank, modeId) {
     const stats = normalizeStats(player.stats);
     const derived = normalizeDerived(player.derived, stats);
     const profile = profileById(player.playerId);
+    const account = accountProfileForPlayer(player, profile);
     const name = playerDisplayName(player, profile);
     const modeTab = modeId === "deathmatch" ? "deathmatch" : "battleRoyale";
 
@@ -2793,6 +3286,7 @@ function renderFeaturedPlayer(player, rank, modeId) {
                     <span class="rank-badge rank-${Math.min(rank, 3)}">${rank}</span>
                     <strong>${escapeHtml(name)}</strong>
                 </div>
+                ${renderProfileTitle(account, { compact: true, focusable: false })}
                 <small>${stats.wins} wins - ${stats.kills} kills - ${stats.games} games</small>
             </div>
             <div class="featured-player-stat">
@@ -5818,7 +6312,10 @@ function renderTable() {
                 <div class="leaderboard-player">
                     ${renderPlayerAvatar(player, profile, 42, "leaderboard-avatar")}
                     <div class="player-name">
-                        <strong>${escapeHtml(name)}</strong>
+                        <div class="player-identity-copy">
+                            <strong>${escapeHtml(name)}</strong>
+                            ${renderProfileTitle(accountProfileForPlayer(player, profile), { compact: true })}
+                        </div>
                         <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview" aria-label="${escapeHtml(`Open ${name} profile`)}">Profile</a>
                     </div>
                 </div>
@@ -5987,7 +6484,6 @@ async function submitAccountForm(form) {
         const badgeState = accountBadgeState(state.authProfile, linkedProfile);
         const inferredLink = inferredMinecraftLinkPayload(state.authProfile, linkedProfile);
         const selectedBadges = draft.selectedBadges.filter((id) => badgeState.unlockedIds.has(id)).slice(0, 5);
-        const customAvatarUrl = state.authProfile?.custom_avatar_url || "";
         const customBackgroundUrl = state.authProfile?.custom_background_url || "";
 
         const badgeStateAfterUpload = accountBadgeState({
@@ -5997,11 +6493,13 @@ async function submitAccountForm(form) {
         const payload = {
             display_name: cleanDisplayName(draft.displayName),
             avatar_source: draft.avatarSource,
-            custom_avatar_url: customAvatarUrl || null,
             custom_background_url: customBackgroundUrl || null,
             profile_background: cleanProfileBackground(draft.profileBackground, { ...state.authProfile, custom_background_url: customBackgroundUrl }, badgeStateAfterUpload),
             pfp_border: cleanPfpBorder(draft.pfpBorder, state.authProfile, badgeState),
-            selected_badges: selectedBadges
+            selected_badges: selectedBadges,
+            ...(state.authCosmeticInventoryExtended
+                ? { profile_title: cleanProfileTitle(draft.profileTitle, state.authProfile, badgeState) }
+                : {})
         };
 
         state.accountSaving = true;
@@ -6012,7 +6510,7 @@ async function submitAccountForm(form) {
             .from("profiles")
             .update(payload)
             .eq("id", state.authSession.user.id)
-            .select(PROFILE_SELECT_COLUMNS)
+            .select(ownProfileSelectColumns())
             .single();
         if (error) throw error;
         verifySavedProfile(data, payload);
@@ -6031,19 +6529,22 @@ async function submitAccountForm(form) {
 }
 
 function readAccountFormDraft(form) {
-    const checkedAvatar = form?.querySelector("input[name='avatarSource']:checked");
+    const avatarInput = form?.querySelector("[name='avatarSource']");
     const displayInput = form?.querySelector("[name='displayName']");
     const backgroundSelect = form?.querySelector("[name='profileBackground']");
     const borderSelect = form?.querySelector("[name='pfpBorder']");
+    const titleInput = form?.querySelector("[name='profileTitle']");
+    const badgeState = accountBadgeState(state.authProfile, linkedStatsProfile());
     const selectedBadges = [...(form?.querySelectorAll("input[name='selectedBadges']:checked") || [])]
         .map((input) => String(input.value || "").trim())
         .filter(Boolean);
 
     return {
         displayName: displayInput?.value || "",
-        avatarSource: cleanAvatarSource(checkedAvatar?.value),
-        profileBackground: cleanProfileBackground(backgroundSelect?.value, state.authProfile, accountBadgeState(state.authProfile, linkedStatsProfile())),
-        pfpBorder: cleanPfpBorder(borderSelect?.value, state.authProfile, accountBadgeState(state.authProfile, linkedStatsProfile())),
+        avatarSource: cleanProfileIcon(avatarInput?.value, state.authProfile, badgeState),
+        profileBackground: cleanProfileBackground(backgroundSelect?.value, state.authProfile, badgeState),
+        pfpBorder: cleanPfpBorder(borderSelect?.value, state.authProfile, badgeState),
+        profileTitle: cleanProfileTitle(titleInput?.value, state.authProfile, badgeState),
         selectedBadges
     };
 }
@@ -6056,6 +6557,9 @@ function verifySavedProfile(saved, payload) {
         ["background", cleanProfileBackground(saved.profile_background, saved), cleanProfileBackground(payload.profile_background, saved)],
         ["PFP border", cleanPfpBorder(saved.pfp_border, saved), cleanPfpBorder(payload.pfp_border, saved)]
     ];
+    if (Object.hasOwn(payload, "profile_title")) {
+        checks.push(["title", cleanProfileTitle(saved.profile_title, saved), cleanProfileTitle(payload.profile_title, saved)]);
+    }
 
     const selectedSaved = arrayField(saved.selected_badges).sort().join(",");
     const selectedWanted = arrayField(payload.selected_badges).sort().join(",");
@@ -6086,7 +6590,7 @@ function setAccountFormSaving(form, saving) {
 }
 
 function openAccountUploadDialog(type) {
-    if (type !== "avatar" && type !== "background") return;
+    if (type !== "background") return;
     if (!isDiscordLoggedIn()) return;
     state.accountUploadDialog = type;
     state.accountMessage = "";
@@ -6101,7 +6605,7 @@ function closeAccountUploadDialog() {
 
 async function submitAccountUploadForm(form) {
     const type = form.dataset.accountUploadForm;
-    if ((type !== "avatar" && type !== "background") || !state.authClient || !state.authSession?.user) return;
+    if (type !== "background" || !state.authClient || !state.authSession?.user) return;
     const file = new FormData(form).get("mediaFile");
     if (!(file instanceof File) || file.size <= 0) return;
 
@@ -6111,14 +6615,12 @@ async function submitAccountUploadForm(form) {
 
     try {
         const url = await uploadProfileMedia(file, type);
-        const payload = type === "avatar"
-            ? { custom_avatar_url: url, avatar_source: "custom" }
-            : { custom_background_url: url, profile_background: "custom" };
+        const payload = { custom_background_url: url, profile_background: "custom" };
         const { data, error } = await state.authClient
             .from("profiles")
             .update(payload)
             .eq("id", state.authSession.user.id)
-            .select(PROFILE_SELECT_COLUMNS)
+            .select(ownProfileSelectColumns())
             .single();
         if (error) throw error;
 
@@ -6126,7 +6628,7 @@ async function submitAccountUploadForm(form) {
         applyPlaytestProfile(linkResult.profile || data);
         await loadAccountProfiles();
         state.accountUploadDialog = "";
-        const uploadMessage = type === "avatar" ? "Custom icon uploaded." : "Custom background uploaded.";
+        const uploadMessage = "Custom background uploaded.";
         state.accountMessage = linkResult.warning ? `${uploadMessage} ${linkResult.warning}` : uploadMessage;
     } catch (error) {
         console.error("Failed to upload account media", error);
@@ -6137,14 +6639,14 @@ async function submitAccountUploadForm(form) {
     }
 }
 
-async function uploadProfileMedia(file, type = "avatar") {
+async function uploadProfileMedia(file, type = "background") {
     if (!state.authClient || !state.authSession?.user) throw new Error("Login is required for uploads.");
+    if (type !== "background") throw new Error("Custom icon uploads are disabled.");
     if (file.size > MAX_PROFILE_UPLOAD_BYTES) throw new Error("Profile media must be 1 MB or smaller.");
     if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) throw new Error("Use PNG, JPG, WEBP, or GIF.");
 
     const extension = file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
-    const safeType = type === "background" ? "background" : "avatar";
-    const path = `${state.authSession.user.id}/${safeType}-${Date.now()}.${extension}`;
+    const path = `${state.authSession.user.id}/background-${Date.now()}.${extension}`;
     const { error } = await state.authClient.storage
         .from(PROFILE_MEDIA_BUCKET)
         .upload(path, file, {
@@ -6211,7 +6713,7 @@ async function saveInferredMinecraftLink(payload) {
             .from("profiles")
             .update(payload)
             .eq("id", state.authSession.user.id)
-            .select(PROFILE_SELECT_COLUMNS)
+            .select(ownProfileSelectColumns())
             .single();
         if (error) throw error;
         return { profile: data, warning: "" };
@@ -6242,7 +6744,7 @@ function renderPlayerAvatar(player, profile, size = 64, extraClass = "") {
     const account = accountProfileForPlayer(player, profile);
     const url = accountAvatarUrl(account, profile || player, size);
     return `
-        <span class="player-avatar ${avatarFrameClass(account)} ${escapeHtml(extraClass)}"${avatarFrameStyle(account)}>
+        <span class="player-avatar ${avatarFrameClass(account)} ${escapeHtml(extraClass)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
             ${renderAvatarImage(url, account, profile || player, size)}
         </span>
     `;
@@ -6300,6 +6802,8 @@ function accountAvatarUrl(account, profile, size = 64) {
     const source = cleanAvatarSource(account?.avatar_source);
     if (source === "custom" && account?.custom_avatar_url) return account.custom_avatar_url;
     if (source === "discord" && account?.avatar_url) return account.avatar_url;
+    const option = PROFILE_ICONS.find((entry) => entry.id === source);
+    if (option?.image) return safeCssUrl(option.image);
     return skinHeadUrl(accountMinecraftName(account, profile), size);
 }
 
@@ -6319,24 +6823,32 @@ function avatarFrameClass(account) {
 function avatarFrameStyle(account) {
     const url = pfpBorderImageUrl(account);
     if (!url) return "";
-    return ` style="--avatar-frame-image: url('${escapeHtml(url)}')"`;
+    const option = pfpBorderOption(account);
+    return ` style="--avatar-frame-image: url('${escapeHtml(url)}'); --avatar-frame-inset: ${number(option?.inset)}%"`;
 }
 
 function setAvatarFrameImage(element, account) {
     if (!element) return;
     const url = pfpBorderImageUrl(account);
+    const option = pfpBorderOption(account);
     element.classList.toggle("avatar-frame-image", Boolean(url));
     if (url) {
         element.style.setProperty("--avatar-frame-image", `url('${url}')`);
+        element.style.setProperty("--avatar-frame-inset", `${number(option?.inset)}%`);
     } else {
         element.style.removeProperty("--avatar-frame-image");
+        element.style.removeProperty("--avatar-frame-inset");
     }
 }
 
-function pfpBorderImageUrl(account) {
+function pfpBorderOption(account) {
     const border = cleanPfpBorder(account?.pfp_border, account);
-    if (border === "none") return "";
-    const option = PFP_BORDERS.find((entry) => entry.id === border);
+    return PFP_BORDERS.find((entry) => entry.id === border) || PFP_BORDERS[0];
+}
+
+function pfpBorderImageUrl(account) {
+    const option = pfpBorderOption(account);
+    if (option?.id === "none") return "";
     return option?.image ? safeCssUrl(option.image) : "";
 }
 
@@ -6364,15 +6876,154 @@ function safeCssUrl(value) {
     return String(value || "").replace(/['"\\<>]/g, "");
 }
 
+function cosmeticCatalogItem(type, id) {
+    if (type === "icon") {
+        if (id === "custom") return { id: "custom", label: "Uploaded icon", category: "Legacy", rarity: "common", unlock: "custom" };
+        return PROFILE_ICONS.find((entry) => entry.id === id) || null;
+    }
+    if (type === "background") return PROFILE_BACKGROUNDS.find((entry) => entry.id === id) || null;
+    if (type === "border") return PFP_BORDERS.find((entry) => entry.id === id) || null;
+    if (type === "title") return PROFILE_TITLES.find((entry) => entry.id === id) || null;
+    return BADGE_CATALOG.find((entry) => entry.id === id) || null;
+}
+
+function cosmeticOwnershipStats(type, id) {
+    const key = `${type}:${id}`;
+    const cached = state.cosmeticOwnershipCache.get(key);
+    if (cached) return cached;
+
+    const item = cosmeticCatalogItem(type, id);
+    const accounts = accountProfileCandidates();
+    let owned = 0;
+    if (item) {
+        for (const account of accounts) {
+            const profile = accountLinkedStatsProfile(account);
+            const badgeState = accountBadgeState(account, profile);
+            if (cosmeticItemOwned(type, item, account, badgeState)) owned += 1;
+        }
+    }
+
+    const result = {
+        owned,
+        total: accounts.length,
+        percent: accounts.length ? owned / accounts.length * 100 : 0
+    };
+    state.cosmeticOwnershipCache.set(key, result);
+    return result;
+}
+
+function cosmeticOwnershipPercent(stats) {
+    if (!stats?.total) return "No ownership data yet";
+    if (stats.owned > 0 && stats.percent < 0.1) return "<0.1%";
+    if (stats.percent < 10) return `${Math.round(stats.percent * 10) / 10}%`;
+    return `${Math.round(stats.percent)}%`;
+}
+
+function cosmeticOwnershipText(stats) {
+    if (!stats?.total) return "No registered profile ownership data yet";
+    return `${cosmeticOwnershipPercent(stats)} owned - ${formatNumber(stats.owned)} of ${formatNumber(stats.total)} registered profiles`;
+}
+
+function cosmeticTooltipDataAttributes(title, description, ownershipText) {
+    return [
+        "data-cosmetic-tooltip",
+        `data-cosmetic-tooltip-title="${escapeHtml(title || "Cosmetic")}"`,
+        `data-cosmetic-tooltip-description="${escapeHtml(description || "")}"`,
+        `data-cosmetic-tooltip-ownership="${escapeHtml(ownershipText || "")}"`
+    ].join(" ");
+}
+
+function setCosmeticTooltipData(element, { title = "Cosmetic", description = "", ownership = "" } = {}) {
+    if (!element) return;
+    element.setAttribute("data-cosmetic-tooltip", "");
+    element.dataset.cosmeticTooltipTitle = title;
+    element.dataset.cosmeticTooltipDescription = description;
+    element.dataset.cosmeticTooltipOwnership = ownership;
+}
+
+function cosmeticOwnershipDataAttributes(type, id, label, description = "") {
+    return cosmeticTooltipDataAttributes(
+        label || "Cosmetic",
+        description,
+        cosmeticOwnershipText(cosmeticOwnershipStats(type, id))
+    );
+}
+
+function avatarCosmeticOwnershipTooltip(account) {
+    if (!account) return null;
+    const iconId = cleanAvatarSource(account.avatar_source);
+    const borderId = cleanPfpBorder(account.pfp_border, account);
+    const icon = cosmeticCatalogItem("icon", iconId);
+    const border = cosmeticCatalogItem("border", borderId);
+    const iconStats = cosmeticOwnershipStats("icon", iconId);
+    const borderStats = cosmeticOwnershipStats("border", borderId);
+    return {
+        title: "Profile icon and border",
+        description: `Icon: ${icon?.label || avatarSourceLabel(iconId)}. Border: ${border?.label || pfpBorderLabel(borderId)}.`,
+        ownership: `Icon ${cosmeticOwnershipPercent(iconStats)} owned - Border ${cosmeticOwnershipPercent(borderStats)} owned`
+    };
+}
+
+function avatarCosmeticOwnershipDataAttributes(account) {
+    const tooltip = avatarCosmeticOwnershipTooltip(account);
+    return tooltip ? cosmeticTooltipDataAttributes(tooltip.title, tooltip.description, tooltip.ownership) : "";
+}
+
+function backgroundCosmeticOwnershipTooltip(account) {
+    if (!account) return null;
+    const id = cleanProfileBackground(account.profile_background, account);
+    const background = cosmeticCatalogItem("background", id);
+    return {
+        title: background?.label || backgroundLabel(id),
+        description: "Profile background",
+        ownership: cosmeticOwnershipText(cosmeticOwnershipStats("background", id))
+    };
+}
+
+function backgroundCosmeticOwnershipDataAttributes(account) {
+    const tooltip = backgroundCosmeticOwnershipTooltip(account);
+    return tooltip ? cosmeticTooltipDataAttributes(tooltip.title, tooltip.description, tooltip.ownership) : "";
+}
+
+function profileTitleOption(account) {
+    const id = cleanProfileTitle(account?.profile_title, account);
+    return PROFILE_TITLES.find((entry) => entry.id === id) || PROFILE_TITLES[0];
+}
+
+function renderProfileTitle(account, options = {}) {
+    const title = profileTitleOption(account);
+    if (title.id === "none" && !options.empty) return "";
+    return renderTitleCosmetic(title, options);
+}
+
+function renderTitleCosmetic(title, { empty = false, compact = false, large = false, interactive = true, focusable = true } = {}) {
+    const rarity = cleanRarity(title?.rarity);
+    const text = String(title?.text || (empty ? "No title equipped" : "")).trim();
+    if (!text) return "";
+    const classes = [
+        "profile-title-cosmetic",
+        `rarity-${rarity}`,
+        title?.id === "none" ? "empty" : "",
+        compact ? "compact" : "",
+        large ? "large" : ""
+    ].filter(Boolean).join(" ");
+    const interactionAttributes = interactive
+        ? `${focusable ? 'tabindex="0" ' : ""}${cosmeticOwnershipDataAttributes("title", title?.id || "none", title?.label || text, "Profile title")}`
+        : "";
+    return `<span class="${classes}" ${interactionAttributes}>${escapeHtml(text)}</span>`;
+}
+
 function renderProfileBadge(badge) {
-    return `<span class="profile-badge badge-${escapeHtml(badge.id)}" title="${escapeHtml(badge.description)}">${renderBadgeIcon(badge)}<span>${escapeHtml(badge.label)}</span></span>`;
+    const rarity = cleanRarity(badge?.rarity);
+    return `<span class="profile-badge badge-${escapeHtml(badge.id)} rarity-${rarity}" tabindex="0" aria-label="${escapeHtml(badgeProgressAriaLabel(badge))}" ${badgeProgressDataAttributes(badge)} ${cosmeticOwnershipDataAttributes("badges", badge.id, badge.label, badge.description || "Profile badge")}>${renderBadgeIcon(badge)}<span>${escapeHtml(badge.label)}</span></span>`;
 }
 
 function renderBadgeIcon(badge) {
     const label = badge?.label || "Badge";
     const value = badge?.value === undefined || badge?.value === null ? "" : compactBadgeNumber(badge.value);
+    const rarity = cleanRarity(badge?.rarity);
     return `
-        <span class="badge-icon" aria-hidden="true">
+        <span class="badge-icon rarity-${rarity}" aria-hidden="true">
             <img src="${escapeHtml(badgeIconUrl(badge))}" alt="" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
             <span class="badge-icon-fallback" hidden>${escapeHtml(badgeInitials(label))}</span>
             ${value ? `<span class="badge-icon-value">${escapeHtml(value)}</span>` : ""}
@@ -6382,6 +7033,11 @@ function renderBadgeIcon(badge) {
 
 function badgeIconUrl(badge) {
     return badge?.icon || `./assets/badges/${encodeURIComponent(badge?.id || "default")}.png`;
+}
+
+function cleanRarity(value) {
+    const rarity = String(value || "common").toLowerCase();
+    return RARITY_ORDER.includes(rarity) ? rarity : "common";
 }
 
 function badgeInitials(label) {
@@ -6416,12 +7072,17 @@ function selectedAccountBadges(account, badgeStateOrUnlockedIds) {
     const selectedIds = selectedAccountBadgeIds(account, badgeState.unlockedIds);
     return BADGE_CATALOG
         .filter((badge) => selectedIds.has(badge.id))
-        .map((badge) => badgeDisplay(badge, badgeState.context));
+        .map((badge) => badgeDisplay(badge, badgeState.context, true));
 }
 
-function badgeDisplay(badge, context) {
+function badgeDisplay(badge, context, unlocked = null) {
     const value = badgeDynamicValue(badge, context);
-    return value === null ? badge : { ...badge, value };
+    const isUnlocked = unlocked === null ? Boolean(context && badge.test(context)) : Boolean(unlocked);
+    return {
+        ...badge,
+        ...(value === null ? {} : { value }),
+        progressState: badgeProgressState(badge, context, isUnlocked)
+    };
 }
 
 function badgeDynamicValue(badge, context) {
@@ -6436,6 +7097,150 @@ function compactBadgeNumber(value) {
     if (numeric >= 1000000) return `${round2(numeric / 1000000)}M`;
     if (numeric >= 10000) return `${Math.floor(numeric / 1000)}K`;
     return formatNumber(numeric);
+}
+
+function badgeProgressState(badge, context, unlocked) {
+    const requirement = badge?.progress;
+    if (!requirement) return null;
+
+    if (requirement.type === "linked") {
+        return {
+            complete: unlocked,
+            percent: unlocked ? 100 : 0,
+            status: unlocked ? "Discord and Minecraft linked" : "Discord and Minecraft not linked"
+        };
+    }
+
+    if (requirement.type === "sharpshooter") {
+        const rateTarget = number(requirement.rateTarget);
+        const hitsTarget = number(requirement.hitsTarget);
+        const actualRate = number(context?.derived?.headshotRate);
+        const actualHits = number(context?.stats?.hits);
+        const shownRate = unlocked ? Math.max(actualRate, rateTarget) : Math.min(actualRate, rateTarget);
+        const shownHits = unlocked ? Math.max(actualHits, hitsTarget) : Math.min(actualHits, hitsTarget);
+        const rateProgress = rateTarget > 0 ? actualRate / rateTarget : 1;
+        const hitsProgress = hitsTarget > 0 ? actualHits / hitsTarget : 1;
+        return {
+            complete: unlocked,
+            percent: unlocked ? 100 : Math.min(100, Math.max(0, Math.min(rateProgress, hitsProgress) * 100)),
+            status: `${round2(shownRate)}% / ${formatNumber(rateTarget)}% headshot rate; ${formatNumber(shownHits)} / ${formatNumber(hitsTarget)} hits`
+        };
+    }
+
+    const stats = requirement.scope === "battleRoyale"
+        ? normalizeStats(context?.br?.stats)
+        : requirement.scope === "deathmatch"
+            ? normalizeStats(context?.dm?.stats)
+            : normalizeStats(context?.stats);
+    const actual = number(stats[requirement.stat]);
+    const target = number(requirement.target);
+    const shown = unlocked
+        ? Math.max(actual, target)
+        : Math.min(actual, target);
+    const percent = target > 0 ? Math.min(100, Math.max(0, actual / target * 100)) : 100;
+    return {
+        complete: unlocked,
+        percent: unlocked ? 100 : percent,
+        status: `${formatNumber(shown)} / ${formatNumber(target)} ${requirement.unit}`
+    };
+}
+
+function badgeProgressAriaLabel(badge) {
+    const progress = badge?.progressState;
+    const parts = [badge?.label || "Badge", badge?.description || ""];
+    if (progress?.status) parts.push(`Progress: ${progress.status}`);
+    if (progress?.complete) parts.push("Unlocked");
+    return parts.filter(Boolean).join(". ");
+}
+
+function badgeProgressDataAttributes(badge) {
+    const progress = badge?.progressState;
+    if (!progress) return "";
+    return [
+        "data-badge-progress",
+        `data-badge-progress-title="${escapeHtml(badge?.label || "Badge")}"`,
+        `data-badge-progress-description="${escapeHtml(badge?.description || "")}"`,
+        `data-badge-progress-status="${escapeHtml(progress.status || "")}"`,
+        `data-badge-progress-percent="${Math.round(number(progress.percent))}"`,
+        `data-badge-progress-complete="${progress.complete ? "true" : "false"}"`
+    ].join(" ");
+}
+
+function handleBadgeProgressEnter(event) {
+    const host = event.target.closest?.("[data-badge-progress], [data-cosmetic-tooltip]");
+    if (!host) return;
+    showBadgeProgressTooltip(host);
+}
+
+function handleBadgeProgressLeave(event) {
+    const host = event.target.closest?.("[data-badge-progress], [data-cosmetic-tooltip]");
+    if (!host || host !== activeBadgeProgressHost) return;
+    if (event.relatedTarget && host.contains(event.relatedTarget)) return;
+    if (event.type === "mouseout" && host.matches(":focus-within")) return;
+    if (event.type === "focusout" && host.matches(":hover")) return;
+    hideBadgeProgressTooltip();
+}
+
+function showBadgeProgressTooltip(host) {
+    const tooltip = ensureBadgeProgressTooltip();
+    activeBadgeProgressHost = host;
+    const hasProgress = host.hasAttribute("data-badge-progress");
+    const title = host.dataset.badgeProgressTitle || host.dataset.cosmeticTooltipTitle || "Cosmetic";
+    const description = host.dataset.badgeProgressDescription || host.dataset.cosmeticTooltipDescription || "";
+    const status = host.dataset.badgeProgressStatus || "";
+    const ownership = host.dataset.cosmeticTooltipOwnership || "";
+    tooltip.querySelector("[data-badge-tooltip-title]").textContent = title;
+    tooltip.querySelector("[data-badge-tooltip-description]").textContent = description;
+    tooltip.querySelector("[data-badge-tooltip-description]").hidden = !description;
+    tooltip.querySelector("[data-badge-tooltip-status]").textContent = status;
+    tooltip.querySelector("[data-badge-tooltip-status]").hidden = !hasProgress || !status;
+    tooltip.querySelector("[data-badge-tooltip-bar]").style.width = `${Math.min(100, Math.max(0, number(host.dataset.badgeProgressPercent)))}%`;
+    tooltip.querySelector("[data-badge-tooltip-progress]").hidden = !hasProgress;
+    tooltip.querySelector("[data-cosmetic-tooltip-ownership]").textContent = ownership;
+    tooltip.querySelector("[data-cosmetic-tooltip-ownership]").hidden = !ownership;
+    tooltip.classList.toggle("complete", hasProgress && host.dataset.badgeProgressComplete === "true");
+    tooltip.hidden = false;
+    tooltip.style.visibility = "hidden";
+    tooltip.style.left = "0";
+    tooltip.style.top = "0";
+
+    const hostRect = host.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const gap = 9;
+    const edge = 10;
+    let left = hostRect.left + hostRect.width / 2 - tooltipRect.width / 2;
+    let top = hostRect.top - tooltipRect.height - gap;
+    left = Math.min(window.innerWidth - tooltipRect.width - edge, Math.max(edge, left));
+    if (top < edge) top = hostRect.bottom + gap;
+    top = Math.min(window.innerHeight - tooltipRect.height - edge, Math.max(edge, top));
+    tooltip.style.left = `${Math.round(left)}px`;
+    tooltip.style.top = `${Math.round(top)}px`;
+    tooltip.style.visibility = "visible";
+}
+
+function hideBadgeProgressTooltip() {
+    const tooltip = document.getElementById("badge-progress-tooltip");
+    if (tooltip) tooltip.hidden = true;
+    activeBadgeProgressHost = null;
+}
+
+function ensureBadgeProgressTooltip() {
+    let tooltip = document.getElementById("badge-progress-tooltip");
+    if (tooltip) return tooltip;
+    tooltip = document.createElement("div");
+    tooltip.id = "badge-progress-tooltip";
+    tooltip.className = "badge-progress-tooltip";
+    tooltip.setAttribute("role", "tooltip");
+    tooltip.hidden = true;
+    tooltip.innerHTML = `
+        <strong data-badge-tooltip-title></strong>
+        <span data-badge-tooltip-description></span>
+        <div class="badge-tooltip-progress" data-badge-tooltip-progress><i data-badge-tooltip-bar></i></div>
+        <small data-badge-tooltip-status></small>
+        <small class="cosmetic-tooltip-ownership" data-cosmetic-tooltip-ownership></small>
+    `;
+    document.body.appendChild(tooltip);
+    return tooltip;
 }
 
 function handleBadgeSeenEvent(event) {
@@ -6515,7 +7320,25 @@ function cleanDisplayName(value) {
 
 function cleanAvatarSource(value) {
     const id = String(value || "").trim();
-    return AVATAR_SOURCE_OPTIONS.some((option) => option.id === id) ? id : "minecraft";
+    if (id === "custom") return "custom";
+    return PROFILE_ICONS.some((option) => option.id === id) ? id : "minecraft";
+}
+
+function cleanProfileIcon(value, account = null, badgeState = null) {
+    const source = cleanAvatarSource(value);
+    if (!account) return source;
+    if (profileIconUnlocked(source, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account)))) return source;
+    const saved = cleanAvatarSource(account?.avatar_source);
+    return profileIconUnlocked(saved, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? saved : "minecraft";
+}
+
+function profileIconUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
+    if (id === "custom") return Boolean(account?.custom_avatar_url);
+    if (arrayField(account?.unlocked_icons).includes(id)) return true;
+    const option = PROFILE_ICONS.find((entry) => entry.id === id);
+    if (!option) return false;
+    if (!option.unlock || option.unlock === "default") return true;
+    return badgeState.unlockedIds?.has(option.unlock) || false;
 }
 
 function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
@@ -6533,6 +7356,13 @@ function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, 
     return Boolean(option?.unlock && badgeState.unlockedIds?.has(option.unlock));
 }
 
+function profileTitleUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
+    if (id === "none") return true;
+    if (arrayField(account?.unlocked_titles).includes(id)) return true;
+    const option = PROFILE_TITLES.find((entry) => entry.id === id);
+    return Boolean(option?.unlock && badgeState.unlockedIds?.has(option.unlock));
+}
+
 function cleanProfileBackground(value, account = null, badgeState = null) {
     const id = String(value || "").trim();
     const valid = PROFILE_BACKGROUNDS.some((option) => option.id === id) ? id : "default";
@@ -6545,6 +7375,13 @@ function cleanPfpBorder(value, account = null, badgeState = null) {
     const valid = PFP_BORDERS.some((option) => option.id === id) ? id : "none";
     if (!account) return valid;
     return pfpBorderUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "none";
+}
+
+function cleanProfileTitle(value, account = null, badgeState = null) {
+    const id = String(value || "").trim();
+    const valid = PROFILE_TITLES.some((option) => option.id === id) ? id : "none";
+    if (!account) return valid;
+    return profileTitleUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "none";
 }
 
 function normalizePlayerName(name) {
@@ -6565,16 +7402,22 @@ function renderProfilePreview() {
     const name = playerDisplayName(profile, profile);
     const badges = selectedAccountBadges(account, accountBadgeState(account, profile));
     container.innerHTML = `
-        <div class="profile-preview-head">
-            ${renderPlayerAvatar(profile, profile, 96, "profile-preview-avatar")}
-            <div>
-                <span>Selected Player</span>
-                <strong>${escapeHtml(name)}</strong>
-                <div class="account-badge-row compact">
-                    ${badges.length ? badges.slice(0, 3).map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
+        <section class="profile-preview-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} ${backgroundCosmeticOwnershipDataAttributes(account)}>
+            <div class="profile-preview-head">
+                ${renderPlayerAvatar(profile, profile, 96, "profile-preview-avatar")}
+                <div class="profile-preview-copy">
+                    <p class="panel-kicker profile-preview-kicker">${account ? "Linked Account" : "Tracked Player"}</p>
+                    <strong>${escapeHtml(name)}</strong>
+                    ${renderProfileTitle(account, { compact: true })}
+                    <span class="profile-preview-linked">${account ? `Linked to ${escapeHtml(profile.name || "Minecraft player")}` : "No website account linked yet"}</span>
+                    ${account ? renderAccountSignedDate(account) : ""}
+                    ${account ? renderAccountLevelPill(account) : ""}
                 </div>
             </div>
-        </div>
+            <div class="account-badge-row compact profile-preview-badges">
+                ${badges.length ? badges.map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
+            </div>
+        </section>
         <button class="primary-action" type="button" id="open-full-profile">Open Full Profile</button>
         ${renderModeBlock("Battle Royale", profile.battleRoyale, { compact: true })}
         ${renderModeBlock("Deathmatch", profile.deathmatch, { compact: true })}
@@ -6611,12 +7454,13 @@ function renderPlayerProfileHero(profile) {
     const badgeState = accountBadgeState(account, profile);
     const badges = selectedAccountBadges(account, badgeState);
     return `
-        <section class="player-profile-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)}>
+        <section class="player-profile-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} ${backgroundCosmeticOwnershipDataAttributes(account)}>
             <div class="player-profile-identity">
                 ${renderPlayerAvatar(profile, profile, 128, "player-profile-avatar")}
                 <div>
                     <p class="panel-kicker">${account ? "Linked Account" : "Tracked Player"}</p>
                     <h3>${escapeHtml(name)}</h3>
+                    ${renderProfileTitle(account)}
                     <span>${account ? escapeHtml(profile.name || "Linked Minecraft player") : "No website account linked yet"}</span>
                     ${account ? renderAccountSignedDate(account) : ""}
                     ${account ? renderAccountLevelPill(account) : ""}
