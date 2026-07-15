@@ -609,10 +609,10 @@ body.account-drawer-open {
 
 .avatar-frame-image > img {
     position: absolute;
-    inset: var(--avatar-frame-inset, 8%);
-    width: calc(100% - var(--avatar-frame-inset, 8%) - var(--avatar-frame-inset, 8%));
-    height: calc(100% - var(--avatar-frame-inset, 8%) - var(--avatar-frame-inset, 8%));
-    border-radius: 16%;
+    inset: var(--avatar-frame-inset, 0%);
+    width: calc(100% - var(--avatar-frame-inset, 0%) - var(--avatar-frame-inset, 0%));
+    height: calc(100% - var(--avatar-frame-inset, 0%) - var(--avatar-frame-inset, 0%));
+    border-radius: inherit;
 }
 
 .tracker-float:hover {
@@ -4223,8 +4223,7 @@ img.identity-avatar {
 }
 
 .account-form input[type="text"],
-.account-form select,
-.account-upload-dialog input[type="file"] {
+.account-form select {
     width: 100%;
     min-height: 44px;
     border: 1px solid var(--line);
@@ -4863,17 +4862,10 @@ body.cosmetic-picker-open {
 .cosmetic-option-avatar.avatar-frame-image > img,
 .cosmetic-picker-preview-avatar.avatar-frame-image > img {
     position: absolute;
-    inset: var(--avatar-frame-inset, 8%);
-    width: calc(100% - var(--avatar-frame-inset, 8%) - var(--avatar-frame-inset, 8%));
-    height: calc(100% - var(--avatar-frame-inset, 8%) - var(--avatar-frame-inset, 8%));
-    border-radius: 16%;
-}
-
-.media-upload-button {
-    justify-self: start;
-    min-height: 38px;
-    border-radius: 999px;
-    padding: 8px 12px;
+    inset: var(--avatar-frame-inset, 0%);
+    width: calc(100% - var(--avatar-frame-inset, 0%) - var(--avatar-frame-inset, 0%));
+    height: calc(100% - var(--avatar-frame-inset, 0%) - var(--avatar-frame-inset, 0%));
+    border-radius: inherit;
 }
 
 .account-form-grid {

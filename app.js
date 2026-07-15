@@ -117,8 +117,6 @@ const PUBLIC_PROFILE_SELECT_COLUMNS = [
     "unlocked_titles"
 ].join(", ");
 const PUBLIC_PROFILE_SELECT_COLUMNS_LEGACY = PUBLIC_PROFILE_COLUMNS_LEGACY.join(", ");
-const PROFILE_MEDIA_BUCKET = "profile-media";
-const MAX_PROFILE_UPLOAD_BYTES = 1024 * 1024;
 const PLAYTEST_SELECT_COLUMNS = "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
 const PLAYTEST_SLOT_SELECT_COLUMNS = "id, playtest_id, start_datetime, end_datetime, label, is_main, source, confirmed_at, confirmed_by, created_at";
 const AVAILABILITY_SELECT_COLUMNS = "id, playtest_id, slot_id, user_id, status, mode_preference, available_start_datetime, available_end_datetime, created_at, updated_at";
@@ -146,10 +144,10 @@ const PROFILE_BACKGROUNDS = [
 ];
 const PFP_BORDERS = [
     { id: "none", label: "None", category: "Default", rarity: "common", unlock: "default", image: "./assets/pfp-borders/none.png", inset: 0 },
-    { id: "green", label: "Linked Green", category: "Milestones", rarity: "common", unlock: "linked", image: "./assets/pfp-borders/green.png", inset: 8 },
-    { id: "gold", label: "First Win Gold", category: "Milestones", rarity: "rare", unlock: "first_win", image: "./assets/pfp-borders/gold.png", inset: 8 },
-    { id: "blue", label: "Deathmatch Blue", category: "Game Modes", rarity: "rare", unlock: "dm_winner", image: "./assets/pfp-borders/blue.png", inset: 8 },
-    { id: "red", label: "Battle Royale Red", category: "Game Modes", rarity: "rare", unlock: "br_winner", image: "./assets/pfp-borders/red.png", inset: 8 }
+    { id: "green", label: "Linked Green", category: "Milestones", rarity: "common", unlock: "linked", image: "./assets/pfp-borders/green.png", inset: 0 },
+    { id: "gold", label: "First Win Gold", category: "Milestones", rarity: "rare", unlock: "first_win", image: "./assets/pfp-borders/gold.png", inset: 0 },
+    { id: "blue", label: "Deathmatch Blue", category: "Game Modes", rarity: "rare", unlock: "dm_winner", image: "./assets/pfp-borders/blue.png", inset: 0 },
+    { id: "red", label: "Battle Royale Red", category: "Game Modes", rarity: "rare", unlock: "br_winner", image: "./assets/pfp-borders/red.png", inset: 0 }
 ];
 const PROFILE_TITLES = [
     { id: "none", label: "No title", text: "", category: "Default", rarity: "common", unlock: "default" },
@@ -235,8 +233,6 @@ const state = {
     cosmeticOwnershipCache: new Map(),
     accountMessage: "",
     accountSaving: false,
-    accountUploadDialog: "",
-    accountUploading: false,
     accountPanelOpen: false,
     cosmeticPicker: {
         type: "",
@@ -566,20 +562,6 @@ function bindStaticEvents() {
             return;
         }
 
-        const uploadOpenButton = event.target.closest("[data-account-upload-open]");
-        if (uploadOpenButton) {
-            event.preventDefault();
-            openAccountUploadDialog(uploadOpenButton.dataset.accountUploadOpen);
-            return;
-        }
-
-        const uploadCloseButton = event.target.closest("[data-account-upload-close]");
-        if (uploadCloseButton || event.target.matches("[data-account-upload-backdrop]")) {
-            event.preventDefault();
-            closeAccountUploadDialog();
-            return;
-        }
-
         const contactButton = event.target.closest("[data-contact-email]");
         if (contactButton) {
             event.preventDefault();
@@ -591,12 +573,6 @@ function bindStaticEvents() {
         if (event.target.matches("[data-account-form]")) {
             event.preventDefault();
             void submitAccountForm(event.target);
-            return;
-        }
-
-        if (event.target.matches("[data-account-upload-form]")) {
-            event.preventDefault();
-            void submitAccountUploadForm(event.target);
             return;
         }
 
@@ -638,10 +614,6 @@ function bindStaticEvents() {
         if (event.key !== "Escape") return;
         if (state.cosmeticPicker.type) {
             closeCosmeticPicker();
-            return;
-        }
-        if (state.accountUploadDialog) {
-            closeAccountUploadDialog();
             return;
         }
         if (state.accountPanelOpen) closeAccountSidePanel();
@@ -1615,7 +1587,6 @@ function render() {
     renderAccountWidget();
     renderAccountSidePanel();
     renderPlaytestConfirmationDialog();
-    renderAccountUploadDialog();
     renderWeeklyMissionSwapDialog();
 
     switch (state.view) {
@@ -2127,7 +2098,6 @@ function renderCosmeticPicker(preserveScroll = false) {
                             <span>Show unowned</span>
                         </label>
                         <button type="button" data-cosmetic-sort>${state.cosmeticPicker.rarityDirection === "asc" ? "Rarity: Common first" : "Rarity: Mythic first"}</button>
-                        ${type === "background" ? `<button type="button" data-account-upload-open="background">Upload background</button>` : ""}
                     </div>
                     <div class="cosmetic-collection">
                         ${renderCosmeticGroups(type, visibleItems, previewAccount, profile, badgeState, selectedIds)}
@@ -2184,7 +2154,13 @@ function cosmeticPickerItems(type, account) {
             : [];
         return [...PROFILE_ICONS, ...legacy];
     }
-    if (type === "background") return PROFILE_BACKGROUNDS;
+    if (type === "background") {
+        return PROFILE_BACKGROUNDS
+            .filter((item) => item.id !== "custom" || Boolean(account?.custom_background_url))
+            .map((item) => item.id === "custom"
+                ? { ...item, label: "Uploaded background", category: "Legacy" }
+                : item);
+    }
     if (type === "border") return PFP_BORDERS;
     if (type === "title") return PROFILE_TITLES;
     return BADGE_CATALOG;
@@ -3112,46 +3088,6 @@ function shuffleWithRandom(entries, rng) {
 function randomChoice(entries, rng) {
     if (!entries?.length) return null;
     return entries[Math.floor(rng() * entries.length)] || entries[0];
-}
-
-function renderAccountUploadDialog() {
-    const host = accountUploadHost();
-    const type = state.accountUploadDialog;
-    if (!host) return;
-    if (type !== "background") {
-        host.innerHTML = "";
-        return;
-    }
-    host.innerHTML = `
-        <div class="account-upload-backdrop" data-account-upload-backdrop>
-            <form class="account-upload-dialog" data-account-upload-form="${escapeHtml(type)}">
-                <div class="date-card-topline">
-                    <p class="panel-kicker">Profile Banner</p>
-                    <button type="button" class="modal-icon-button" data-account-upload-close aria-label="Close upload dialog">x</button>
-                </div>
-                <h3>Upload custom background</h3>
-                <p>Use a 1600x500 PNG, WebP, or GIF under 1 MB, or 1920x600 for sharper wide screens.</p>
-                <label>
-                    <span>Banner image</span>
-                    <input name="mediaFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif" required>
-                </label>
-                <div class="date-admin-actions modal-actions">
-                    <button type="button" data-account-upload-close>Cancel</button>
-                    <button type="submit" ${state.accountUploading ? "disabled" : ""}>${state.accountUploading ? "Uploading..." : "Upload and use"}</button>
-                </div>
-            </form>
-        </div>
-    `;
-}
-
-function accountUploadHost() {
-    let host = document.getElementById("account-upload-host");
-    if (host) return host;
-    if (!document.body) return null;
-    host = document.createElement("div");
-    host.id = "account-upload-host";
-    document.body.appendChild(host);
-    return host;
 }
 
 function avatarSourceLabel(value) {
@@ -6589,78 +6525,6 @@ function setAccountFormSaving(form, saving) {
     button.disabled = !state.authProfileExtended;
 }
 
-function openAccountUploadDialog(type) {
-    if (type !== "background") return;
-    if (!isDiscordLoggedIn()) return;
-    state.accountUploadDialog = type;
-    state.accountMessage = "";
-    renderAccountUploadDialog();
-}
-
-function closeAccountUploadDialog() {
-    state.accountUploadDialog = "";
-    state.accountUploading = false;
-    renderAccountUploadDialog();
-}
-
-async function submitAccountUploadForm(form) {
-    const type = form.dataset.accountUploadForm;
-    if (type !== "background" || !state.authClient || !state.authSession?.user) return;
-    const file = new FormData(form).get("mediaFile");
-    if (!(file instanceof File) || file.size <= 0) return;
-
-    state.accountUploading = true;
-    state.accountMessage = "";
-    renderAccountUploadDialog();
-
-    try {
-        const url = await uploadProfileMedia(file, type);
-        const payload = { custom_background_url: url, profile_background: "custom" };
-        const { data, error } = await state.authClient
-            .from("profiles")
-            .update(payload)
-            .eq("id", state.authSession.user.id)
-            .select(ownProfileSelectColumns())
-            .single();
-        if (error) throw error;
-
-        const linkResult = await saveInferredMinecraftLink(inferredMinecraftLinkPayload(state.authProfile, linkedStatsProfile()));
-        applyPlaytestProfile(linkResult.profile || data);
-        await loadAccountProfiles();
-        state.accountUploadDialog = "";
-        const uploadMessage = "Custom background uploaded.";
-        state.accountMessage = linkResult.warning ? `${uploadMessage} ${linkResult.warning}` : uploadMessage;
-    } catch (error) {
-        console.error("Failed to upload account media", error);
-        state.accountMessage = error?.message || "Could not upload that image.";
-    } finally {
-        state.accountUploading = false;
-        render();
-    }
-}
-
-async function uploadProfileMedia(file, type = "background") {
-    if (!state.authClient || !state.authSession?.user) throw new Error("Login is required for uploads.");
-    if (type !== "background") throw new Error("Custom icon uploads are disabled.");
-    if (file.size > MAX_PROFILE_UPLOAD_BYTES) throw new Error("Profile media must be 1 MB or smaller.");
-    if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) throw new Error("Use PNG, JPG, WEBP, or GIF.");
-
-    const extension = file.type === "image/jpeg" ? "jpg" : file.type.split("/")[1];
-    const path = `${state.authSession.user.id}/background-${Date.now()}.${extension}`;
-    const { error } = await state.authClient.storage
-        .from(PROFILE_MEDIA_BUCKET)
-        .upload(path, file, {
-            cacheControl: "3600",
-            contentType: file.type,
-            upsert: true
-        });
-    if (error) throw error;
-
-    const { data } = state.authClient.storage.from(PROFILE_MEDIA_BUCKET).getPublicUrl(path);
-    if (!data?.publicUrl) throw new Error("Upload succeeded but no public URL was returned.");
-    return data.publicUrl;
-}
-
 function linkedStatsProfile() {
     if (!state.authProfile) return null;
     return accountLinkedStatsProfile(state.authProfile);
@@ -7346,21 +7210,27 @@ function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(a
     if (id === "custom") return Boolean(account?.custom_background_url);
     if (arrayField(account?.unlocked_backgrounds).includes(id)) return true;
     const option = PROFILE_BACKGROUNDS.find((entry) => entry.id === id);
-    return Boolean(option?.unlock && badgeState.unlockedIds?.has(option.unlock));
+    if (!option) return false;
+    if (!option.unlock || option.unlock === "default") return true;
+    return badgeState.unlockedIds?.has(option.unlock) || false;
 }
 
 function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "none") return true;
     if (arrayField(account?.unlocked_pfp_borders).includes(id)) return true;
     const option = PFP_BORDERS.find((entry) => entry.id === id);
-    return Boolean(option?.unlock && badgeState.unlockedIds?.has(option.unlock));
+    if (!option) return false;
+    if (!option.unlock || option.unlock === "default") return true;
+    return badgeState.unlockedIds?.has(option.unlock) || false;
 }
 
 function profileTitleUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "none") return true;
     if (arrayField(account?.unlocked_titles).includes(id)) return true;
     const option = PROFILE_TITLES.find((entry) => entry.id === id);
-    return Boolean(option?.unlock && badgeState.unlockedIds?.has(option.unlock));
+    if (!option) return false;
+    if (!option.unlock || option.unlock === "default") return true;
+    return badgeState.unlockedIds?.has(option.unlock) || false;
 }
 
 function cleanProfileBackground(value, account = null, badgeState = null) {
