@@ -7,3 +7,6 @@ node_modules/
 .bot-state.json
 discord-bot/.bot-state.json
 discord-bot/logs/
+supabase/
+assets/README.md
+assets/**/README.md

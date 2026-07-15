@@ -300,7 +300,8 @@ a[aria-disabled="true"] {
     max-width: calc(100vw - 36px);
 }
 
-.tracker-float {
+.tracker-float,
+.store-float {
     position: static;
     min-height: 44px;
     border: 1px solid rgba(255, 203, 107, 0.46);
@@ -465,7 +466,18 @@ body.account-drawer-open {
     margin-top: 5px;
 }
 
-.profile-drawer-customize {
+.profile-drawer-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.profile-drawer-actions.single {
+    grid-template-columns: 1fr;
+}
+
+.profile-drawer-customize,
+.profile-drawer-store {
     width: 100%;
     min-height: 42px;
     border: 1px solid rgba(126, 200, 255, 0.32);
@@ -476,7 +488,8 @@ body.account-drawer-open {
     font: 700 0.86rem "Chakra Petch", sans-serif;
 }
 
-.profile-drawer-customize:hover {
+.profile-drawer-customize:hover,
+.profile-drawer-store:hover {
     border-color: rgba(255, 203, 107, 0.44);
     background: rgba(255, 203, 107, 0.1);
     color: var(--gold);
@@ -615,7 +628,9 @@ body.account-drawer-open {
     border-radius: inherit;
 }
 
-.tracker-float:hover {
+.tracker-float:hover,
+.store-float:hover,
+.store-float.active {
     color: var(--gold);
     background: rgba(255, 203, 107, 0.16);
 }
@@ -625,7 +640,8 @@ body.account-drawer-open {
     right: clamp(18px, 3vw, 44px);
 }
 
-.home-route .tracker-float {
+.home-route .tracker-float,
+.home-route .store-float {
     border-color: rgba(140, 255, 106, 0.52);
     background: rgba(9, 13, 16, 0.76);
 }
@@ -635,7 +651,9 @@ body.account-drawer-open {
     right: 18px;
 }
 
-.home-route .tracker-float:hover {
+.home-route .tracker-float:hover,
+.home-route .store-float:hover,
+.home-route .store-float.active {
     color: #090d10;
     background: #8cff6a;
 }
@@ -3643,10 +3661,22 @@ img.identity-avatar {
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42);
     color: var(--text);
     pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(5px) scale(0.985);
+    transform-origin: center bottom;
+    transition:
+        opacity 150ms ease,
+        transform 180ms cubic-bezier(0.2, 0.72, 0.2, 1),
+        visibility 0s linear 180ms;
+    will-change: opacity, transform;
 }
 
-.badge-progress-tooltip[hidden] {
-    display: none;
+.badge-progress-tooltip.is-visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0) scale(1);
+    transition-delay: 0s;
 }
 
 .badge-progress-tooltip > strong,
@@ -3701,6 +3731,7 @@ img.identity-avatar {
     height: 100%;
     border-radius: inherit;
     background: var(--gold);
+    transition: width 240ms cubic-bezier(0.2, 0.72, 0.2, 1);
 }
 
 .badge-progress-tooltip.complete .badge-tooltip-progress i {
@@ -4001,6 +4032,740 @@ img.identity-avatar {
 .account-body {
     display: grid;
     gap: 16px;
+}
+
+.store-view {
+    width: min(1280px, calc(100vw - 32px));
+    margin: 20px auto 0;
+}
+
+.store-route .hero {
+    display: none;
+}
+
+.store-route .store-view {
+    margin-top: 86px;
+}
+
+.store-body {
+    display: grid;
+    gap: 18px;
+}
+
+.store-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 22px;
+    border-bottom: 1px solid var(--line);
+    padding: 8px 0 20px;
+}
+
+.store-heading h2,
+.store-heading p {
+    margin: 0;
+}
+
+.store-heading h2 {
+    margin-top: 5px;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 3rem;
+}
+
+.store-heading > div:first-child > p:last-child {
+    margin-top: 7px;
+    color: var(--muted);
+}
+
+.store-balance {
+    min-width: 178px;
+    border-left: 2px solid rgba(150, 167, 191, 0.28);
+    padding: 5px 0 5px 14px;
+}
+
+.store-balance.ready {
+    border-color: var(--green);
+}
+
+.store-balance span,
+.store-balance strong {
+    display: block;
+}
+
+.store-balance span {
+    color: var(--muted);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+}
+
+.store-balance strong {
+    margin-top: 4px;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.05rem;
+}
+
+.store-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+}
+
+.store-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.store-tabs button {
+    min-height: 40px;
+    flex: 0 0 auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--muted);
+    cursor: pointer;
+    font: 700 0.76rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+    scroll-snap-align: start;
+}
+
+.store-tabs button:hover,
+.store-tabs button:focus-visible,
+.store-tabs button.active {
+    border-color: rgba(255, 203, 107, 0.52);
+    background: rgba(255, 203, 107, 0.1);
+    color: var(--gold);
+    outline: none;
+}
+
+.store-admin-tabs {
+    width: fit-content;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 3px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.store-admin-tabs button {
+    min-height: 38px;
+    border: 0;
+    border-radius: 4px;
+    padding: 8px 15px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font: 700 0.76rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.store-admin-tabs button.active,
+.store-admin-tabs button:hover,
+.store-admin-tabs button:focus-visible {
+    background: rgba(126, 200, 255, 0.12);
+    color: var(--blue);
+    outline: none;
+}
+
+.store-status {
+    margin: -4px 0 0;
+    border-left: 2px solid rgba(255, 203, 107, 0.62);
+    padding: 7px 10px;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.store-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(225px, 1fr));
+    gap: 12px;
+}
+
+.store-card {
+    --rarity-color: #a8b3c2;
+    min-width: 0;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-top: 2px solid var(--rarity-color);
+    border-radius: 8px;
+    background: rgba(13, 20, 31, 0.82);
+    transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.store-card:hover {
+    border-color: color-mix(in srgb, var(--rarity-color) 66%, var(--line));
+    background: rgba(19, 28, 42, 0.9);
+    transform: translateY(-2px);
+}
+
+.store-card.owned {
+    border-top-color: var(--green);
+}
+
+.store-product-preview {
+    height: 154px;
+    display: grid;
+    place-items: center;
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid rgba(150, 167, 191, 0.15);
+    background: rgba(0, 0, 0, 0.24);
+    outline: none;
+}
+
+.store-product-preview:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--rarity-color);
+}
+
+.store-product-preview > .cosmetic-option-media {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+    border-radius: 0;
+}
+
+.store-product-preview .cosmetic-option-avatar {
+    width: 108px;
+}
+
+.store-product-preview .title-media {
+    padding: 22px;
+}
+
+.store-product-preview .title-media .profile-title-cosmetic {
+    width: auto;
+    max-width: 100%;
+    padding: 7px 10px;
+    font-size: 0.72rem;
+}
+
+.store-featured-label {
+    position: absolute;
+    top: 9px;
+    left: 9px;
+    border: 1px solid rgba(255, 203, 107, 0.5);
+    border-radius: 4px;
+    padding: 4px 6px;
+    background: rgba(7, 13, 21, 0.88);
+    color: var(--gold);
+    font: 700 0.58rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.store-card-copy {
+    min-width: 0;
+    padding: 13px;
+}
+
+.store-card-copy h3,
+.store-card-copy small {
+    display: block;
+}
+
+.store-card-copy h3 {
+    margin: 7px 0 5px;
+    overflow-wrap: anywhere;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1rem;
+}
+
+.store-card-description {
+    min-height: 2.5em;
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 0 0 7px;
+    color: var(--muted);
+    font-size: 0.7rem;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+
+.store-card-copy small {
+    color: var(--muted);
+    font-size: 0.7rem;
+}
+
+.store-card-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+}
+
+.store-card-meta span:first-child {
+    color: var(--rarity-color);
+}
+
+.store-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    border-top: 1px solid rgba(150, 167, 191, 0.14);
+    padding: 11px 13px;
+}
+
+.store-card-footer strong {
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.9rem;
+}
+
+.store-card-footer strong span {
+    color: var(--muted);
+    font-size: 0.62rem;
+    text-transform: uppercase;
+}
+
+.store-card-footer button,
+.store-purchase-actions button {
+    min-height: 34px;
+    border: 1px solid rgba(255, 203, 107, 0.42);
+    border-radius: 5px;
+    padding: 7px 11px;
+    background: rgba(255, 203, 107, 0.1);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.72rem "Chakra Petch", sans-serif;
+}
+
+.store-card-footer button:hover:not(:disabled),
+.store-purchase-actions button:hover:not(:disabled) {
+    border-color: var(--gold);
+    color: var(--gold);
+}
+
+.store-card-footer button:disabled,
+.store-purchase-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.46;
+}
+
+.store-owned {
+    color: var(--green);
+    font: 700 0.72rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.store-preview-only {
+    color: var(--muted);
+    font: 700 0.66rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.store-empty {
+    border-top: 1px solid var(--line);
+    padding: 38px 0;
+    color: var(--muted);
+}
+
+.store-empty h3 {
+    margin: 0;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.store-access-state,
+.catalog-setup-required {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 24px;
+    background: rgba(13, 20, 31, 0.72);
+}
+
+.store-access-state strong,
+.catalog-setup-required h3 {
+    margin: 0;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.catalog-setup-required p {
+    max-width: 720px;
+    color: var(--muted);
+}
+
+.catalog-setup-required code {
+    display: inline-block;
+    border: 1px solid rgba(126, 200, 255, 0.24);
+    border-radius: 5px;
+    padding: 9px 11px;
+    background: rgba(126, 200, 255, 0.07);
+}
+
+.catalog-admin-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 16px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 14px;
+}
+
+.catalog-admin-toolbar h3,
+.catalog-editor h3 {
+    margin: 4px 0 0;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.catalog-admin-toolbar button,
+.catalog-editor header button,
+.catalog-admin-item-actions button,
+.catalog-save-button {
+    min-height: 36px;
+    border: 1px solid rgba(126, 200, 255, 0.3);
+    border-radius: 5px;
+    padding: 7px 11px;
+    background: rgba(126, 200, 255, 0.08);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.72rem "Chakra Petch", sans-serif;
+}
+
+.catalog-admin-toolbar button:hover,
+.catalog-editor header button:hover,
+.catalog-admin-item-actions button:hover,
+.catalog-save-button:hover:not(:disabled) {
+    border-color: rgba(255, 203, 107, 0.52);
+    background: rgba(255, 203, 107, 0.1);
+    color: var(--gold);
+}
+
+.catalog-admin-layout {
+    display: grid;
+    grid-template-columns: minmax(350px, 430px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.catalog-editor {
+    position: sticky;
+    top: 86px;
+    max-height: calc(100svh - 104px);
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    background: rgba(13, 20, 31, 0.9);
+}
+
+.catalog-editor > header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: 12px;
+}
+
+.catalog-editor-preview {
+    height: 176px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    margin-top: 14px;
+    border: 1px solid rgba(150, 167, 191, 0.18);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.26);
+}
+
+.catalog-editor-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.catalog-editor-preview.background-preview img {
+    object-fit: cover;
+}
+
+.catalog-preview-empty {
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+.catalog-form-grid,
+.catalog-shop-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.catalog-form-grid label,
+.catalog-shop-fields label {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+}
+
+.catalog-form-grid label.wide {
+    grid-column: 1 / -1;
+}
+
+.catalog-form-grid input,
+.catalog-form-grid select,
+.catalog-form-grid textarea,
+.catalog-shop-fields input,
+.catalog-shop-fields select,
+.catalog-locked-value {
+    width: 100%;
+    min-height: 39px;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 8px 10px;
+    background: rgba(5, 10, 17, 0.72);
+    color: var(--text);
+    font: 0.8rem "Chakra Petch", sans-serif;
+    text-transform: none;
+}
+
+.catalog-form-grid textarea {
+    min-height: 76px;
+    resize: vertical;
+}
+
+.catalog-locked-value {
+    display: flex;
+    align-items: center;
+}
+
+.catalog-file-field input[type="file"] {
+    padding: 7px;
+}
+
+.catalog-file-field small {
+    color: var(--muted);
+    font-size: 0.63rem;
+    line-height: 1.35;
+    text-transform: none;
+}
+
+.catalog-form-grid label.catalog-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 39px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 8px 10px;
+    background: rgba(5, 10, 17, 0.46);
+    color: var(--text);
+    text-transform: none;
+}
+
+.catalog-check input {
+    width: 16px;
+    min-height: 16px;
+    margin: 0;
+}
+
+.catalog-form-status {
+    min-height: 1.2em;
+    margin: 10px 0 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.catalog-form-status.error {
+    color: #ff9a9a;
+}
+
+.catalog-save-button {
+    width: 100%;
+    min-height: 42px;
+}
+
+.catalog-save-button:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
+.catalog-admin-collection {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+}
+
+.catalog-admin-item {
+    --rarity-color: #a8b3c2;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-top: 2px solid var(--rarity-color);
+    border-radius: 7px;
+    padding: 10px;
+    background: rgba(13, 20, 31, 0.78);
+}
+
+.catalog-admin-item.inactive {
+    opacity: 0.58;
+}
+
+.catalog-admin-item-preview {
+    width: 72px;
+    height: 72px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.26);
+}
+
+.catalog-admin-item-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.catalog-admin-item-preview .profile-title-cosmetic {
+    max-width: 66px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.catalog-admin-item-copy {
+    min-width: 0;
+    display: grid;
+    align-content: center;
+    gap: 3px;
+}
+
+.catalog-admin-item-copy span,
+.catalog-admin-item-copy small {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.62rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.catalog-admin-item-copy strong {
+    overflow-wrap: anywhere;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.86rem;
+}
+
+.catalog-admin-item-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+}
+
+body.store-purchase-open {
+    overflow: hidden;
+}
+
+.store-purchase-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10020;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: rgba(3, 7, 12, 0.8);
+    backdrop-filter: blur(8px);
+}
+
+.store-purchase-dialog {
+    width: min(540px, 100%);
+    max-height: calc(100svh - 36px);
+    overflow-y: auto;
+    border: 1px solid rgba(255, 203, 107, 0.32);
+    border-radius: 8px;
+    padding: 18px;
+    background: #0d1521;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.store-purchase-dialog > header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: 14px;
+}
+
+.store-purchase-dialog h3 {
+    margin: 5px 0 0;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.35rem;
+}
+
+.store-purchase-product {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 16px;
+    align-items: stretch;
+    margin-top: 18px;
+}
+
+.store-purchase-preview {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.24);
+}
+
+.store-purchase-preview > .cosmetic-option-media {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+}
+
+.store-purchase-preview .cosmetic-option-avatar {
+    width: 110px;
+}
+
+.store-purchase-product dl {
+    display: grid;
+    align-content: center;
+    gap: 10px;
+    margin: 0;
+}
+
+.store-purchase-product dl > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid rgba(150, 167, 191, 0.14);
+    padding-bottom: 8px;
+}
+
+.store-purchase-product dt {
+    color: var(--muted);
+}
+
+.store-purchase-product dd {
+    margin: 0;
+    font-family: "Chakra Petch", sans-serif;
+    text-align: right;
+}
+
+.store-purchase-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+    margin-top: 18px;
+}
+
+.store-checkout-note {
+    margin: 14px 0 0;
+    color: var(--muted);
+    font-size: 0.76rem;
 }
 
 .account-hero,
@@ -4440,6 +5205,10 @@ img.identity-avatar {
     font-family: "Chakra Petch", sans-serif;
     font-size: 0.75rem;
     font-weight: 700;
+}
+
+.cosmetic-image-fallback[hidden] {
+    display: none;
 }
 
 .cosmetic-mini-avatar,
@@ -5272,6 +6041,11 @@ body.cosmetic-picker-open {
     .mission-claim-burst {
         animation: none;
     }
+
+    .badge-progress-tooltip,
+    .badge-tooltip-progress i {
+        transition: none;
+    }
 }
 
 .player-tabs,
@@ -6009,9 +6783,115 @@ code {
         max-width: calc(100vw - 20px);
     }
 
-    .tracker-float {
+    .tracker-float,
+    .store-float {
         min-height: 48px;
         padding: 10px 16px;
+    }
+
+    .store-view {
+        width: calc(100vw - 24px);
+        margin-top: 14px;
+    }
+
+    .store-route .store-view {
+        margin-top: 76px;
+    }
+
+    .store-heading {
+        display: grid;
+        align-items: start;
+        padding-top: 2px;
+    }
+
+    .store-heading h2 {
+        font-size: 2.1rem;
+    }
+
+    .store-balance {
+        min-width: 0;
+    }
+
+    .store-tabs {
+        padding-right: 12px;
+    }
+
+    .store-admin-tabs {
+        width: 100%;
+    }
+
+    .store-admin-tabs button {
+        padding: 8px;
+    }
+
+    .catalog-admin-toolbar {
+        align-items: center;
+    }
+
+    .catalog-admin-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .catalog-editor {
+        position: static;
+        max-height: none;
+    }
+
+    .catalog-form-grid,
+    .catalog-shop-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .catalog-form-grid label.wide {
+        grid-column: auto;
+    }
+
+    .store-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 9px;
+    }
+
+    .store-product-preview {
+        height: 122px;
+    }
+
+    .store-product-preview .cosmetic-option-avatar {
+        width: 82px;
+    }
+
+    .store-product-preview .title-media {
+        padding: 12px;
+    }
+
+    .store-card-copy,
+    .store-card-footer {
+        padding: 10px;
+    }
+
+    .store-card-copy h3 {
+        font-size: 0.86rem;
+    }
+
+    .store-card-meta {
+        display: grid;
+        gap: 2px;
+    }
+
+    .store-card-footer {
+        display: grid;
+        align-items: stretch;
+    }
+
+    .store-card-footer button {
+        width: 100%;
+    }
+
+    .store-purchase-product {
+        grid-template-columns: 1fr;
+    }
+
+    .store-purchase-preview {
+        min-height: 138px;
     }
 
     .home-route .hero-status {

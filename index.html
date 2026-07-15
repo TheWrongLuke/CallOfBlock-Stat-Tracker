@@ -6,7 +6,7 @@
     <title>Call of Block Stats</title>
     <link rel="icon" type="image/png" href="./Icon.png">
     <link rel="apple-touch-icon" href="./Icon.png">
-    <link rel="stylesheet" href="./styles.css?v=cosmetics-2">
+    <link rel="stylesheet" href="./styles.css?v=store-admin-3">
 </head>
 <body class="home-route">
 <div class="app-shell">
@@ -72,6 +72,7 @@
         </div>
     </header>
     <div class="floating-actions" aria-label="Site actions">
+        <button type="button" class="store-float hidden" data-route="store" data-admin-store-link hidden>Store</button>
         <button type="button" class="tracker-float" data-route="leaderboard">Tracker</button>
         <div class="account-widget" id="account-widget" aria-live="polite"></div>
     </div>
@@ -616,6 +617,10 @@
         <div id="account-body" class="account-body"></div>
     </main>
 
+    <main class="store-view hidden" id="store-view">
+        <div id="store-body" class="store-body"></div>
+    </main>
+
     <footer class="site-footer">
         <div class="footer-main">
             <p class="panel-kicker">Call of Block</p>
@@ -627,6 +632,7 @@
             <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Modrinth</a>
             <a href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">YouTube</a>
             <a href="https://ko-fi.com/J3J17SDR6" target="_blank" rel="noopener noreferrer">Ko-fi</a>
+            <a class="hidden" href="#store" data-admin-store-link hidden>Store</a>
             <a href="#playtests">Playtests</a>
             <a href="#help">Help</a>
             <button type="button" data-contact-email>Email</button>
@@ -636,6 +642,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./api-config.js?v=site-1"></script>
-<script src="./app.js?v=cosmetics-2" defer></script>
+<script src="./store-catalog.js?v=store-1"></script>
+<script src="./app.js?v=store-admin-3" defer></script>
 </body>
 </html>

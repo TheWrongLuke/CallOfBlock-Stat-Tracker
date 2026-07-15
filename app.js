@@ -129,25 +129,44 @@ const RARITY_LABELS = {
     legendary: "Legendary",
     mythic: "Mythic"
 };
-const COSMETIC_CATEGORY_ORDER = ["Default", "Game Modes", "Milestones", "Personal", "Legacy"];
+
+function storeCatalogEntries(type) {
+    const entries = window.COB_STORE_COSMETICS?.[type];
+    if (!Array.isArray(entries)) return [];
+    return entries
+        .filter((entry) => entry && typeof entry === "object" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(String(entry.id || "")))
+        .map((entry) => ({
+            ...entry,
+            id: String(entry.id),
+            label: String(entry.label || entry.id).slice(0, 80),
+            category: "Store",
+            rarity: RARITY_ORDER.includes(entry.rarity) ? entry.rarity : "common",
+            unlock: "store"
+        }));
+}
+
+const COSMETIC_CATEGORY_ORDER = ["Default", "Store", "Game Modes", "Milestones", "Personal", "Legacy"];
 const PROFILE_ICONS = [
     { id: "default", label: "Call of Block", category: "Default", rarity: "common", image: "./Icon.png", unlock: "default" },
     { id: "discord", label: "Discord picture", category: "Default", rarity: "common", source: "discord", unlock: "default" },
-    { id: "minecraft", label: "Minecraft skin", category: "Default", rarity: "common", source: "minecraft", unlock: "default" }
+    { id: "minecraft", label: "Minecraft skin", category: "Default", rarity: "common", source: "minecraft", unlock: "default" },
+    ...storeCatalogEntries("icon")
 ];
 const PROFILE_BACKGROUNDS = [
     { id: "default", label: "Default", category: "Default", rarity: "common", unlock: "default", image: "./assets/profile-backgrounds/default.png" },
     { id: "br", label: "Battle Royale", category: "Game Modes", rarity: "rare", unlock: "br_winner", image: "./assets/profile-backgrounds/battle-royale.png" },
     { id: "dm", label: "Deathmatch", category: "Game Modes", rarity: "rare", unlock: "dm_winner", image: "./assets/profile-backgrounds/deathmatch.png" },
     { id: "night", label: "Night Ops", category: "Milestones", rarity: "epic", unlock: "veteran", image: "./assets/profile-backgrounds/night-ops.png" },
-    { id: "custom", label: "Custom image", category: "Personal", rarity: "common", unlock: "custom" }
+    { id: "custom", label: "Custom image", category: "Personal", rarity: "common", unlock: "custom" },
+    ...storeCatalogEntries("background")
 ];
 const PFP_BORDERS = [
     { id: "none", label: "None", category: "Default", rarity: "common", unlock: "default", image: "./assets/pfp-borders/none.png", inset: 0 },
     { id: "green", label: "Linked Green", category: "Milestones", rarity: "common", unlock: "linked", image: "./assets/pfp-borders/green.png", inset: 0 },
     { id: "gold", label: "First Win Gold", category: "Milestones", rarity: "rare", unlock: "first_win", image: "./assets/pfp-borders/gold.png", inset: 0 },
     { id: "blue", label: "Deathmatch Blue", category: "Game Modes", rarity: "rare", unlock: "dm_winner", image: "./assets/pfp-borders/blue.png", inset: 0 },
-    { id: "red", label: "Battle Royale Red", category: "Game Modes", rarity: "rare", unlock: "br_winner", image: "./assets/pfp-borders/red.png", inset: 0 }
+    { id: "red", label: "Battle Royale Red", category: "Game Modes", rarity: "rare", unlock: "br_winner", image: "./assets/pfp-borders/red.png", inset: 0 },
+    ...storeCatalogEntries("border")
 ];
 const PROFILE_TITLES = [
     { id: "none", label: "No title", text: "", category: "Default", rarity: "common", unlock: "default" },
@@ -159,8 +178,24 @@ const PROFILE_TITLES = [
     { id: "br_champion", label: "BR Champion", text: "Battle Royale Champion", category: "Game Modes", rarity: "legendary", unlock: "br_wins_live" },
     { id: "dm_champion", label: "DM Champion", text: "Deathmatch Champion", category: "Game Modes", rarity: "legendary", unlock: "dm_wins_live" },
     { id: "br_apex", label: "BR Apex", text: "Battle Royale Apex", category: "Game Modes", rarity: "mythic", unlock: "br_kills_10000" },
-    { id: "dm_apex", label: "DM Apex", text: "Deathmatch Apex", category: "Game Modes", rarity: "mythic", unlock: "dm_kills_10000" }
+    { id: "dm_apex", label: "DM Apex", text: "Deathmatch Apex", category: "Game Modes", rarity: "mythic", unlock: "dm_kills_10000" },
+    ...storeCatalogEntries("title")
 ];
+const STORE_CATEGORY_LABELS = {
+    all: "All",
+    background: "Backgrounds",
+    border: "Borders",
+    icon: "Icons",
+    title: "Titles"
+};
+const COSMETIC_CATALOG_TABLE = "cosmetic_catalog_items";
+const PUBLIC_COSMETIC_CATALOG_VIEW = "public_cosmetic_catalog";
+const COSMETIC_MEDIA_BUCKET = "profile-media";
+const STORE_CHECKOUT_ENABLED = window.COB_STORE_CHECKOUT_ENABLED === true;
+// Products are intentionally empty until a store-only catalog entry and its
+// matching Stripe Price are registered. Achievement cosmetics are never used
+// as store fallbacks.
+const STORE_OFFLINE_ITEMS = [];
 const BADGE_CATALOG = [
     { id: "linked", label: "Linked", rarity: "common", description: "Discord and Minecraft account paired.", progress: { type: "linked" }, test: ({ linked }) => linked },
     { id: "first_win", label: "First Win", rarity: "common", description: "Win at least one match.", progress: { scope: "overall", stat: "wins", target: 1, unit: "win" }, test: ({ stats }) => stats.wins >= 1 },
@@ -239,6 +274,30 @@ const state = {
         showUnowned: false,
         rarityDirection: "asc"
     },
+    store: {
+        adminTab: "preview",
+        category: "all",
+        items: STORE_OFFLINE_ITEMS,
+        loaded: false,
+        loading: false,
+        backendReady: false,
+        catalogItems: [],
+        catalogLoaded: false,
+        catalogLoading: false,
+        catalogReady: false,
+        catalogMessage: "",
+        editingKey: "",
+        savingCatalog: false,
+        purchasingKey: "",
+        pendingPurchase: null,
+        message: "",
+        checkoutStatus: "",
+        checkoutSessionId: "",
+        checkoutType: "",
+        checkoutItemId: "",
+        checkoutHandled: false,
+        checkoutFinalizing: false
+    },
     weeklyMissions: {
         loading: false,
         syncing: false,
@@ -276,6 +335,7 @@ const state = {
     cache: emptyCache()
 };
 let activeBadgeProgressHost = null;
+let badgeTooltipFrame = 0;
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
@@ -328,6 +388,7 @@ function setupAuthClient() {
 async function initAuth() {
     if (!state.authClient) {
         state.authReady = true;
+        enforcePrivateStoreRoute();
         render();
         return;
     }
@@ -335,7 +396,7 @@ async function initAuth() {
     try {
         const { data, error } = await state.authClient.auth.getSession();
         if (error) throw error;
-        await applyAuthSession(data?.session || null);
+        await applyAuthSession(data?.session || null, true);
         await loadAccountProfiles();
         await loadRemotePlaytests({ silent: true });
         state.authClient.auth.onAuthStateChange((_event, session) => {
@@ -346,6 +407,7 @@ async function initAuth() {
         state.authReady = true;
         state.authMessage = "Discord login is unavailable right now.";
         resetPlaytestViewer();
+        enforcePrivateStoreRoute();
         render();
     }
 }
@@ -359,19 +421,26 @@ async function applyAuthSession(session, shouldRender = false) {
         state.authMessage = "";
         state.accountPanelOpen = false;
         resetWeeklyMissionState();
+        resetStoreSessionState({ resetCatalog: true });
         resetPlaytestViewer();
+        await loadCosmeticCatalog({ force: true });
         await loadAccountProfiles();
         await loadRemotePlaytests({ silent: true });
+        enforcePrivateStoreRoute();
         if (shouldRender) render();
         return;
     }
 
     updateViewerFromDiscordUser(session.user);
     await syncPlaytestProfile(session.user);
+    await loadCosmeticCatalog({ force: true });
     await loadAccountProfiles();
     await loadRemotePlaytests({ silent: true });
     await syncWeeklyMissions();
-    consumePlaytestAuthReturn();
+    consumeAuthReturn();
+    resetStoreSessionState();
+    enforcePrivateStoreRoute();
+    if (state.view === "store" && isPlaytestAdmin()) await loadStoreData();
     if (shouldRender) render();
 }
 
@@ -383,7 +452,7 @@ async function signInWithDiscord() {
     }
 
     state.authMessage = "";
-    if (state.view === "playtests") rememberPlaytestAuthReturn();
+    if (state.view === "playtests" || state.view === "store") rememberAuthReturn(state.view);
     const { error } = await state.authClient.auth.signInWithOAuth({
         provider: "discord",
         options: {
@@ -412,9 +481,12 @@ async function signOutDiscord() {
     state.accountMessage = "";
     state.authMessage = "";
     resetWeeklyMissionState();
+    resetStoreSessionState({ resetCatalog: true });
     resetPlaytestViewer();
+    await loadCosmeticCatalog({ force: true });
     await loadAccountProfiles();
     await loadRemotePlaytests({ silent: true });
+    enforcePrivateStoreRoute();
     render();
 }
 
@@ -432,23 +504,25 @@ function playtestAuthRedirectUrl() {
     return url.toString();
 }
 
-function rememberPlaytestAuthReturn() {
+function rememberAuthReturn(view) {
+    if (view !== "playtests" && view !== "store") return;
     try {
-        window.localStorage?.setItem(PLAYTEST_AUTH_RETURN_KEY, "playtests");
+        window.localStorage?.setItem(PLAYTEST_AUTH_RETURN_KEY, view);
     } catch (_error) {
         // Returning to the public root is still valid if storage is unavailable.
     }
 }
 
-function consumePlaytestAuthReturn() {
+function consumeAuthReturn() {
     try {
-        if (window.localStorage?.getItem(PLAYTEST_AUTH_RETURN_KEY) !== "playtests") return;
+        const view = window.localStorage?.getItem(PLAYTEST_AUTH_RETURN_KEY);
+        if (view !== "playtests" && view !== "store") return;
         window.localStorage.removeItem(PLAYTEST_AUTH_RETURN_KEY);
-        state.view = "playtests";
+        state.view = view;
         state.selectedId = null;
         state.profilePreviewOpen = false;
-        if (window.location.hash.replace(/^#/, "") !== "playtests") {
-            window.location.hash = "playtests";
+        if (window.location.hash.replace(/^#/, "") !== view) {
+            window.location.hash = view;
         }
     } catch (_error) {
         // Ignore storage issues; the user can still open the playtest view normally.
@@ -457,6 +531,13 @@ function consumePlaytestAuthReturn() {
 
 function bindStaticEvents() {
     document.addEventListener("click", (event) => {
+        const storePurchaseClose = event.target.closest("[data-store-purchase-close]");
+        if (storePurchaseClose || event.target.matches("[data-store-purchase-backdrop]")) {
+            event.preventDefault();
+            closeStorePurchaseDialog();
+            return;
+        }
+
         const confirmationClose = event.target.closest("[data-confirm-dialog-close]");
         if (confirmationClose || event.target.matches("[data-confirm-dialog-backdrop]")) {
             event.preventDefault();
@@ -496,6 +577,62 @@ function bindStaticEvents() {
         if (missionSwap) {
             event.preventDefault();
             openWeeklyMissionSwapDialog(missionSwap.dataset.weeklySwap);
+            return;
+        }
+
+        const storeAdminTab = event.target.closest("[data-store-admin-tab]");
+        if (storeAdminTab) {
+            event.preventDefault();
+            const tab = storeAdminTab.dataset.storeAdminTab;
+            if (["preview", "catalog"].includes(tab) && isPlaytestAdmin()) {
+                state.store.adminTab = tab;
+                renderStorePage();
+            }
+            return;
+        }
+
+        const storeCatalogNew = event.target.closest("[data-store-catalog-new]");
+        if (storeCatalogNew) {
+            event.preventDefault();
+            state.store.editingKey = "";
+            state.store.adminTab = "catalog";
+            renderStorePage();
+            window.requestAnimationFrame(() => document.querySelector("[data-catalog-form] [name='name']")?.focus());
+            return;
+        }
+
+        const storeCatalogEdit = event.target.closest("[data-store-catalog-edit]");
+        if (storeCatalogEdit) {
+            event.preventDefault();
+            state.store.editingKey = storeCatalogEdit.dataset.storeCatalogEdit || "";
+            state.store.adminTab = "catalog";
+            renderStorePage();
+            window.requestAnimationFrame(() => document.querySelector("[data-catalog-form] [name='name']")?.focus());
+            return;
+        }
+
+        const storeCatalogToggle = event.target.closest("[data-store-catalog-toggle]");
+        if (storeCatalogToggle) {
+            event.preventDefault();
+            void toggleCatalogItemActive(storeCatalogToggle.dataset.storeCatalogToggle);
+            return;
+        }
+
+        const storeCategory = event.target.closest("[data-store-category]");
+        if (storeCategory) {
+            event.preventDefault();
+            const category = storeCategory.dataset.storeCategory;
+            if (STORE_CATEGORY_LABELS[category]) {
+                state.store.category = category;
+                renderStorePage();
+            }
+            return;
+        }
+
+        const storeBuy = event.target.closest("[data-store-buy]");
+        if (storeBuy) {
+            event.preventDefault();
+            openStorePurchaseDialog(storeBuy.dataset.storeType, storeBuy.dataset.storeBuy);
             return;
         }
 
@@ -582,6 +719,18 @@ function bindStaticEvents() {
             return;
         }
 
+        if (event.target.matches("[data-store-purchase-form]")) {
+            event.preventDefault();
+            void submitStorePurchase();
+            return;
+        }
+
+        if (event.target.matches("[data-catalog-form]")) {
+            event.preventDefault();
+            void submitCatalogForm(event.target);
+            return;
+        }
+
         if (!event.target.matches("[data-confirm-dialog-form]")) return;
         event.preventDefault();
         void submitConfirmDialog(event.target);
@@ -601,6 +750,16 @@ function bindStaticEvents() {
             renderCosmeticPicker(true);
             return;
         }
+
+        if (event.target.matches("[data-catalog-asset-input]")) {
+            previewCatalogAsset(event.target);
+            return;
+        }
+
+        if (event.target.matches("[data-catalog-shop-toggle]")) {
+            const form = event.target.closest("[data-catalog-form]");
+            form?.querySelector("[data-catalog-shop-fields]")?.toggleAttribute("hidden", !event.target.checked);
+        }
     });
 
     document.addEventListener("input", (event) => {
@@ -612,6 +771,10 @@ function bindStaticEvents() {
 
     document.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
+        if (state.store.pendingPurchase) {
+            closeStorePurchaseDialog();
+            return;
+        }
         if (state.cosmeticPicker.type) {
             closeCosmeticPicker();
             return;
@@ -778,6 +941,24 @@ function applyRoute() {
         state.profilePreviewOpen = false;
         return;
     }
+    if (route === "store") {
+        if (state.authReady && !isPlaytestAdmin()) {
+            state.view = "home";
+            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            return;
+        }
+        state.view = "store";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        state.store.checkoutStatus = ["success", "cancelled"].includes(params.get("checkout"))
+            ? params.get("checkout")
+            : "";
+        state.store.checkoutSessionId = params.get("session_id") || "";
+        state.store.checkoutType = params.get("type") || "";
+        state.store.checkoutItemId = params.get("item") || "";
+        state.store.checkoutHandled = false;
+        return;
+    }
     if (route === "community-dates") {
         state.view = "communityAdmin";
         state.selectedId = null;
@@ -831,6 +1012,15 @@ function setRouteHash(hash) {
     return true;
 }
 
+function enforcePrivateStoreRoute() {
+    if (state.view !== "store" || !state.authReady || isPlaytestAdmin()) return;
+    state.view = "home";
+    state.store.pendingPurchase = null;
+    state.store.checkoutStatus = "";
+    state.store.checkoutSessionId = "";
+    window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+}
+
 function routeTo(route) {
     state.accountPanelOpen = false;
     if (route === "home") {
@@ -865,6 +1055,21 @@ function routeTo(route) {
         state.selectedId = null;
         state.profilePreviewOpen = false;
         if (!setRouteHash("account")) render();
+        return;
+    }
+    if (route === "store") {
+        if (!isPlaytestAdmin()) {
+            state.view = "home";
+            state.selectedId = null;
+            state.profilePreviewOpen = false;
+            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            render();
+            return;
+        }
+        state.view = "store";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        if (!setRouteHash("store")) render();
         return;
     }
     if (route === "community-dates") {
@@ -1588,6 +1793,7 @@ function render() {
     renderAccountSidePanel();
     renderPlaytestConfirmationDialog();
     renderWeeklyMissionSwapDialog();
+    renderStorePurchaseDialog();
 
     switch (state.view) {
         case "home":
@@ -1601,6 +1807,9 @@ function render() {
             break;
         case "account":
             renderAccountPage();
+            break;
+        case "store":
+            renderStorePage();
             break;
         case "leaderboard":
             renderLeaderboardView();
@@ -1624,11 +1833,13 @@ function renderLeaderboardView() {
 
 function renderRoute() {
     document.body.classList.toggle("home-route", state.view === "home");
+    document.body.classList.toggle("store-route", state.view === "store");
     document.getElementById("home-view").classList.toggle("hidden", state.view !== "home");
     document.getElementById("admin-help-view").classList.toggle("hidden", state.view !== "adminHelp");
     document.getElementById("playtests-view").classList.toggle("hidden", state.view !== "playtests");
     document.getElementById("community-admin-view").classList.toggle("hidden", state.view !== "communityAdmin");
     document.getElementById("account-view").classList.toggle("hidden", state.view !== "account");
+    document.getElementById("store-view").classList.toggle("hidden", state.view !== "store");
     const dashboard = document.querySelector(".dashboard");
     dashboard.classList.toggle("hidden", state.view !== "leaderboard");
     dashboard.classList.toggle("profile-closed", state.view === "leaderboard" && !state.profilePreviewOpen);
@@ -1659,6 +1870,18 @@ function renderTopNav() {
         floatingButton.setAttribute("aria-label", onHome ? "Open stats tracker" : "Return to server hub");
         floatingButton.title = onHome ? "Open stats tracker" : "Return to server hub";
     }
+    const canSeeStore = isPlaytestAdmin();
+    document.querySelectorAll("[data-admin-store-link]").forEach((link) => {
+        link.hidden = !canSeeStore;
+        link.classList.toggle("hidden", !canSeeStore);
+        link.setAttribute("aria-hidden", canSeeStore ? "false" : "true");
+        if ("disabled" in link) link.disabled = !canSeeStore;
+    });
+    const storeButton = document.querySelector(".store-float");
+    if (!storeButton) return;
+    const active = canSeeStore && state.view === "store";
+    storeButton.classList.toggle("active", active);
+    storeButton.setAttribute("aria-current", active ? "page" : "false");
 }
 
 function renderAccountWidget() {
@@ -1750,7 +1973,10 @@ function renderAccountSidePanel() {
                         ${renderAccountLevelPill(account)}
                     </div>
                 </div>
-                <button class="profile-drawer-customize" type="button" data-route="account">Customize profile</button>
+                <div class="profile-drawer-actions ${isPlaytestAdmin() ? "" : "single"}">
+                    <button class="profile-drawer-customize" type="button" data-route="account">Customize profile</button>
+                    ${isPlaytestAdmin() ? `<button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>` : ""}
+                </div>
                 ${renderWeeklyMissions(profile)}
             </aside>
         </div>
@@ -1819,6 +2045,816 @@ function renderAccountPage() {
         ${linkedProfile ? renderAccountStatsPanel(linkedProfile) : ""}
         ${renderAccountCustomizeForm(account, badgeState)}
     `;
+}
+
+function resetStoreSessionState({ resetCatalog = false } = {}) {
+    state.store.items = STORE_OFFLINE_ITEMS;
+    state.store.loaded = false;
+    state.store.loading = false;
+    state.store.backendReady = false;
+    state.store.purchasingKey = "";
+    state.store.pendingPurchase = null;
+    state.store.message = "";
+    state.store.checkoutFinalizing = false;
+    if (resetCatalog) {
+        state.store.catalogItems = [];
+        state.store.catalogLoaded = false;
+        state.store.catalogLoading = false;
+        state.store.catalogReady = false;
+        state.store.catalogMessage = "";
+        state.store.editingKey = "";
+    }
+}
+
+async function loadCosmeticCatalog({ force = false } = {}) {
+    if (state.store.catalogLoading || (state.store.catalogLoaded && !force)) return;
+    state.store.catalogLoading = true;
+    state.store.catalogMessage = "";
+
+    if (!state.authClient) {
+        state.store.catalogItems = [];
+        state.store.catalogLoaded = true;
+        state.store.catalogLoading = false;
+        state.store.catalogReady = false;
+        return;
+    }
+
+    const adminCatalog = isPlaytestAdmin();
+    const source = adminCatalog ? COSMETIC_CATALOG_TABLE : PUBLIC_COSMETIC_CATALOG_VIEW;
+    const columns = adminCatalog
+        ? "cosmetic_type, cosmetic_id, name, description, category, rarity, image_url, title_text, border_inset, active, shop_enabled, shop_unit_amount, shop_currency, shop_featured, sort_order, created_at, updated_at"
+        : "cosmetic_type, cosmetic_id, name, description, category, rarity, image_url, title_text, border_inset, active, sort_order, created_at, updated_at";
+    const result = await state.authClient
+        .from(source)
+        .select(columns)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true });
+
+    if (result.error) {
+        if (adminCatalog) console.warn("Cosmetic catalog is unavailable", result.error);
+        state.store.catalogItems = [];
+        state.store.catalogReady = false;
+        state.store.catalogMessage = "Run supabase/cosmetic-catalog-admin.sql to enable website catalog management.";
+    } else {
+        state.store.catalogItems = (result.data || []).map(normalizeCosmeticCatalogRow).filter(Boolean);
+        state.store.catalogReady = true;
+    }
+    state.store.catalogLoaded = true;
+    state.store.catalogLoading = false;
+    state.cosmeticOwnershipCache.clear();
+}
+
+function normalizeCosmeticCatalogRow(value) {
+    const type = String(value?.cosmetic_type || value?.type || "").trim().toLowerCase();
+    const id = String(value?.cosmetic_id || value?.id || "").trim().toLowerCase();
+    if (!STORE_CATEGORY_LABELS[type] || type === "all" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) return null;
+    const name = String(value?.name || id).trim().slice(0, 80) || id;
+    const imageUrl = String(value?.image_url || value?.image || "").trim();
+    const shopEnabled = Boolean(value?.shop_enabled ?? value?.shopEnabled);
+    return {
+        type,
+        id,
+        label: name,
+        name,
+        description: String(value?.description || "").trim().slice(0, 300),
+        category: String(value?.category || "Store").trim().slice(0, 40) || "Store",
+        rarity: cleanRarity(value?.rarity),
+        image: imageUrl,
+        text: String(value?.title_text || value?.text || name).trim().slice(0, 48),
+        inset: Math.min(30, Math.max(0, number(value?.border_inset ?? value?.inset))),
+        unlock: shopEnabled ? "store" : "inventory",
+        active: value?.active !== false,
+        shopEnabled,
+        unitAmount: Math.max(0, Math.floor(number(value?.shop_unit_amount ?? value?.unitAmount))),
+        currency: String(value?.shop_currency || value?.currency || "eur").trim().toLowerCase(),
+        featured: Boolean(value?.shop_featured ?? value?.featured),
+        sortOrder: Math.max(0, Math.floor(number(value?.sort_order ?? value?.sortOrder))),
+        createdAt: value?.created_at || "",
+        updatedAt: value?.updated_at || "",
+        remoteCatalog: true
+    };
+}
+
+function cosmeticCatalogCollection(type, { includeInactive = false } = {}) {
+    let builtIn = [];
+    if (type === "icon") builtIn = PROFILE_ICONS;
+    if (type === "background") builtIn = PROFILE_BACKGROUNDS;
+    if (type === "border") builtIn = PFP_BORDERS;
+    if (type === "title") builtIn = PROFILE_TITLES;
+    if (type === "badges") return BADGE_CATALOG;
+
+    const merged = new Map(builtIn.map((item) => [item.id, item]));
+    for (const item of state.store.catalogItems) {
+        if (item.type !== type || (!includeInactive && !item.active)) continue;
+        merged.set(item.id, item);
+    }
+    return [...merged.values()];
+}
+
+function cosmeticCatalogKey(type, id) {
+    return `${String(type || "").trim()}:${String(id || "").trim()}`;
+}
+
+function remoteCatalogItem(key) {
+    return state.store.catalogItems.find((item) => cosmeticCatalogKey(item.type, item.id) === key) || null;
+}
+
+function catalogShopItems() {
+    return state.store.catalogItems
+        .filter((item) => item.active && item.shopEnabled && item.unitAmount > 0)
+        .map((item) => ({
+            type: item.type,
+            id: item.id,
+            name: item.name,
+            description: item.description || "Store-exclusive cosmetic.",
+            rarity: item.rarity,
+            unitAmount: item.unitAmount,
+            currency: item.currency || "eur",
+            featured: item.featured,
+            sortOrder: item.sortOrder,
+            purchasable: false,
+            catalogDraft: true
+        }));
+}
+
+function mergeStoreItems(catalogItems, paymentItems) {
+    const merged = new Map(catalogItems.map((item) => [storeProductKey(item.type, item.id), item]));
+    for (const item of paymentItems) {
+        const key = storeProductKey(item.type, item.id);
+        merged.set(key, { ...(merged.get(key) || {}), ...item });
+    }
+    return [...merged.values()];
+}
+
+async function loadStoreData({ force = false } = {}) {
+    if (!isPlaytestAdmin()) return;
+    if (state.store.loading || (state.store.loaded && !force)) return;
+    state.store.loading = true;
+    if (state.view === "store") renderStorePage();
+
+    await loadCosmeticCatalog({ force });
+    let items = catalogShopItems();
+    let backendReady = false;
+    let message = STORE_CHECKOUT_ENABLED ? "Checkout offline" : "Purchases are paused. This page is an admin-only preview.";
+
+    if (state.authClient) {
+        const catalogResult = await state.authClient
+            .from("cosmetic_store_items")
+            .select("cosmetic_type, cosmetic_id, name, description, rarity, unit_amount, currency, featured, sort_order")
+            .eq("active", true)
+            .order("sort_order", { ascending: true });
+
+        if (!catalogResult.error) {
+            const remoteItems = (catalogResult.data || [])
+                .map((item) => normalizeStoreItem({ ...item, purchasable: true }))
+                .filter(Boolean);
+            items = mergeStoreItems(items, remoteItems);
+            backendReady = STORE_CHECKOUT_ENABLED;
+            if (STORE_CHECKOUT_ENABLED) message = "";
+        }
+    }
+
+    state.store.items = items;
+    state.store.backendReady = backendReady;
+    state.store.loaded = true;
+    state.store.loading = false;
+    if (!state.store.purchasingKey && !state.store.message) {
+        if (state.store.checkoutStatus === "cancelled") {
+            state.store.message = "Checkout cancelled. No payment was made.";
+            clearStoreCheckoutRoute();
+        } else if (state.store.checkoutStatus === "success" && !isDiscordLoggedIn()) {
+            state.store.message = "Log in with the Discord account that started checkout to finish delivery.";
+        } else {
+            state.store.message = message;
+        }
+    }
+    if (state.view === "store") renderStorePage();
+    if (STORE_CHECKOUT_ENABLED && state.store.checkoutStatus === "success" && isDiscordLoggedIn()) {
+        await finalizeStoreCheckoutReturn();
+    }
+}
+
+function normalizeStoreItem(value) {
+    const type = String(value?.cosmetic_type || value?.type || "").trim();
+    const id = String(value?.cosmetic_id || value?.id || "").trim();
+    if (!STORE_CATEGORY_LABELS[type] || type === "all" || !id) return null;
+    const catalogItem = cosmeticCatalogItem(type, id);
+    if (!catalogItem || catalogItem.unlock !== "store") return null;
+    const unitAmount = Math.max(0, Math.floor(number(value?.unit_amount ?? value?.unitAmount)));
+    const currency = String(value?.currency || "").trim().toLowerCase();
+    if (unitAmount < 1 || !/^[a-z]{3}$/.test(currency)) return null;
+    return {
+        type,
+        id,
+        name: String(value?.name || catalogItem.label || "Cosmetic").trim().slice(0, 80),
+        description: String(value?.description || "Store-exclusive cosmetic.").trim().slice(0, 240),
+        rarity: cleanRarity(value?.rarity || catalogItem.rarity),
+        unitAmount,
+        currency,
+        featured: Boolean(value?.featured),
+        sortOrder: Math.max(0, Math.floor(number(value?.sort_order ?? value?.sortOrder))),
+        purchasable: Boolean(value?.purchasable),
+        catalogDraft: Boolean(value?.catalogDraft)
+    };
+}
+
+function storeProducts() {
+    return state.store.items
+        .map(normalizeStoreItem)
+        .filter(Boolean)
+        .sort((a, b) => Number(b.featured) - Number(a.featured) || a.sortOrder - b.sortOrder || a.unitAmount - b.unitAmount);
+}
+
+function storeProduct(type, id) {
+    return storeProducts().find((item) => item.type === type && item.id === id) || null;
+}
+
+function storeProductKey(type, id) {
+    return `${type}:${id}`;
+}
+
+function formatStorePrice(product) {
+    const currency = String(product?.currency || "EUR").toUpperCase();
+    try {
+        const formatter = new Intl.NumberFormat(undefined, { style: "currency", currency });
+        const fractionDigits = formatter.resolvedOptions().maximumFractionDigits;
+        return formatter.format(number(product?.unitAmount) / (10 ** fractionDigits));
+    } catch (_error) {
+        return `${formatNumber(product?.unitAmount)} ${currency}`;
+    }
+}
+
+function renderStorePage() {
+    const body = document.getElementById("store-body");
+    if (!body) return;
+    if (!state.authReady) {
+        body.innerHTML = `<section class="store-access-state"><strong>Checking admin access...</strong></section>`;
+        return;
+    }
+    if (!isPlaytestAdmin()) {
+        body.innerHTML = "";
+        enforcePrivateStoreRoute();
+        return;
+    }
+    if (!state.store.loaded && !state.store.loading) void loadStoreData();
+
+    const adminTab = ["preview", "catalog"].includes(state.store.adminTab) ? state.store.adminTab : "preview";
+    const category = STORE_CATEGORY_LABELS[state.store.category] ? state.store.category : "all";
+    const products = storeProducts().filter((item) => category === "all" || item.type === category);
+    const checkoutLabel = STORE_CHECKOUT_ENABLED && state.store.backendReady ? "Test checkout enabled" : "Purchases paused";
+
+    body.innerHTML = `
+        <section class="store-heading">
+            <div>
+                <p class="panel-kicker">Admin Only</p>
+                <h2>Cosmetic Catalog</h2>
+                <p>Prepare profile cosmetics and future shop listings without publishing purchases.</p>
+            </div>
+            <div class="store-balance ${STORE_CHECKOUT_ENABLED && state.store.backendReady ? "ready" : ""}">
+                <span>Store state</span>
+                <strong>${escapeHtml(state.store.loading ? "Loading..." : checkoutLabel)}</strong>
+            </div>
+        </section>
+
+        <nav class="store-admin-tabs" aria-label="Catalog admin views">
+            <button type="button" data-store-admin-tab="preview" class="${adminTab === "preview" ? "active" : ""}" aria-pressed="${adminTab === "preview" ? "true" : "false"}">Shop preview</button>
+            <button type="button" data-store-admin-tab="catalog" class="${adminTab === "catalog" ? "active" : ""}" aria-pressed="${adminTab === "catalog" ? "true" : "false"}">Manage catalog</button>
+        </nav>
+
+        ${state.store.message ? `<p class="store-status">${escapeHtml(state.store.message)}</p>` : ""}
+        ${adminTab === "catalog"
+            ? renderStoreCatalogAdmin()
+            : renderStorePreview(category, products)}
+    `;
+}
+
+function renderStorePreview(category, products) {
+    return `
+        <nav class="store-tabs" aria-label="Store categories">
+            ${Object.entries(STORE_CATEGORY_LABELS).map(([id, label]) => `
+                <button type="button" data-store-category="${escapeHtml(id)}" class="${category === id ? "active" : ""}" aria-pressed="${category === id ? "true" : "false"}">${escapeHtml(label)}</button>
+            `).join("")}
+        </nav>
+        ${products.length
+            ? `<section class="store-grid" aria-live="polite">${products.map(renderStoreCard).join("")}</section>`
+            : `<section class="store-empty"><h3>${category === "all" ? "No shop items prepared yet" : `No ${escapeHtml(STORE_CATEGORY_LABELS[category].toLowerCase())} prepared yet`}</h3></section>`}
+    `;
+}
+
+function renderStoreCatalogAdmin() {
+    if (state.store.catalogLoading && !state.store.catalogLoaded) {
+        return `<section class="store-access-state"><strong>Loading cosmetic catalog...</strong></section>`;
+    }
+    if (!state.store.catalogReady) {
+        return `
+            <section class="catalog-setup-required">
+                <p class="panel-kicker">Setup Required</p>
+                <h3>Install the admin catalog table</h3>
+                <p>${escapeHtml(state.store.catalogMessage || "The cosmetic catalog table is unavailable.")}</p>
+                <code>supabase/cosmetic-catalog-admin.sql</code>
+            </section>
+        `;
+    }
+
+    const editing = remoteCatalogItem(state.store.editingKey);
+    const items = [...state.store.catalogItems]
+        .sort((a, b) => Number(b.active) - Number(a.active) || a.type.localeCompare(b.type) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    return `
+        <section class="catalog-admin-toolbar">
+            <div>
+                <p class="panel-kicker">Database Catalog</p>
+                <h3>${formatNumber(items.length)} managed cosmetics</h3>
+            </div>
+            <button type="button" data-store-catalog-new>New cosmetic</button>
+        </section>
+        <section class="catalog-admin-layout">
+            ${renderCatalogEditor(editing)}
+            <div class="catalog-admin-collection" aria-live="polite">
+                ${items.length ? items.map(renderCatalogAdminItem).join("") : `<p class="mode-empty">No database cosmetics yet. Create the first one with the form.</p>`}
+            </div>
+        </section>
+    `;
+}
+
+function renderCatalogEditor(item = null) {
+    const editing = Boolean(item);
+    const value = item || {
+        type: "background",
+        id: "",
+        name: "",
+        description: "",
+        category: "Store",
+        rarity: "common",
+        image: "",
+        text: "",
+        inset: 0,
+        active: true,
+        shopEnabled: false,
+        unitAmount: 499,
+        currency: "eur",
+        featured: false,
+        sortOrder: 0
+    };
+    const price = (Math.max(0, value.unitAmount) / 100).toFixed(2);
+    const typeField = editing
+        ? `<input type="hidden" name="cosmeticType" value="${escapeHtml(value.type)}"><span class="catalog-locked-value">${escapeHtml(STORE_CATEGORY_LABELS[value.type] || value.type)}</span>`
+        : `<select name="cosmeticType" required>${Object.entries(STORE_CATEGORY_LABELS).filter(([id]) => id !== "all").map(([id, label]) => `<option value="${escapeHtml(id)}" ${value.type === id ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`;
+    const idField = editing
+        ? `<input type="hidden" name="cosmeticId" value="${escapeHtml(value.id)}"><span class="catalog-locked-value"><code>${escapeHtml(value.id)}</code></span>`
+        : `<input name="cosmeticId" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" placeholder="founder_night" autocomplete="off">`;
+
+    return `
+        <form class="catalog-editor" data-catalog-form>
+            <header>
+                <div>
+                    <p class="panel-kicker">${editing ? "Edit Cosmetic" : "New Cosmetic"}</p>
+                    <h3>${escapeHtml(editing ? value.name : "Catalog details")}</h3>
+                </div>
+                ${editing ? `<button type="button" data-store-catalog-new>Clear</button>` : ""}
+            </header>
+            <div class="catalog-editor-preview ${escapeHtml(value.type)}-preview" data-catalog-preview>
+                ${renderCatalogEditorPreview(value)}
+            </div>
+            <div class="catalog-form-grid">
+                <label><span>Type</span>${typeField}</label>
+                <label><span>Cosmetic ID</span>${idField}</label>
+                <label class="wide"><span>Name</span><input name="name" required maxlength="80" value="${escapeHtml(value.name)}" placeholder="Founder Night"></label>
+                <label class="wide"><span>Description</span><textarea name="description" maxlength="300" rows="3" placeholder="Shown in cosmetic details and the future shop.">${escapeHtml(value.description)}</textarea></label>
+                <label><span>Category</span><input name="category" maxlength="40" value="${escapeHtml(value.category)}" placeholder="Store"></label>
+                <label><span>Rarity</span><select name="rarity">${RARITY_ORDER.map((rarity) => `<option value="${rarity}" ${value.rarity === rarity ? "selected" : ""}>${RARITY_LABELS[rarity]}</option>`).join("")}</select></label>
+                <label><span>Title text</span><input name="titleText" maxlength="48" value="${escapeHtml(value.text)}" placeholder="Used only for title cosmetics"></label>
+                <label><span>Border inset %</span><input name="borderInset" type="number" min="0" max="30" step="0.5" value="${escapeHtml(String(value.inset))}"></label>
+                <label class="wide catalog-file-field">
+                    <span>PNG, WebP or GIF asset</span>
+                    <input type="file" name="asset" accept="image/png,image/webp,image/gif" data-catalog-asset-input>
+                    <small>${escapeHtml(catalogAssetRecommendation(value.type))}</small>
+                </label>
+                <label><span>Sort order</span><input name="sortOrder" type="number" min="0" max="100000" step="1" value="${escapeHtml(String(value.sortOrder))}"></label>
+                <label class="catalog-check"><input type="checkbox" name="active" ${value.active ? "checked" : ""}><span>Visible in collections</span></label>
+                <label class="catalog-check"><input type="checkbox" name="shopEnabled" data-catalog-shop-toggle ${value.shopEnabled ? "checked" : ""}><span>Future shop item</span></label>
+                <label class="catalog-check"><input type="checkbox" name="shopFeatured" ${value.featured ? "checked" : ""}><span>Featured listing</span></label>
+            </div>
+            <div class="catalog-shop-fields" data-catalog-shop-fields ${value.shopEnabled ? "" : "hidden"}>
+                <label><span>Preview price</span><input name="shopPrice" type="number" min="0.01" max="10000" step="0.01" value="${escapeHtml(price)}"></label>
+                <label><span>Currency</span><select name="shopCurrency">${["eur", "usd", "gbp"].map((currency) => `<option value="${currency}" ${value.currency === currency ? "selected" : ""}>${currency.toUpperCase()}</option>`).join("")}</select></label>
+            </div>
+            <p class="catalog-form-status" data-catalog-form-status></p>
+            <button class="catalog-save-button" type="submit" ${state.store.savingCatalog ? "disabled" : ""}>${state.store.savingCatalog ? "Saving..." : editing ? "Save changes" : "Create cosmetic"}</button>
+        </form>
+    `;
+}
+
+function renderCatalogEditorPreview(item) {
+    if (item.type === "title") {
+        return `<span class="profile-title-cosmetic rarity-${escapeHtml(cleanRarity(item.rarity))}">${escapeHtml(item.text || item.name || "Title preview")}</span>`;
+    }
+    if (item.image) {
+        return `<img src="${escapeHtml(item.image)}" alt="" data-catalog-preview-image>`;
+    }
+    return `<span class="catalog-preview-empty" data-catalog-preview-empty>No asset selected</span>`;
+}
+
+function catalogAssetRecommendation(type) {
+    if (type === "background") return "Recommended 1920x800 or 1600x500. Maximum 8 MB.";
+    if (type === "border") return "Recommended 512x512 transparent square. Maximum 8 MB.";
+    if (type === "icon") return "Recommended 512x512 square. Maximum 8 MB.";
+    return "Title cosmetics use the title text field; an asset is optional.";
+}
+
+function renderCatalogAdminItem(item) {
+    const price = item.shopEnabled && item.unitAmount > 0 ? formatStorePrice(item) : "Not listed";
+    const status = item.active ? "Visible" : "Archived";
+    return `
+        <article class="catalog-admin-item rarity-${escapeHtml(item.rarity)} ${item.active ? "" : "inactive"}">
+            <div class="catalog-admin-item-preview">${renderCatalogEditorPreview(item)}</div>
+            <div class="catalog-admin-item-copy">
+                <span>${escapeHtml(STORE_CATEGORY_LABELS[item.type] || item.type)} / ${escapeHtml(RARITY_LABELS[item.rarity])}</span>
+                <strong>${escapeHtml(item.name)}</strong>
+                <small>${escapeHtml(status)} / ${escapeHtml(price)}</small>
+            </div>
+            <div class="catalog-admin-item-actions">
+                <button type="button" data-store-catalog-edit="${escapeHtml(cosmeticCatalogKey(item.type, item.id))}">Edit</button>
+                <button type="button" data-store-catalog-toggle="${escapeHtml(cosmeticCatalogKey(item.type, item.id))}">${item.active ? "Archive" : "Restore"}</button>
+            </div>
+        </article>
+    `;
+}
+
+async function submitCatalogForm(form) {
+    if (!isPlaytestAdmin() || !state.authClient || !state.authSession?.user || state.store.savingCatalog) return;
+    const values = new FormData(form);
+    const type = String(values.get("cosmeticType") || "").trim().toLowerCase();
+    const id = String(values.get("cosmeticId") || "").trim().toLowerCase();
+    const key = cosmeticCatalogKey(type, id);
+    const editing = remoteCatalogItem(state.store.editingKey);
+    const status = form.querySelector("[data-catalog-form-status]");
+    const submit = form.querySelector("button[type='submit']");
+
+    try {
+        if (!STORE_CATEGORY_LABELS[type] || type === "all") throw new Error("Choose a valid cosmetic type.");
+        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) throw new Error("The ID can only use lowercase letters, numbers, _ and -.");
+        if (!editing && remoteCatalogItem(key)) throw new Error("That cosmetic ID already exists. Open it from the collection to edit it.");
+        const builtInCollision = cosmeticCatalogCollection(type, { includeInactive: true })
+            .find((item) => item.id === id && !item.remoteCatalog);
+        if (!editing && builtInCollision) throw new Error("That ID is already used by a built-in cosmetic.");
+
+        const name = String(values.get("name") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+        if (!name) throw new Error("Enter a cosmetic name.");
+        const shopEnabled = values.get("shopEnabled") === "on";
+        const priceNumber = Number(values.get("shopPrice"));
+        const unitAmount = shopEnabled ? Math.round(priceNumber * 100) : 0;
+        if (shopEnabled && (!Number.isFinite(unitAmount) || unitAmount < 1)) throw new Error("Enter a shop preview price above zero.");
+
+        state.store.savingCatalog = true;
+        if (submit) {
+            submit.disabled = true;
+            submit.textContent = "Saving...";
+        }
+        if (status) {
+            status.textContent = "Preparing cosmetic...";
+            status.classList.remove("error");
+        }
+
+        let imageUrl = editing?.image || "";
+        const asset = values.get("asset");
+        if (asset instanceof File && asset.size > 0) {
+            if (status) status.textContent = "Uploading asset...";
+            imageUrl = await uploadCatalogAsset(asset, type, id);
+        }
+        if (type !== "title" && !imageUrl) throw new Error("Upload a PNG, WebP or GIF asset for this cosmetic.");
+
+        if (status) status.textContent = "Saving cosmetic...";
+
+        const now = new Date().toISOString();
+        const payload = {
+            cosmetic_type: type,
+            cosmetic_id: id,
+            name,
+            description: String(values.get("description") || "").trim().slice(0, 300),
+            category: String(values.get("category") || "Store").trim().replace(/\s+/g, " ").slice(0, 40) || "Store",
+            rarity: cleanRarity(values.get("rarity")),
+            image_url: imageUrl || null,
+            title_text: type === "title" ? String(values.get("titleText") || name).trim().replace(/\s+/g, " ").slice(0, 48) || name : null,
+            border_inset: type === "border" ? Math.min(30, Math.max(0, number(values.get("borderInset")))) : 0,
+            active: values.get("active") === "on",
+            shop_enabled: shopEnabled,
+            shop_unit_amount: shopEnabled ? unitAmount : null,
+            shop_currency: String(values.get("shopCurrency") || "eur").trim().toLowerCase(),
+            shop_featured: shopEnabled && values.get("shopFeatured") === "on",
+            sort_order: Math.min(100000, Math.max(0, Math.floor(number(values.get("sortOrder"))))),
+            created_by: state.authSession.user.id,
+            updated_at: now
+        };
+
+        const result = await state.authClient
+            .from(COSMETIC_CATALOG_TABLE)
+            .upsert(payload, { onConflict: "cosmetic_type,cosmetic_id" })
+            .select("cosmetic_type, cosmetic_id")
+            .single();
+        if (result.error) throw result.error;
+
+        state.store.editingKey = key;
+        state.store.loaded = false;
+        await loadStoreData({ force: true });
+        state.store.message = `${name} ${editing ? "updated" : "created"}.`;
+    } catch (error) {
+        console.error("Could not save cosmetic catalog item", error);
+        if (status) {
+            status.textContent = error?.message || "Could not save the cosmetic.";
+            status.classList.add("error");
+        }
+        return;
+    } finally {
+        state.store.savingCatalog = false;
+        if (submit) submit.disabled = false;
+    }
+    renderStorePage();
+}
+
+async function uploadCatalogAsset(file, type, id) {
+    const extensions = {
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif"
+    };
+    const extension = extensions[file?.type];
+    if (!extension) throw new Error("Only PNG, WebP and GIF assets are accepted.");
+    if (file.size > 8 * 1024 * 1024) throw new Error("The cosmetic asset must be 8 MB or smaller.");
+
+    const userId = state.authSession?.user?.id;
+    if (!userId) throw new Error("Your Discord session expired. Log in again.");
+    const objectPath = `${userId}/catalog/${type}/${id}/${Date.now()}.${extension}`;
+    const upload = await state.authClient.storage
+        .from(COSMETIC_MEDIA_BUCKET)
+        .upload(objectPath, file, {
+            cacheControl: "3600",
+            contentType: file.type,
+            upsert: false
+        });
+    if (upload.error) throw upload.error;
+    const publicResult = state.authClient.storage.from(COSMETIC_MEDIA_BUCKET).getPublicUrl(objectPath);
+    const publicUrl = String(publicResult?.data?.publicUrl || "").trim();
+    if (!publicUrl) throw new Error("The asset uploaded, but its public URL could not be created.");
+    return publicUrl;
+}
+
+function previewCatalogAsset(input) {
+    const file = input?.files?.[0];
+    const form = input?.closest("[data-catalog-form]");
+    const preview = form?.querySelector("[data-catalog-preview]");
+    const status = form?.querySelector("[data-catalog-form-status]");
+    if (!file || !preview) return;
+    if (!new Set(["image/png", "image/webp", "image/gif"]).has(file.type) || file.size > 8 * 1024 * 1024) {
+        input.value = "";
+        if (status) {
+            status.textContent = file.size > 8 * 1024 * 1024 ? "The asset is larger than 8 MB." : "Only PNG, WebP and GIF assets are accepted.";
+            status.classList.add("error");
+        }
+        return;
+    }
+    if (status) {
+        status.textContent = "Preview updated. Save the cosmetic to upload it.";
+        status.classList.remove("error");
+    }
+    const objectUrl = URL.createObjectURL(file);
+    preview.innerHTML = `<img src="${escapeHtml(objectUrl)}" alt="" data-catalog-preview-image>`;
+    preview.querySelector("img")?.addEventListener("load", () => URL.revokeObjectURL(objectUrl), { once: true });
+}
+
+async function toggleCatalogItemActive(key) {
+    if (!isPlaytestAdmin() || !state.authClient || state.store.savingCatalog) return;
+    const item = remoteCatalogItem(key);
+    if (!item) return;
+    state.store.savingCatalog = true;
+    state.store.message = `${item.active ? "Archiving" : "Restoring"} ${item.name}...`;
+    renderStorePage();
+    try {
+        const result = await state.authClient
+            .from(COSMETIC_CATALOG_TABLE)
+            .update({ active: !item.active, updated_at: new Date().toISOString() })
+            .eq("cosmetic_type", item.type)
+            .eq("cosmetic_id", item.id)
+            .select("cosmetic_id")
+            .single();
+        if (result.error) throw result.error;
+        state.store.loaded = false;
+        await loadStoreData({ force: true });
+        state.store.message = `${item.name} ${item.active ? "archived" : "restored"}.`;
+    } catch (error) {
+        console.error("Could not change cosmetic visibility", error);
+        state.store.message = error?.message || "Could not update the cosmetic.";
+    } finally {
+        state.store.savingCatalog = false;
+        renderStorePage();
+    }
+}
+
+function renderStoreCard(product) {
+    const item = cosmeticCatalogItem(product.type, product.id);
+    if (!item) return "";
+    const account = state.authProfile || {};
+    const profile = linkedStatsProfile();
+    const badgeState = accountBadgeState(account, profile);
+    const owned = isDiscordLoggedIn() && cosmeticItemOwned(product.type, item, account, badgeState);
+    const rarity = cleanRarity(product.rarity || item.rarity);
+    const key = storeProductKey(product.type, product.id);
+    const purchasing = state.store.purchasingKey === key;
+    const description = `${RARITY_LABELS[rarity]} ${cosmeticTypeNoun(product.type)}`;
+    const ownership = cosmeticOwnershipText(cosmeticOwnershipStats(product.type, product.id));
+    const action = owned
+        ? `<span class="store-owned">Owned</span>`
+        : !STORE_CHECKOUT_ENABLED || !product.purchasable
+            ? `<span class="store-preview-only">Preview only</span>`
+            : !state.store.backendReady
+                ? `<button type="button" disabled>Unavailable</button>`
+                : `<button type="button" data-store-type="${escapeHtml(product.type)}" data-store-buy="${escapeHtml(product.id)}" ${purchasing ? "disabled" : ""}>${purchasing ? "Opening..." : "Buy"}</button>`;
+
+    return `
+        <article class="store-card rarity-${rarity} ${owned ? "owned" : ""} ${product.featured ? "featured" : ""}">
+            <div class="store-product-preview" tabindex="0" aria-label="${escapeHtml(`${item.label}. ${description}. ${ownership}`)}" ${cosmeticOwnershipDataAttributes(product.type, product.id, item.label, description)}>
+                ${renderCosmeticOptionMedia(product.type, item, account, profile)}
+                ${product.featured ? `<span class="store-featured-label">Featured</span>` : ""}
+            </div>
+            <div class="store-card-copy">
+                <div class="store-card-meta">
+                    <span>${escapeHtml(RARITY_LABELS[rarity])}</span>
+                    <span>${escapeHtml(STORE_CATEGORY_LABELS[product.type])}</span>
+                </div>
+                <h3>${escapeHtml(product.name || item.label)}</h3>
+                <p class="store-card-description">${escapeHtml(product.description)}</p>
+                <small>${escapeHtml(ownership)}</small>
+            </div>
+            <footer class="store-card-footer">
+                <strong>${escapeHtml(formatStorePrice(product))}</strong>
+                ${action}
+            </footer>
+        </article>
+    `;
+}
+
+function openStorePurchaseDialog(type, id) {
+    if (!STORE_CHECKOUT_ENABLED || !isPlaytestAdmin() || !isDiscordLoggedIn() || !state.store.backendReady) return;
+    const product = storeProduct(type, id);
+    const item = cosmeticCatalogItem(type, id);
+    if (!product || !item) return;
+    const badgeState = accountBadgeState(state.authProfile, linkedStatsProfile());
+    if (cosmeticItemOwned(type, item, state.authProfile, badgeState)) return;
+    state.store.pendingPurchase = { type, id };
+    state.store.message = "";
+    renderStorePurchaseDialog();
+    window.requestAnimationFrame(() => document.querySelector("[data-store-purchase-confirm]")?.focus());
+}
+
+function closeStorePurchaseDialog() {
+    if (state.store.purchasingKey) return;
+    state.store.pendingPurchase = null;
+    renderStorePurchaseDialog();
+}
+
+function renderStorePurchaseDialog() {
+    let host = document.getElementById("store-purchase-dialog-host");
+    if (!host) {
+        host = document.createElement("div");
+        host.id = "store-purchase-dialog-host";
+        document.body.appendChild(host);
+    }
+
+    const pending = STORE_CHECKOUT_ENABLED && isPlaytestAdmin() ? state.store.pendingPurchase : null;
+    const product = pending ? storeProduct(pending.type, pending.id) : null;
+    const item = product ? cosmeticCatalogItem(product.type, product.id) : null;
+    document.body.classList.toggle("store-purchase-open", Boolean(product && item));
+    if (!product || !item) {
+        host.innerHTML = "";
+        return;
+    }
+
+    const account = state.authProfile || {};
+    const profile = linkedStatsProfile();
+    const purchasing = state.store.purchasingKey === storeProductKey(product.type, product.id);
+    host.innerHTML = `
+        <div class="store-purchase-backdrop" data-store-purchase-backdrop>
+            <form class="store-purchase-dialog" data-store-purchase-form role="dialog" aria-modal="true" aria-labelledby="store-purchase-title">
+                <header>
+                    <div>
+                        <p class="panel-kicker">Confirm Purchase</p>
+                        <h3 id="store-purchase-title">${escapeHtml(product.name || item.label)}</h3>
+                    </div>
+                    <button type="button" class="modal-icon-button" data-store-purchase-close aria-label="Close purchase dialog" ${purchasing ? "disabled" : ""}>x</button>
+                </header>
+                <div class="store-purchase-product">
+                    <div class="store-purchase-preview">${renderCosmeticOptionMedia(product.type, item, account, profile)}</div>
+                    <dl>
+                        <div><dt>Price</dt><dd>${escapeHtml(formatStorePrice(product))}</dd></div>
+                        <div><dt>Type</dt><dd>${escapeHtml(cosmeticTypeNoun(product.type))}</dd></div>
+                        <div><dt>Rarity</dt><dd>${escapeHtml(RARITY_LABELS[cleanRarity(product.rarity || item.rarity)])}</dd></div>
+                        <div><dt>Payment</dt><dd>Stripe</dd></div>
+                    </dl>
+                </div>
+                <p class="store-checkout-note">You will continue to Stripe to complete this one-time purchase.</p>
+                <div class="store-purchase-actions">
+                    <button type="button" data-store-purchase-close ${purchasing ? "disabled" : ""}>Cancel</button>
+                    <button type="submit" data-store-purchase-confirm ${purchasing ? "disabled" : ""}>${purchasing ? "Opening checkout..." : "Continue to checkout"}</button>
+                </div>
+            </form>
+        </div>
+    `;
+}
+
+async function submitStorePurchase() {
+    const pending = state.store.pendingPurchase;
+    const product = pending ? storeProduct(pending.type, pending.id) : null;
+    if (!STORE_CHECKOUT_ENABLED || !isPlaytestAdmin() || !product || !product.purchasable || !state.authClient || !state.authSession?.user || !state.store.backendReady || state.store.purchasingKey) return;
+
+    const key = storeProductKey(product.type, product.id);
+    state.store.purchasingKey = key;
+    state.store.message = "";
+    renderStorePurchaseDialog();
+    renderStorePage();
+
+    try {
+        const { data, error } = await state.authClient.functions.invoke("create-cosmetic-checkout", {
+            body: {
+                cosmeticType: product.type,
+                cosmeticId: product.id
+            }
+        });
+        if (error) throw new Error(await storeFunctionErrorMessage(error, "Checkout could not be created."));
+        let checkoutUrl;
+        try {
+            checkoutUrl = new URL(data?.url || "");
+        } catch (_error) {
+            throw new Error("Checkout returned an invalid URL.");
+        }
+        if (checkoutUrl.protocol !== "https:") throw new Error("Checkout returned an insecure URL.");
+        window.location.assign(checkoutUrl.href);
+    } catch (error) {
+        console.error("Cosmetic purchase failed", error);
+        state.store.message = error?.message || "Checkout failed.";
+    } finally {
+        state.store.purchasingKey = "";
+        render();
+    }
+}
+
+async function storeFunctionErrorMessage(error, fallback) {
+    try {
+        const body = await error?.context?.json?.();
+        if (body?.error) return String(body.error);
+    } catch (_error) {
+        // The generic function error below remains useful when no JSON body exists.
+    }
+    return String(error?.message || fallback);
+}
+
+async function finalizeStoreCheckoutReturn() {
+    if (!STORE_CHECKOUT_ENABLED || !isPlaytestAdmin()) return;
+    if (state.store.checkoutHandled || state.store.checkoutFinalizing) return;
+    if (state.store.checkoutStatus !== "success" || !state.store.checkoutSessionId) return;
+    if (!state.authClient || !state.authSession?.user) return;
+
+    state.store.checkoutHandled = true;
+    state.store.checkoutFinalizing = true;
+    state.store.message = "Confirming payment and updating your collection...";
+    if (state.view === "store") renderStorePage();
+
+    try {
+        const { data, error } = await state.authClient.functions.invoke("finalize-cosmetic-checkout", {
+            body: { sessionId: state.store.checkoutSessionId }
+        });
+        if (error) throw new Error(await storeFunctionErrorMessage(error, "Payment could not be verified."));
+
+        const ownProfile = await selectOwnProfile(state.authSession.user.id);
+        if (ownProfile.error || !ownProfile.data) {
+            throw ownProfile.error || new Error("Payment was verified, but the updated profile could not be loaded.");
+        }
+        state.authProfileExtended = ownProfile.extended;
+        state.authCosmeticInventoryExtended = ownProfile.cosmeticsExtended;
+        applyPlaytestProfile(ownProfile.data);
+        await loadAccountProfiles();
+
+        const type = String(data?.cosmetic_type || state.store.checkoutType || "");
+        const id = String(data?.cosmetic_id || state.store.checkoutItemId || "");
+        const item = cosmeticCatalogItem(type, id);
+        state.store.pendingPurchase = null;
+        state.store.message = `${item?.label || "Cosmetic"} added to your collection.`;
+        clearStoreCheckoutRoute();
+    } catch (error) {
+        console.error("Cosmetic fulfillment failed", error);
+        state.store.message = `${error?.message || "Payment verification failed."} Reload this page to retry; Stripe will not charge you again.`;
+    } finally {
+        state.store.checkoutFinalizing = false;
+        if (state.view === "store") renderStorePage();
+    }
+}
+
+function clearStoreCheckoutRoute() {
+    state.store.checkoutStatus = "";
+    state.store.checkoutSessionId = "";
+    state.store.checkoutType = "";
+    state.store.checkoutItemId = "";
+    if (state.view !== "store") return;
+    const cleanUrl = `${window.location.pathname}${window.location.search}#store`;
+    window.history.replaceState(null, document.title, cleanUrl);
 }
 
 function renderAccountLoginPanel(message) {
@@ -2152,17 +3188,17 @@ function cosmeticPickerItems(type, account) {
         const legacy = account?.custom_avatar_url
             ? [{ id: "custom", label: "Uploaded icon", category: "Legacy", rarity: "common", image: account.custom_avatar_url, unlock: "custom" }]
             : [];
-        return [...PROFILE_ICONS, ...legacy];
+        return [...cosmeticCatalogCollection("icon"), ...legacy];
     }
     if (type === "background") {
-        return PROFILE_BACKGROUNDS
+        return cosmeticCatalogCollection("background")
             .filter((item) => item.id !== "custom" || Boolean(account?.custom_background_url))
             .map((item) => item.id === "custom"
                 ? { ...item, label: "Uploaded background", category: "Legacy" }
                 : item);
     }
-    if (type === "border") return PFP_BORDERS;
-    if (type === "title") return PROFILE_TITLES;
+    if (type === "border") return cosmeticCatalogCollection("border");
+    if (type === "title") return cosmeticCatalogCollection("title");
     return BADGE_CATALOG;
 }
 
@@ -3092,19 +4128,19 @@ function randomChoice(entries, rng) {
 
 function avatarSourceLabel(value) {
     if (value === "custom") return "Uploaded icon";
-    return PROFILE_ICONS.find((option) => option.id === value)?.label || "Minecraft skin";
+    return cosmeticCatalogItem("icon", value)?.label || "Minecraft skin";
 }
 
 function backgroundLabel(value) {
-    return PROFILE_BACKGROUNDS.find((option) => option.id === value)?.label || "Default";
+    return cosmeticCatalogItem("background", value)?.label || "Default";
 }
 
 function pfpBorderLabel(value) {
-    return PFP_BORDERS.find((option) => option.id === value)?.label || "None";
+    return cosmeticCatalogItem("border", value)?.label || "None";
 }
 
 function profileTitleLabel(value) {
-    return PROFILE_TITLES.find((option) => option.id === value)?.label || "No title";
+    return cosmeticCatalogItem("title", value)?.label || "No title";
 }
 
 function renderHome() {
@@ -6666,7 +7702,7 @@ function accountAvatarUrl(account, profile, size = 64) {
     const source = cleanAvatarSource(account?.avatar_source);
     if (source === "custom" && account?.custom_avatar_url) return account.custom_avatar_url;
     if (source === "discord" && account?.avatar_url) return account.avatar_url;
-    const option = PROFILE_ICONS.find((entry) => entry.id === source);
+    const option = cosmeticCatalogItem("icon", source);
     if (option?.image) return safeCssUrl(option.image);
     return skinHeadUrl(accountMinecraftName(account, profile), size);
 }
@@ -6707,7 +7743,7 @@ function setAvatarFrameImage(element, account) {
 
 function pfpBorderOption(account) {
     const border = cleanPfpBorder(account?.pfp_border, account);
-    return PFP_BORDERS.find((entry) => entry.id === border) || PFP_BORDERS[0];
+    return cosmeticCatalogItem("border", border) || cosmeticCatalogCollection("border")[0];
 }
 
 function pfpBorderImageUrl(account) {
@@ -6732,7 +7768,7 @@ function profileBackgroundImageUrl(account) {
         const url = String(account?.custom_background_url || "").trim();
         return url ? safeCssUrl(url) : "";
     }
-    const option = PROFILE_BACKGROUNDS.find((entry) => entry.id === background);
+    const option = cosmeticCatalogItem("background", background);
     return option?.image ? safeCssUrl(option.image) : "";
 }
 
@@ -6743,11 +7779,11 @@ function safeCssUrl(value) {
 function cosmeticCatalogItem(type, id) {
     if (type === "icon") {
         if (id === "custom") return { id: "custom", label: "Uploaded icon", category: "Legacy", rarity: "common", unlock: "custom" };
-        return PROFILE_ICONS.find((entry) => entry.id === id) || null;
+        return cosmeticCatalogCollection("icon").find((entry) => entry.id === id) || null;
     }
-    if (type === "background") return PROFILE_BACKGROUNDS.find((entry) => entry.id === id) || null;
-    if (type === "border") return PFP_BORDERS.find((entry) => entry.id === id) || null;
-    if (type === "title") return PROFILE_TITLES.find((entry) => entry.id === id) || null;
+    if (type === "background") return cosmeticCatalogCollection("background").find((entry) => entry.id === id) || null;
+    if (type === "border") return cosmeticCatalogCollection("border").find((entry) => entry.id === id) || null;
+    if (type === "title") return cosmeticCatalogCollection("title").find((entry) => entry.id === id) || null;
     return BADGE_CATALOG.find((entry) => entry.id === id) || null;
 }
 
@@ -6851,7 +7887,7 @@ function backgroundCosmeticOwnershipDataAttributes(account) {
 
 function profileTitleOption(account) {
     const id = cleanProfileTitle(account?.profile_title, account);
-    return PROFILE_TITLES.find((entry) => entry.id === id) || PROFILE_TITLES[0];
+    return cosmeticCatalogItem("title", id) || cosmeticCatalogCollection("title")[0];
 }
 
 function renderProfileTitle(account, options = {}) {
@@ -7047,6 +8083,8 @@ function handleBadgeProgressLeave(event) {
 
 function showBadgeProgressTooltip(host) {
     const tooltip = ensureBadgeProgressTooltip();
+    if (host === activeBadgeProgressHost && tooltip.classList.contains("is-visible")) return;
+    window.cancelAnimationFrame(badgeTooltipFrame);
     activeBadgeProgressHost = host;
     const hasProgress = host.hasAttribute("data-badge-progress");
     const title = host.dataset.badgeProgressTitle || host.dataset.cosmeticTooltipTitle || "Cosmetic";
@@ -7063,8 +8101,6 @@ function showBadgeProgressTooltip(host) {
     tooltip.querySelector("[data-cosmetic-tooltip-ownership]").textContent = ownership;
     tooltip.querySelector("[data-cosmetic-tooltip-ownership]").hidden = !ownership;
     tooltip.classList.toggle("complete", hasProgress && host.dataset.badgeProgressComplete === "true");
-    tooltip.hidden = false;
-    tooltip.style.visibility = "hidden";
     tooltip.style.left = "0";
     tooltip.style.top = "0";
 
@@ -7079,12 +8115,19 @@ function showBadgeProgressTooltip(host) {
     top = Math.min(window.innerHeight - tooltipRect.height - edge, Math.max(edge, top));
     tooltip.style.left = `${Math.round(left)}px`;
     tooltip.style.top = `${Math.round(top)}px`;
-    tooltip.style.visibility = "visible";
+    tooltip.setAttribute("aria-hidden", "false");
+    badgeTooltipFrame = window.requestAnimationFrame(() => {
+        if (activeBadgeProgressHost === host) tooltip.classList.add("is-visible");
+    });
 }
 
 function hideBadgeProgressTooltip() {
     const tooltip = document.getElementById("badge-progress-tooltip");
-    if (tooltip) tooltip.hidden = true;
+    window.cancelAnimationFrame(badgeTooltipFrame);
+    if (tooltip) {
+        tooltip.classList.remove("is-visible");
+        tooltip.setAttribute("aria-hidden", "true");
+    }
     activeBadgeProgressHost = null;
 }
 
@@ -7095,7 +8138,7 @@ function ensureBadgeProgressTooltip() {
     tooltip.id = "badge-progress-tooltip";
     tooltip.className = "badge-progress-tooltip";
     tooltip.setAttribute("role", "tooltip");
-    tooltip.hidden = true;
+    tooltip.setAttribute("aria-hidden", "true");
     tooltip.innerHTML = `
         <strong data-badge-tooltip-title></strong>
         <span data-badge-tooltip-description></span>
@@ -7185,7 +8228,7 @@ function cleanDisplayName(value) {
 function cleanAvatarSource(value) {
     const id = String(value || "").trim();
     if (id === "custom") return "custom";
-    return PROFILE_ICONS.some((option) => option.id === id) ? id : "minecraft";
+    return cosmeticCatalogCollection("icon").some((option) => option.id === id) ? id : "minecraft";
 }
 
 function cleanProfileIcon(value, account = null, badgeState = null) {
@@ -7199,7 +8242,7 @@ function cleanProfileIcon(value, account = null, badgeState = null) {
 function profileIconUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "custom") return Boolean(account?.custom_avatar_url);
     if (arrayField(account?.unlocked_icons).includes(id)) return true;
-    const option = PROFILE_ICONS.find((entry) => entry.id === id);
+    const option = cosmeticCatalogItem("icon", id);
     if (!option) return false;
     if (!option.unlock || option.unlock === "default") return true;
     return badgeState.unlockedIds?.has(option.unlock) || false;
@@ -7209,7 +8252,7 @@ function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(a
     if (id === "default") return true;
     if (id === "custom") return Boolean(account?.custom_background_url);
     if (arrayField(account?.unlocked_backgrounds).includes(id)) return true;
-    const option = PROFILE_BACKGROUNDS.find((entry) => entry.id === id);
+    const option = cosmeticCatalogItem("background", id);
     if (!option) return false;
     if (!option.unlock || option.unlock === "default") return true;
     return badgeState.unlockedIds?.has(option.unlock) || false;
@@ -7218,7 +8261,7 @@ function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(a
 function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "none") return true;
     if (arrayField(account?.unlocked_pfp_borders).includes(id)) return true;
-    const option = PFP_BORDERS.find((entry) => entry.id === id);
+    const option = cosmeticCatalogItem("border", id);
     if (!option) return false;
     if (!option.unlock || option.unlock === "default") return true;
     return badgeState.unlockedIds?.has(option.unlock) || false;
@@ -7227,7 +8270,7 @@ function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, 
 function profileTitleUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "none") return true;
     if (arrayField(account?.unlocked_titles).includes(id)) return true;
-    const option = PROFILE_TITLES.find((entry) => entry.id === id);
+    const option = cosmeticCatalogItem("title", id);
     if (!option) return false;
     if (!option.unlock || option.unlock === "default") return true;
     return badgeState.unlockedIds?.has(option.unlock) || false;
@@ -7235,21 +8278,21 @@ function profileTitleUnlocked(id, account, badgeState = accountBadgeState(accoun
 
 function cleanProfileBackground(value, account = null, badgeState = null) {
     const id = String(value || "").trim();
-    const valid = PROFILE_BACKGROUNDS.some((option) => option.id === id) ? id : "default";
+    const valid = cosmeticCatalogCollection("background").some((option) => option.id === id) ? id : "default";
     if (!account) return valid;
     return profileBackgroundUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "default";
 }
 
 function cleanPfpBorder(value, account = null, badgeState = null) {
     const id = String(value || "").trim();
-    const valid = PFP_BORDERS.some((option) => option.id === id) ? id : "none";
+    const valid = cosmeticCatalogCollection("border").some((option) => option.id === id) ? id : "none";
     if (!account) return valid;
     return pfpBorderUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "none";
 }
 
 function cleanProfileTitle(value, account = null, badgeState = null) {
     const id = String(value || "").trim();
-    const valid = PROFILE_TITLES.some((option) => option.id === id) ? id : "none";
+    const valid = cosmeticCatalogCollection("title").some((option) => option.id === id) ? id : "none";
     if (!account) return valid;
     return profileTitleUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "none";
 }
