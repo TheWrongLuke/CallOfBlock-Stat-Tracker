@@ -34,3 +34,13 @@ export const COSMETIC_GRANT_SOURCES = Object.freeze([
 export function progressionOptionLabel(options, value, fallback = "Unknown") {
     return options.find((option) => option.value === value)?.label || fallback;
 }
+
+export function cosmeticCanAppearInShop(item) {
+    if (!item || (item.type === "title" && item.id === "owner")) return false;
+    return Boolean(
+        item.active
+        && item.acquisitionType === "store"
+        && item.shopEnabled
+        && Number(item.unitAmount) > 0
+    );
+}

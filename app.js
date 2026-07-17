@@ -6,6 +6,7 @@ import {
     COSMETIC_GRANT_SOURCES,
     PROGRESSION_METRICS,
     PROGRESSION_MODES,
+    cosmeticCanAppearInShop,
     progressionOptionLabel
 } from "./src/config/progression.js";
 import {
@@ -3559,7 +3560,7 @@ function remoteCatalogItem(key) {
 
 function catalogShopItems() {
     return state.store.catalogItems
-        .filter((item) => item.active && item.shopEnabled && item.unitAmount > 0)
+        .filter(cosmeticCanAppearInShop)
         .map((item) => ({
             type: item.type,
             id: item.id,
@@ -3637,7 +3638,7 @@ function normalizeStoreItem(value) {
     const id = String(value?.cosmetic_id || value?.id || "").trim();
     if (!STORE_CATEGORY_LABELS[type] || type === "all" || !id) return null;
     const catalogItem = cosmeticCatalogItem(type, id);
-    if (!catalogItem || catalogItem.unlock !== "store") return null;
+    if (!catalogItem || catalogItem.unlock !== "store" || !cosmeticCanAppearInShop(catalogItem)) return null;
     const unitAmount = Math.max(0, Math.floor(number(value?.unit_amount ?? value?.unitAmount)));
     const currency = String(value?.currency || "").trim().toLowerCase();
     if (unitAmount < 1 || !/^[a-z]{3}$/.test(currency)) return null;
