@@ -21,7 +21,8 @@
 /* Feedback and support */
 .feedback-view,
 .ticket-view,
-.admin-tickets-view {
+.admin-tickets-view,
+.admin-progression-view {
     width: min(1440px, calc(100% - 48px));
     margin: 24px auto 48px;
 }
@@ -272,6 +273,50 @@
     color: var(--blue);
     cursor: pointer;
     font: 700 0.84rem "Chakra Petch", sans-serif;
+}
+
+.ticket-draft-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 34px;
+    margin-top: 12px;
+}
+
+.ticket-draft-row > div {
+    min-width: 0;
+}
+
+.ticket-draft-status,
+.ticket-draft-attachment {
+    display: block;
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.76rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.ticket-draft-attachment {
+    color: var(--blue);
+}
+
+.ticket-draft-discard {
+    flex: 0 0 auto;
+    min-height: 32px;
+    border: 1px solid rgba(255, 127, 114, 0.34);
+    border-radius: 6px;
+    background: rgba(255, 127, 114, 0.07);
+    color: var(--muted);
+    cursor: pointer;
+    font: 700 0.76rem "Chakra Petch", sans-serif;
+    padding: 5px 9px;
+}
+
+.ticket-draft-discard:hover {
+    border-color: rgba(255, 127, 114, 0.62);
+    color: #ffaaa1;
 }
 
 .feedback-submit,
@@ -741,6 +786,34 @@
     margin-bottom: 14px;
 }
 
+.admin-ticket-toolbar .admin-ticket-toggle {
+    align-content: center;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    min-height: 42px;
+    align-self: end;
+    padding: 9px 11px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #0a1018;
+}
+
+.admin-ticket-toolbar .admin-ticket-toggle input {
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    min-height: 16px;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--green);
+}
+
+.admin-ticket-toolbar .admin-ticket-toggle > span {
+    color: var(--text);
+    font-size: 0.74rem;
+    text-transform: none;
+}
+
 .admin-ticket-row {
     display: grid;
     grid-template-columns: 78px minmax(220px, 1.4fr) minmax(130px, 0.8fr) auto auto minmax(130px, auto);
@@ -767,6 +840,215 @@
     color: var(--muted);
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Progression administration */
+.admin-progression-body {
+    display: grid;
+    gap: 18px;
+    margin-top: 22px;
+}
+
+.progression-state,
+.progression-notice {
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--blue);
+    border-radius: 6px;
+    padding: 12px 14px;
+    background: rgba(13, 20, 30, 0.72);
+    color: var(--muted);
+}
+
+.progression-state {
+    display: grid;
+}
+
+.progression-state.error,
+.progression-notice.error {
+    border-left-color: var(--red);
+}
+
+.progression-state button {
+    width: fit-content;
+    min-height: 36px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 7px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.progression-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+}
+
+.progression-metrics > div {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+    padding: 14px 16px;
+    border-right: 1px solid var(--line);
+}
+
+.progression-metrics > div:last-child {
+    border-right: 0;
+}
+
+.progression-metrics span,
+.progression-list-item span,
+.progression-list-item small {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.progression-metrics strong {
+    font: 700 1.6rem "Chakra Petch", sans-serif;
+}
+
+.progression-admin-grid,
+.progression-data-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    align-items: start;
+}
+
+.progression-editor,
+.progression-list-panel {
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: rgba(13, 20, 30, 0.72);
+    padding: 15px;
+}
+
+.progression-editor,
+.progression-list-panel,
+.progression-list {
+    display: grid;
+    gap: 12px;
+}
+
+.progression-editor header,
+.progression-list-panel > header,
+.progression-list-item,
+.progression-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.progression-editor h3,
+.progression-list-panel h3,
+.progression-editor p,
+.progression-list-panel p {
+    margin: 0;
+}
+
+.progression-editor label {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+}
+
+.progression-editor label > span {
+    color: var(--muted);
+    font: 700 0.68rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.progression-editor input,
+.progression-editor select {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 8px 10px;
+    background: #0a1018;
+    color: var(--text);
+    font: inherit;
+}
+
+.progression-form-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.progression-editor .progression-check {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+}
+
+.progression-editor .progression-check input {
+    width: 16px;
+    min-height: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--green);
+}
+
+.progression-editor button,
+.progression-row-actions button {
+    min-height: 36px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 7px 11px;
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.72rem "Chakra Petch", sans-serif;
+}
+
+.progression-editor > button[type="submit"] {
+    border-color: rgba(133, 232, 157, 0.36);
+    color: var(--green);
+}
+
+.progression-list-item {
+    min-width: 0;
+    border-top: 1px solid var(--line);
+    padding-top: 11px;
+}
+
+.progression-list-item:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.progression-list-item.inactive {
+    opacity: 0.56;
+}
+
+.progression-list-item > div:first-child {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+.progression-list-item strong,
+.progression-list-item small {
+    overflow-wrap: anywhere;
+}
+
+.progression-row-actions {
+    flex: 0 0 auto;
+}
+
+.progression-empty {
+    margin: 0;
+    color: var(--muted);
 }
 
 .admin-help-actions {
@@ -809,7 +1091,8 @@
 @media (max-width: 700px) {
     .feedback-view,
     .ticket-view,
-    .admin-tickets-view {
+    .admin-tickets-view,
+    .admin-progression-view {
         width: min(100% - 24px, 100%);
         margin-top: 12px;
     }
@@ -833,9 +1116,33 @@
         grid-template-columns: 1fr;
     }
 
+    .progression-metrics,
+    .progression-admin-grid,
+    .progression-data-grid,
+    .progression-form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .progression-metrics > div {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .progression-metrics > div:last-child {
+        border-bottom: 0;
+    }
+
+    .progression-list-item {
+        align-items: flex-start;
+    }
+
     .feedback-form-grid label.wide,
     .admin-ticket-toolbar label.wide {
         grid-column: auto;
+    }
+
+    .ticket-draft-row {
+        align-items: start;
     }
 
     .ticket-filter-row,
@@ -1360,6 +1667,7 @@ body.account-drawer-open {
 .profile-drawer-customize,
 .profile-drawer-support,
 .profile-drawer-tickets,
+.profile-drawer-progression,
 .profile-drawer-docs,
 .profile-drawer-store {
     width: 100%;
@@ -1375,6 +1683,7 @@ body.account-drawer-open {
 .profile-drawer-customize:hover,
 .profile-drawer-support:hover,
 .profile-drawer-tickets:hover,
+.profile-drawer-progression:hover,
 .profile-drawer-docs:hover,
 .profile-drawer-store:hover {
     border-color: rgba(255, 203, 107, 0.44);

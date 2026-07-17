@@ -162,6 +162,13 @@ function renderTicketForm() {
                         <label class="wide"><span>External screenshot or video URL</span><input name="externalMediaUrl" type="url" inputmode="url" maxlength="${TICKET_LIMITS.externalMediaUrl}" placeholder="https://">${renderFieldError("externalMediaUrl")}</label>
                     </div>
                 </details>
+                <div class="ticket-draft-row">
+                    <div>
+                        <p class="ticket-draft-status" data-feedback-draft-status role="status"></p>
+                        <small class="ticket-draft-attachment" data-feedback-draft-attachment hidden></small>
+                    </div>
+                    <button type="button" class="ticket-draft-discard" data-feedback-draft-discard hidden>Discard draft</button>
+                </div>
                 <p class="feedback-form-status" data-feedback-form-status role="status"></p>
                 <button class="feedback-submit" type="submit">Submit ticket</button>
             </form>
@@ -355,7 +362,7 @@ function renderAdminTicketControls(ticket, admins) {
             <form data-admin-ticket-update>
                 <label><span>Status</span><select name="status">${renderOptions(TICKET_STATUSES, ticket.status)}</select></label>
                 <label><span>Severity</span><select name="severity">${renderOptions(TICKET_SEVERITIES, ticket.severity)}</select></label>
-                <label><span>Assigned administrator</span><select name="assignedAdmin"><option value="">Unassigned</option>${admins.map((profile) => `<option value="${escapeHtml(profile.id)}" ${ticket.assigned_admin === profile.id ? "selected" : ""}>${escapeHtml(profile.display_name || profile.username || profile.id)}</option>`).join("")}</select></label>
+                <label><span>Assigned administrator</span><select name="assignedAdmin"><option value="">Unassigned</option>${admins.map((profile) => `<option value="${escapeHtml(profile.id)}" ${ticket.assigned_admin === profile.id ? "selected" : ""}>${escapeHtml(profileCommunicationLabel(profile))}</option>`).join("")}</select></label>
                 <p class="feedback-form-status" data-admin-ticket-status role="status"></p>
                 <button type="submit">Save admin changes</button>
             </form>
@@ -371,12 +378,27 @@ function renderReporterPanel(reporter) {
             <p class="panel-kicker">Reporter</p>
             <h3>${escapeHtml(reporter.display_name || reporter.username || "Unknown player")}</h3>
             <dl>
-                <div><dt>Discord ID</dt><dd>${escapeHtml(reporter.discord_id || "Unavailable")}</dd></div>
+                <div><dt>Discord username</dt><dd>${escapeHtml(discordUsernameLabel(reporter.username))}</dd></div>
                 <div><dt>Minecraft</dt><dd>${escapeHtml(reporter.minecraft_player_name || "Not linked")}</dd></div>
                 <div><dt>Signed up</dt><dd>${escapeHtml(formatDateTime(reporter.created_at))}</dd></div>
             </dl>
         </section>
     `;
+}
+
+function discordUsernameLabel(value) {
+    const username = String(value || "").trim();
+    if (!username) return "Unavailable";
+    return username.startsWith("@") ? username : `@${username}`;
+}
+
+function profileCommunicationLabel(profile) {
+    const displayName = String(profile?.display_name || "").trim();
+    const username = discordUsernameLabel(profile?.username);
+    if (displayName && username !== "Unavailable" && displayName.toLowerCase() !== username.slice(1).toLowerCase()) {
+        return `${displayName} (${username})`;
+    }
+    return displayName || username || "Unknown administrator";
 }
 
 function renderTicketHistory(history, authorNames) {
@@ -435,6 +457,7 @@ export function renderAdminTicketsContent({ loading, tickets, filters, counts, e
                 <label><span>Status</span><select data-admin-ticket-filter="status">${renderOptions(TICKET_STATUSES, filters.status, "All statuses")}</select></label>
                 <label><span>Severity</span><select data-admin-ticket-filter="severity">${renderOptions(TICKET_SEVERITIES, filters.severity, "All severities")}</select></label>
                 <label><span>Sort</span><select data-admin-ticket-filter="sort">${renderOptions(TICKET_SORTS, filters.sort)}</select></label>
+                <label class="admin-ticket-toggle"><input type="checkbox" data-admin-ticket-hide-closed ${filters.hideClosed ? "checked" : ""}><span>Hide closed tickets</span></label>
             </div>
             ${
                 loading

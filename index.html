@@ -20,7 +20,7 @@
     <link rel="icon" type="image/png" href="./Icon.png">
     <link rel="apple-touch-icon" href="./Icon.png">
     <link rel="manifest" href="./site.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=feedback-1">
+    <link rel="stylesheet" href="./styles.css?v=admin-2">
 </head>
 <body class="home-route">
 <div class="app-shell">
@@ -420,10 +420,26 @@
             </div>
             <div class="admin-help-actions">
                 <button type="button" data-route="admin-tickets">Ticket dashboard</button>
+                <button type="button" data-route="admin-progression">Progression &amp; grants</button>
                 <a href="#help">Player help</a>
             </div>
         </section>
         <div id="admin-documentation-body" aria-live="polite"></div>
+    </main>
+
+    <main class="admin-progression-view hidden" id="admin-progression-view">
+        <section class="feedback-hero">
+            <div>
+                <p class="panel-kicker">Admin Progression</p>
+                <h2>Cosmetic rewards and exclusive access.</h2>
+                <p>Manage stat-based unlock rules, owner-only cosmetics, and direct grants for exclusive account items.</p>
+            </div>
+            <div class="admin-help-actions">
+                <button type="button" data-route="store">Cosmetic catalog</button>
+                <button type="button" data-route="admin-tickets">Ticket dashboard</button>
+            </div>
+        </section>
+        <div class="admin-progression-body" id="admin-progression-body" aria-live="polite"></div>
     </main>
 
     <section class="player-view panel hidden" id="player-view">
@@ -471,6 +487,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./api-config.js?v=site-1"></script>
 <script src="./store-catalog.js?v=store-1"></script>
-<script type="module" src="./app.js?v=feedback-1"></script>
+<script type="module" src="./app.js?v=admin-2"></script>
 </body>
 </html>

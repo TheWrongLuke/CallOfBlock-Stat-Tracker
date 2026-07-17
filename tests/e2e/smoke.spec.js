@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { Buffer } from "node:buffer";
 
 const supabaseStub = `
 (() => {
@@ -106,11 +107,16 @@ test("feedback asks logged-out visitors to sign in", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Login with Discord" })).toBeVisible();
 });
 
-test("signed-in feedback includes cheat reports and private evidence upload", async ({ page }) => {
+test("signed-in feedback restores ticket fields and evidence after reload and reopening", async ({ page, context }) => {
     await openAuthenticatedApp(page, "#feedback");
     const form = page.locator("[data-feedback-create]");
     await expect(form).toBeVisible();
     await expect(form.locator("select[name='category'] option[value='cheat_report']")).toHaveText("Cheat Report");
+    await form.locator("select[name='category']").selectOption("cheat_report");
+    await form.locator("input[name='title']").fill("Suspicious movement during a match");
+    await form
+        .locator("textarea[name='description']")
+        .fill("The player moved repeatedly through solid walls during the final part of the match.");
     await form.locator(".ticket-optional-fields").evaluate((details) => {
         details.open = true;
     });
@@ -118,6 +124,32 @@ test("signed-in feedback includes cheat reports and private evidence upload", as
     await expect(attachment).toBeVisible();
     await expect(attachment).toHaveAttribute("accept", /image\/png/);
     await expect(attachment).toHaveAttribute("accept", /video\/mp4/);
+    await attachment.setInputFiles({
+        name: "evidence.png",
+        mimeType: "image/png",
+        buffer: Buffer.from("draft-evidence")
+    });
+    await expect(form.locator("[data-feedback-draft-status]")).toHaveText("Draft saved on this device.");
+
+    await page.reload();
+    await expect(form).toBeVisible();
+    await expect(form.locator("select[name='category']")).toHaveValue("cheat_report");
+    await expect(form.locator("input[name='title']")).toHaveValue("Suspicious movement during a match");
+    await expect(form.locator("textarea[name='description']")).toHaveValue(
+        /The player moved repeatedly through solid walls/
+    );
+    await expect(form.locator("[data-feedback-draft-status]")).toHaveText("Draft restored from this device.");
+    await expect(form.locator("[data-feedback-draft-discard]")).toBeVisible();
+    await expect.poll(() => attachment.evaluate((input) => input.files?.[0]?.name || "")).toBe("evidence.png");
+
+    await page.close();
+    const reopenedPage = await context.newPage();
+    await openAuthenticatedApp(reopenedPage, "#feedback");
+    const reopenedForm = reopenedPage.locator("[data-feedback-create]");
+    await expect(reopenedForm.locator("input[name='title']")).toHaveValue("Suspicious movement during a match");
+    await expect
+        .poll(() => reopenedForm.locator("input[name='attachment']").evaluate((input) => input.files?.[0]?.name || ""))
+        .toBe("evidence.png");
 });
 
 test("admin routes reject a logged-out visitor", async ({ page }) => {
@@ -127,4 +159,7 @@ test("admin routes reject a logged-out visitor", async ({ page }) => {
     await page.goto("/#admin-help");
     await expect(page).not.toHaveURL(/#admin-help$/);
     await expect(page.locator("#admin-help-view")).toBeHidden();
+    await page.goto("/#admin-progression");
+    await expect(page).not.toHaveURL(/#admin-progression$/);
+    await expect(page.locator("#admin-progression-view")).toBeHidden();
 });

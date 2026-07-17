@@ -1,5 +1,13 @@
 import { createFeedbackApi } from "./src/api/feedback.js";
+import { createProgressionAdminApi } from "./src/api/progression.js";
 import { isAdminProfile } from "./src/auth/permissions.js";
+import {
+    COSMETIC_ACQUISITION_TYPES,
+    COSMETIC_GRANT_SOURCES,
+    PROGRESSION_METRICS,
+    PROGRESSION_MODES,
+    progressionOptionLabel
+} from "./src/config/progression.js";
 import {
     TICKET_SUBMIT_COOLDOWN_MS,
     USER_CLOSABLE_TICKET_STATUSES,
@@ -19,12 +27,18 @@ import {
     uploadFeedbackAttachment,
     validateFeedbackAttachment
 } from "./src/services/feedback-attachments.js";
+import { createFeedbackDraftSession } from "./src/services/feedback-draft-session.js";
+import {
+    loadAdminTicketPreferences,
+    saveAdminTicketPreferences
+} from "./src/services/admin-ticket-preferences.js";
 import {
     renderAdminDocumentationContent,
     renderAdminTicketsContent,
     renderFeedbackContent,
     renderTicketDetailContent
 } from "./src/views/feedback.js";
+import { renderProgressionAdminContent } from "./src/views/progression.js";
 
 const MODE_LABELS = {
     overall: "Overall",
@@ -198,6 +212,7 @@ const PFP_BORDERS = [
 ];
 const PROFILE_TITLES = [
     { id: "none", label: "No title", text: "", category: "Default", rarity: "common", unlock: "default" },
+    { id: "owner", label: "Owner", text: "Owner", category: "Exclusive", rarity: "mythic", unlock: "inventory" },
     { id: "linked_operative", label: "Linked Operative", text: "Linked Operative", category: "Milestones", rarity: "common", unlock: "linked" },
     { id: "br_survivor", label: "BR Survivor", text: "Battle Royale Survivor", category: "Game Modes", rarity: "rare", unlock: "br_winner" },
     { id: "dm_victor", label: "DM Victor", text: "Deathmatch Victor", category: "Game Modes", rarity: "rare", unlock: "dm_winner" },
@@ -218,8 +233,13 @@ const STORE_CATEGORY_LABELS = {
 };
 const COSMETIC_CATALOG_TABLE = "cosmetic_catalog_items";
 const PUBLIC_COSMETIC_CATALOG_VIEW = "public_cosmetic_catalog";
+const PUBLIC_COSMETIC_INVENTORY_VIEW = "public_profile_cosmetic_inventory";
 const COSMETIC_MEDIA_BUCKET = "profile-media";
 const STORE_CHECKOUT_ENABLED = window.COB_STORE_CHECKOUT_ENABLED === true;
+const COSMETIC_ACQUISITION_VALUES = new Set(COSMETIC_ACQUISITION_TYPES.map((option) => option.value));
+const PROGRESSION_MODE_VALUES = new Set(PROGRESSION_MODES.map((option) => option.value));
+const PROGRESSION_METRIC_VALUES = new Set(PROGRESSION_METRICS.map((option) => option.value));
+const COSMETIC_GRANT_SOURCE_VALUES = new Set(COSMETIC_GRANT_SOURCES.map((option) => option.value));
 // Products are intentionally empty until a store-only catalog entry and its
 // matching Stripe Price are registered. Achievement cosmetics are never used
 // as store fallbacks.
@@ -273,6 +293,8 @@ const BEST_DATE_SCORE_HELP = "Best Date ranks by the strongest overlapping time 
 const PLAYTEST_SEED_USERS = [];
 const DEFAULT_PLAYTESTS = [];
 
+const adminTicketPreferences = loadAdminTicketPreferences();
+
 const state = {
     data: null,
     preview: false,
@@ -313,6 +335,7 @@ const state = {
         catalogLoaded: false,
         catalogLoading: false,
         catalogReady: false,
+        catalogProgressionReady: false,
         catalogMessage: "",
         editingKey: "",
         savingCatalog: false,
@@ -358,7 +381,21 @@ const state = {
         categoryFilter: "all",
         severityFilter: "all",
         search: "",
-        sort: "updated"
+        sort: "updated",
+        hideClosed: adminTicketPreferences.hideClosed
+    },
+    progression: {
+        api: null,
+        loaded: false,
+        loading: false,
+        ready: false,
+        rules: [],
+        grants: [],
+        profiles: [],
+        editingRuleId: "",
+        saving: false,
+        message: "",
+        error: ""
     },
     weeklyMissions: {
         loading: false,
@@ -396,6 +433,9 @@ const state = {
     playtests: emptyPlaytestState(),
     cache: emptyCache()
 };
+const feedbackDraftSession = createFeedbackDraftSession({
+    getUserId: () => state.authSession?.user?.id || ""
+});
 let activeBadgeProgressHost = null;
 let badgeTooltipFrame = 0;
 let adminTicketSearchTimer = 0;
@@ -447,6 +487,7 @@ function setupAuthClient() {
         }
     });
     state.feedback.api = createFeedbackApi(state.authClient);
+    state.progression.api = createProgressionAdminApi(state.authClient);
 }
 
 async function initAuth() {
@@ -472,6 +513,7 @@ async function initAuth() {
         state.authMessage = "Discord login is unavailable right now.";
         resetPlaytestViewer();
         resetFeedbackSessionState();
+        resetProgressionAdminState();
         enforceProtectedAdminRoute();
         render();
     }
@@ -488,6 +530,7 @@ async function applyAuthSession(session, shouldRender = false) {
         resetWeeklyMissionState();
         resetStoreSessionState({ resetCatalog: true });
         resetFeedbackSessionState();
+        resetProgressionAdminState();
         resetPlaytestViewer();
         await loadCosmeticCatalog({ force: true });
         await loadAccountProfiles();
@@ -500,15 +543,35 @@ async function applyAuthSession(session, shouldRender = false) {
     updateViewerFromDiscordUser(session.user);
     await syncPlaytestProfile(session.user);
     await loadCosmeticCatalog({ force: true });
+    await claimProgressionCosmetics();
     await loadAccountProfiles();
     await loadRemotePlaytests({ silent: true });
     await syncWeeklyMissions();
     resetFeedbackSessionState();
+    resetProgressionAdminState();
     consumeAuthReturn();
     resetStoreSessionState();
     enforceProtectedAdminRoute();
     if (state.view === "store" && isPlaytestAdmin()) await loadStoreData();
     if (shouldRender) render();
+}
+
+async function claimProgressionCosmetics() {
+    if (!state.authClient || !state.authSession?.user) return;
+    try {
+        const result = await state.authClient.rpc("claim_progression_cosmetics");
+        if (result.error) {
+            const code = String(result.error.code || "");
+            if (["42883", "PGRST202"].includes(code) || /could not find.*claim_progression_cosmetics/i.test(result.error.message || "")) return;
+            throw result.error;
+        }
+        const rewards = Array.isArray(result.data) ? result.data : [];
+        if (rewards.length) {
+            state.accountMessage = `${rewards.length} new progression cosmetic${rewards.length === 1 ? "" : "s"} unlocked.`;
+        }
+    } catch (error) {
+        console.warn("Could not claim progression cosmetics", error);
+    }
 }
 
 async function signInWithDiscord() {
@@ -550,6 +613,7 @@ async function signOutDiscord() {
     resetWeeklyMissionState();
     resetStoreSessionState({ resetCatalog: true });
     resetFeedbackSessionState();
+    resetProgressionAdminState();
     resetPlaytestViewer();
     await loadCosmeticCatalog({ force: true });
     await loadAccountProfiles();
@@ -606,6 +670,14 @@ function bindStaticEvents() {
             return;
         }
 
+        const feedbackDraftDiscard = event.target.closest("[data-feedback-draft-discard]");
+        if (feedbackDraftDiscard) {
+            event.preventDefault();
+            if (!window.confirm("Discard this saved ticket draft and its attachment?")) return;
+            void feedbackDraftSession.discard();
+            return;
+        }
+
         const ticketRetry = event.target.closest("[data-ticket-retry]");
         if (ticketRetry) {
             event.preventDefault();
@@ -627,6 +699,48 @@ function bindStaticEvents() {
             event.preventDefault();
             state.feedback.documentationLoaded = false;
             void loadAdminDocumentation({ force: true });
+            return;
+        }
+
+        const progressionRetry = event.target.closest("[data-progression-retry]");
+        if (progressionRetry) {
+            event.preventDefault();
+            void loadProgressionAdminData({ force: true });
+            return;
+        }
+
+        const progressionRuleNew = event.target.closest("[data-progression-rule-new]");
+        if (progressionRuleNew) {
+            event.preventDefault();
+            state.progression.editingRuleId = "";
+            renderProgressionAdminPage();
+            return;
+        }
+
+        const progressionRuleEdit = event.target.closest("[data-progression-rule-edit]");
+        if (progressionRuleEdit) {
+            event.preventDefault();
+            state.progression.editingRuleId = progressionRuleEdit.dataset.progressionRuleEdit || "";
+            renderProgressionAdminPage();
+            window.requestAnimationFrame(() => document.querySelector("[data-progression-rule-form]")?.scrollIntoView({ block: "start" }));
+            return;
+        }
+
+        const progressionRuleDelete = event.target.closest("[data-progression-rule-delete]");
+        if (progressionRuleDelete) {
+            event.preventDefault();
+            void deleteProgressionRule(progressionRuleDelete.dataset.progressionRuleDelete || "");
+            return;
+        }
+
+        const progressionGrantRevoke = event.target.closest("[data-progression-grant-revoke]");
+        if (progressionGrantRevoke) {
+            event.preventDefault();
+            void revokeProgressionGrant(
+                progressionGrantRevoke.dataset.profileId || "",
+                progressionGrantRevoke.dataset.cosmeticType || "",
+                progressionGrantRevoke.dataset.cosmeticId || ""
+            );
             return;
         }
 
@@ -869,12 +983,32 @@ function bindStaticEvents() {
             return;
         }
 
+        if (event.target.matches("[data-progression-rule-form]")) {
+            event.preventDefault();
+            void submitProgressionRule(event.target);
+            return;
+        }
+
+        if (event.target.matches("[data-progression-grant-form]")) {
+            event.preventDefault();
+            void submitProgressionGrant(event.target);
+            return;
+        }
+
         if (!event.target.matches("[data-confirm-dialog-form]")) return;
         event.preventDefault();
         void submitConfirmDialog(event.target);
     });
 
     document.addEventListener("change", (event) => {
+        const feedbackDraftForm = event.target.closest("[data-feedback-create]");
+        if (feedbackDraftForm && event.target.matches("select[name], input[type='file'][name='attachment']")) {
+            feedbackDraftSession.capture(feedbackDraftForm, {
+                attachmentChanged: event.target.matches("input[type='file'][name='attachment']")
+            });
+            return;
+        }
+
         if (event.target.matches("[data-feedback-filter]")) {
             const filter = event.target.dataset.feedbackFilter;
             if (filter === "status") state.feedback.statusFilter = event.target.value;
@@ -889,6 +1023,13 @@ function bindStaticEvents() {
             if (filter === "category") state.feedback.categoryFilter = event.target.value;
             if (filter === "severity") state.feedback.severityFilter = event.target.value;
             if (filter === "sort") state.feedback.sort = event.target.value;
+            renderAdminTicketsPage();
+            return;
+        }
+
+        if (event.target.matches("[data-admin-ticket-hide-closed]")) {
+            state.feedback.hideClosed = Boolean(event.target.checked);
+            saveAdminTicketPreferences({ hideClosed: state.feedback.hideClosed });
             renderAdminTicketsPage();
             return;
         }
@@ -916,9 +1057,20 @@ function bindStaticEvents() {
             const form = event.target.closest("[data-catalog-form]");
             form?.querySelector("[data-catalog-shop-fields]")?.toggleAttribute("hidden", !event.target.checked);
         }
+
+        if (event.target.matches("[data-catalog-acquisition]")) {
+            const form = event.target.closest("[data-catalog-form]");
+            form?.querySelector("[data-catalog-shop-fields]")?.toggleAttribute("hidden", event.target.value !== "store");
+        }
     });
 
     document.addEventListener("input", (event) => {
+        const feedbackDraftForm = event.target.closest("[data-feedback-create]");
+        if (feedbackDraftForm && event.target.matches("input:not([type='file']), textarea")) {
+            feedbackDraftSession.capture(feedbackDraftForm);
+            return;
+        }
+
         if (event.target.matches("[data-admin-ticket-filter='search']")) {
             state.feedback.search = event.target.value.slice(0, 200);
             window.clearTimeout(adminTicketSearchTimer);
@@ -967,6 +1119,10 @@ function bindStaticEvents() {
     document.addEventListener("focusout", handleBadgeProgressLeave);
     window.addEventListener("scroll", hideBadgeProgressTooltip, true);
     window.addEventListener("resize", hideBadgeProgressTooltip);
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") feedbackDraftSession.flush();
+    });
+    window.addEventListener("pagehide", () => feedbackDraftSession.flush());
 
     const search = document.getElementById("player-search");
     search.addEventListener("input", (event) => {
@@ -1133,6 +1289,17 @@ function applyRoute() {
         state.profilePreviewOpen = false;
         return;
     }
+    if (route === "admin-progression") {
+        if (state.authReady && !isPlaytestAdmin()) {
+            state.view = "home";
+            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            return;
+        }
+        state.view = "adminProgression";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        return;
+    }
     if (route === "playtests") {
         state.view = "playtests";
         state.selectedId = null;
@@ -1233,7 +1400,7 @@ function setRouteHash(hash) {
 function enforceProtectedAdminRoute() {
     if (!state.authReady || isPlaytestAdmin()) return;
     const protectedView = state.view;
-    if (!["store", "adminHelp", "adminTickets", "communityAdmin"].includes(protectedView)) return;
+    if (!["store", "adminHelp", "adminTickets", "adminProgression", "communityAdmin"].includes(protectedView)) return;
 
     let hash = "";
     if (protectedView === "adminTickets") {
@@ -1305,6 +1472,21 @@ function routeTo(route) {
         state.selectedId = null;
         state.profilePreviewOpen = false;
         if (!setRouteHash("admin-tickets")) render();
+        return;
+    }
+    if (route === "admin-progression") {
+        if (!isPlaytestAdmin()) {
+            state.view = "home";
+            state.selectedId = null;
+            state.profilePreviewOpen = false;
+            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            render();
+            return;
+        }
+        state.view = "adminProgression";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        if (!setRouteHash("admin-progression")) render();
         return;
     }
     if (route === "playtests") {
@@ -1539,9 +1721,16 @@ async function loadAccountProfiles() {
     }
 
     try {
-        const { data, error } = await fetchPublicProfiles({ limit: 1000 });
+        const [{ data, error }, inventoryResult] = await Promise.all([
+            fetchPublicProfiles({ limit: 1000 }),
+            fetchPublicCosmeticInventory()
+        ]);
         if (error) throw error;
-        state.accountProfiles = Array.isArray(data) ? data : [];
+        const inventoryRows = inventoryResult.error ? [] : inventoryResult.data;
+        state.accountProfiles = attachCosmeticInventory(Array.isArray(data) ? data : [], inventoryRows);
+        if (state.authProfile) {
+            state.authProfile = attachCosmeticInventory([state.authProfile], inventoryRows)[0] || state.authProfile;
+        }
         state.accountProfilesReady = true;
         rebuildAccountProfileIndex();
     } catch (error) {
@@ -1554,6 +1743,31 @@ async function loadAccountProfiles() {
     // Stats and public account data load independently. Refresh account-backed
     // surfaces when the latter arrives so an already-open preview is not stale.
     if (state.data) render();
+}
+
+async function fetchPublicCosmeticInventory() {
+    if (!state.authClient) return { data: [], error: null };
+    return state.authClient
+        .from(PUBLIC_COSMETIC_INVENTORY_VIEW)
+        .select("profile_id, cosmetic_type, cosmetic_id, acquired_at")
+        .limit(10000);
+}
+
+function attachCosmeticInventory(profiles, inventoryRows) {
+    const byProfile = new Map();
+    for (const row of Array.isArray(inventoryRows) ? inventoryRows : []) {
+        if (!row?.profile_id || !row.cosmetic_type || !row.cosmetic_id) continue;
+        if (!byProfile.has(row.profile_id)) byProfile.set(row.profile_id, []);
+        byProfile.get(row.profile_id).push({
+            type: String(row.cosmetic_type),
+            id: String(row.cosmetic_id),
+            acquiredAt: row.acquired_at || ""
+        });
+    }
+    return profiles.map((profile) => ({
+        ...profile,
+        cosmetic_inventory: byProfile.get(profile.id) || []
+    }));
 }
 
 async function loadRemotePlaytests(options = {}) {
@@ -1853,14 +2067,18 @@ function discordUsernameFromUser(user) {
     const metadata = user?.user_metadata || {};
     const identityData = identity?.identity_data || {};
     return String(
-        metadata.global_name
+        metadata.user_name
+        || metadata.username
+        || metadata.preferred_username
+        || identityData.user_name
+        || identityData.username
+        || identityData.preferred_username
+        || metadata.global_name
         || metadata.full_name
         || metadata.name
-        || metadata.user_name
         || identityData.global_name
         || identityData.full_name
         || identityData.name
-        || identityData.user_name
         || user?.email?.split("@")[0]
         || "Discord user"
     );
@@ -2080,6 +2298,9 @@ function render() {
         case "adminTickets":
             renderAdminTicketsPage();
             break;
+        case "adminProgression":
+            renderProgressionAdminPage();
+            break;
         case "adminHelp":
             renderAdminDocumentationPage();
             break;
@@ -2118,6 +2339,7 @@ function renderRoute() {
     document.getElementById("feedback-view").classList.toggle("hidden", state.view !== "feedback");
     document.getElementById("ticket-view").classList.toggle("hidden", state.view !== "ticket");
     document.getElementById("admin-tickets-view").classList.toggle("hidden", state.view !== "adminTickets");
+    document.getElementById("admin-progression-view").classList.toggle("hidden", state.view !== "adminProgression");
     document.getElementById("community-admin-view").classList.toggle("hidden", state.view !== "communityAdmin");
     document.getElementById("account-view").classList.toggle("hidden", state.view !== "account");
     document.getElementById("store-view").classList.toggle("hidden", state.view !== "store");
@@ -2259,6 +2481,7 @@ function renderAccountSidePanel() {
                     <button class="profile-drawer-support" type="button" data-route="feedback">Feedback &amp; support</button>
                     ${isPlaytestAdmin() ? `
                         <button class="profile-drawer-tickets" type="button" data-route="admin-tickets">Ticket dashboard</button>
+                        <button class="profile-drawer-progression" type="button" data-route="admin-progression">Progression &amp; grants</button>
                         <button class="profile-drawer-docs" type="button" data-route="admin-help">Admin documentation</button>
                         <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
                     ` : ""}
@@ -2347,6 +2570,7 @@ function resetStoreSessionState({ resetCatalog = false } = {}) {
         state.store.catalogLoaded = false;
         state.store.catalogLoading = false;
         state.store.catalogReady = false;
+        state.store.catalogProgressionReady = false;
         state.store.catalogMessage = "";
         state.store.editingKey = "";
     }
@@ -2354,6 +2578,7 @@ function resetStoreSessionState({ resetCatalog = false } = {}) {
 
 function resetFeedbackSessionState() {
     const feedback = state.feedback;
+    feedbackDraftSession.reset();
     feedback.tickets = [];
     feedback.ticketsLoaded = false;
     feedback.ticketsLoading = false;
@@ -2384,10 +2609,25 @@ function resetFeedbackSessionState() {
     feedback.formErrors = {};
 }
 
+function resetProgressionAdminState() {
+    const progression = state.progression;
+    progression.loaded = false;
+    progression.loading = false;
+    progression.ready = false;
+    progression.rules = [];
+    progression.grants = [];
+    progression.profiles = [];
+    progression.editingRuleId = "";
+    progression.saving = false;
+    progression.message = "";
+    progression.error = "";
+}
+
 function renderFeedbackPage() {
     const body = document.getElementById("feedback-body");
     if (!body) return;
     const loggedIn = isDiscordLoggedIn();
+    const userId = state.authSession?.user?.id || "";
     if (loggedIn && !state.feedback.ticketsLoaded && !state.feedback.ticketsLoading) {
         void loadOwnFeedbackTickets();
     }
@@ -2402,6 +2642,8 @@ function renderFeedbackPage() {
         message: state.feedback.message,
         error: state.feedback.error
     });
+    const form = body.querySelector("[data-feedback-create]");
+    if (form && loggedIn && userId) feedbackDraftSession.attach(form);
 }
 
 async function loadOwnFeedbackTickets({ force = false } = {}) {
@@ -2443,7 +2685,9 @@ async function submitFeedbackTicket(form) {
     const values = new FormData(form);
     const validation = validateTicketInput(Object.fromEntries(values.entries()));
     const attachmentInput = form.elements.namedItem("attachment");
-    const attachmentFile = attachmentInput instanceof HTMLInputElement ? attachmentInput.files?.[0] : null;
+    const selectedAttachment = attachmentInput instanceof HTMLInputElement ? attachmentInput.files?.[0] : null;
+    const restoredAttachment = feedbackDraftSession.attachment(userId);
+    const attachmentFile = selectedAttachment || restoredAttachment;
     const attachmentValidation = validateFeedbackAttachment(attachmentFile);
     const errors = { ...validation.errors };
     if (!attachmentValidation.valid) errors.attachment = attachmentValidation.error;
@@ -2479,6 +2723,12 @@ async function submitFeedbackTicket(form) {
         }
         const result = await feedback.api.createTicket(validation.value, userId, ticketId);
         if (result.error) throw result.error;
+        try {
+            await feedbackDraftSession.clear(userId);
+        } catch (draftError) {
+            console.warn("Could not clear the submitted feedback draft", draftError);
+            feedbackDraftSession.reset();
+        }
         feedback.cooldownUntil = Date.now() + TICKET_SUBMIT_COOLDOWN_MS;
         feedback.tickets = [result.data, ...feedback.tickets.filter((ticket) => ticket.id !== result.data.id)];
         feedback.ticketsLoaded = true;
@@ -2802,7 +3052,8 @@ function adminTicketFilters() {
         category: state.feedback.categoryFilter,
         status: state.feedback.statusFilter,
         severity: state.feedback.severityFilter,
-        sort: state.feedback.sort
+        sort: state.feedback.sort,
+        hideClosed: state.feedback.hideClosed
     };
 }
 
@@ -2810,6 +3061,7 @@ function filteredAdminFeedbackTickets() {
     const feedback = state.feedback;
     const query = feedback.search.trim().toLowerCase();
     const rows = feedback.adminTickets.filter((ticket) => {
+        if (feedback.hideClosed && feedback.statusFilter === "all" && ticket.status === "closed") return false;
         if (feedback.categoryFilter !== "all" && ticket.category !== feedback.categoryFilter) return false;
         if (feedback.statusFilter !== "all" && ticket.status !== feedback.statusFilter) return false;
         if (feedback.severityFilter !== "all" && ticket.severity !== feedback.severityFilter) return false;
@@ -2855,7 +3107,7 @@ function feedbackReporterLabel(userId) {
     const account = state.accountProfileIndex?.byId?.get(userId)
         || state.accountProfiles.find((profile) => profile.id === userId)
         || (state.authProfile?.id === userId ? state.authProfile : null);
-    return account ? accountDisplayName(account) : String(userId || "Unknown player").slice(0, 8);
+    return account ? accountDisplayName(account) : "Unknown player";
 }
 
 function feedbackAuthorNames() {
@@ -2956,6 +3208,246 @@ async function loadAdminDocumentation({ force = false } = {}) {
     }
 }
 
+function renderProgressionAdminPage() {
+    const body = document.getElementById("admin-progression-body");
+    if (!body) return;
+    if (!state.authReady) {
+        body.innerHTML = renderProgressionAdminContent({
+            loading: true,
+            ready: false,
+            catalog: [],
+            rules: [],
+            grants: [],
+            profiles: [],
+            editingRuleId: "",
+            message: "",
+            error: "",
+            saving: false
+        });
+        return;
+    }
+    if (!isPlaytestAdmin()) {
+        enforceProtectedAdminRoute();
+        return;
+    }
+    if (!state.progression.loaded && !state.progression.loading) void loadProgressionAdminData();
+    body.innerHTML = renderProgressionAdminContent({
+        loading: state.progression.loading,
+        ready: state.progression.ready,
+        catalog: state.store.catalogItems,
+        rules: state.progression.rules,
+        grants: state.progression.grants,
+        profiles: state.progression.profiles,
+        editingRuleId: state.progression.editingRuleId,
+        message: state.progression.message,
+        error: state.progression.error,
+        saving: state.progression.saving
+    });
+}
+
+async function loadProgressionAdminData({ force = false } = {}) {
+    const progression = state.progression;
+    if (!progression.api || !isPlaytestAdmin() || progression.loading || (progression.loaded && !force)) return;
+    progression.loading = true;
+    progression.error = "";
+    if (state.view === "adminProgression") renderProgressionAdminPage();
+
+    try {
+        await loadCosmeticCatalog({ force });
+        if (!state.store.catalogProgressionReady) {
+            throw new Error("The current cosmetic progression schema has not been installed yet.");
+        }
+        const [rulesResult, grantsResult, profilesResult] = await Promise.all([
+            progression.api.listRules(),
+            progression.api.listInventory(),
+            progression.api.listProfiles()
+        ]);
+        if (rulesResult.error) throw rulesResult.error;
+        if (grantsResult.error) throw grantsResult.error;
+        if (profilesResult.error) throw profilesResult.error;
+        progression.rules = Array.isArray(rulesResult.data) ? rulesResult.data : [];
+        progression.grants = Array.isArray(grantsResult.data) ? grantsResult.data : [];
+        progression.profiles = Array.isArray(profilesResult.data) ? profilesResult.data : [];
+        progression.ready = true;
+    } catch (error) {
+        console.error("Could not load progression administration", error);
+        progression.rules = [];
+        progression.grants = [];
+        progression.profiles = [];
+        progression.ready = false;
+        progression.error = progressionAdminErrorMessage(error);
+    } finally {
+        progression.loaded = true;
+        progression.loading = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+async function submitProgressionRule(form) {
+    const progression = state.progression;
+    if (!progression.api || !isPlaytestAdmin() || progression.saving) return;
+    const values = new FormData(form);
+
+    try {
+        const ruleId = String(values.get("ruleId") || "").trim();
+        const cosmetic = progressionCatalogItem(values.get("cosmeticKey"));
+        if (!cosmetic) throw new Error("Choose a database catalog cosmetic.");
+        const mode = String(values.get("mode") || "");
+        const metric = String(values.get("metric") || "");
+        const target = Number(values.get("target"));
+        if (!PROGRESSION_MODE_VALUES.has(mode)) throw new Error("Choose a valid game mode.");
+        if (!PROGRESSION_METRIC_VALUES.has(metric)) throw new Error("Choose a valid tracked stat.");
+        if (!Number.isFinite(target) || target <= 0 || target > 1_000_000_000) {
+            throw new Error("Required amount must be above zero.");
+        }
+
+        progression.saving = true;
+        progression.error = "";
+        progression.message = "";
+        renderProgressionAdminPage();
+        const result = await progression.api.saveRule({
+            id: ruleId,
+            cosmeticType: cosmetic.type,
+            cosmeticId: cosmetic.id,
+            mode,
+            metric,
+            target,
+            active: values.get("active") === "on",
+            sortOrder: Math.min(100000, Math.max(0, Math.floor(number(values.get("sortOrder"))))),
+            createdBy: state.authSession.user.id
+        });
+        if (result.error) throw result.error;
+        const acquisitionResult = await progression.api.setCatalogAcquisition(cosmetic.type, cosmetic.id, "progression");
+        if (acquisitionResult.error) throw acquisitionResult.error;
+        progression.editingRuleId = result.data?.id || ruleId;
+        progression.message = `${cosmetic.name} progression rule saved.`;
+        progression.loaded = false;
+        state.store.catalogLoaded = false;
+        await loadProgressionAdminData({ force: true });
+        await claimProgressionCosmetics();
+        progression.loaded = false;
+        await loadProgressionAdminData({ force: true });
+        await loadAccountProfiles();
+    } catch (error) {
+        console.error("Could not save progression rule", error);
+        progression.error = progressionAdminErrorMessage(error, "Could not save this progression rule.");
+    } finally {
+        progression.saving = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+async function deleteProgressionRule(ruleId) {
+    const progression = state.progression;
+    const rule = progression.rules.find((entry) => entry.id === ruleId);
+    if (!rule || !progression.api || progression.saving || !isPlaytestAdmin()) return;
+    if (!window.confirm("Delete this progression rule? The cosmetic and existing grants will remain.")) return;
+
+    progression.saving = true;
+    progression.error = "";
+    try {
+        const result = await progression.api.deleteRule(ruleId);
+        if (result.error) throw result.error;
+        progression.editingRuleId = progression.editingRuleId === ruleId ? "" : progression.editingRuleId;
+        progression.message = "Progression rule deleted.";
+        progression.loaded = false;
+        await loadProgressionAdminData({ force: true });
+    } catch (error) {
+        console.error("Could not delete progression rule", error);
+        progression.error = progressionAdminErrorMessage(error, "Could not delete this progression rule.");
+    } finally {
+        progression.saving = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+async function submitProgressionGrant(form) {
+    const progression = state.progression;
+    if (!progression.api || !isPlaytestAdmin() || progression.saving) return;
+    const values = new FormData(form);
+
+    try {
+        const profileId = String(values.get("profileId") || "").trim();
+        const profile = progression.profiles.find((entry) => entry.id === profileId);
+        const cosmetic = progressionCatalogItem(values.get("cosmeticKey"));
+        const source = String(values.get("source") || "").trim();
+        if (!profile) throw new Error("Choose a player account.");
+        if (!cosmetic) throw new Error("Choose a database catalog cosmetic.");
+        if (!COSMETIC_GRANT_SOURCE_VALUES.has(source)) throw new Error("Choose a valid grant type.");
+        if ((cosmetic.acquisitionType === "owner" || source === "owner") && !profile.is_owner) {
+            throw new Error("Owner-only cosmetics can only be granted to the owner account.");
+        }
+
+        progression.saving = true;
+        progression.error = "";
+        progression.message = "";
+        renderProgressionAdminPage();
+        const result = await progression.api.grantCosmetic({
+            profileId,
+            cosmeticType: cosmetic.type,
+            cosmeticId: cosmetic.id,
+            source: cosmetic.acquisitionType === "owner" ? "owner" : source,
+            note: String(values.get("note") || "").trim().replace(/\s+/g, " ").slice(0, 200),
+            grantedBy: state.authSession.user.id
+        });
+        if (result.error) throw result.error;
+        progression.message = `${cosmetic.name} granted to ${profile.display_name || profile.username || "the selected player"}.`;
+        progression.loaded = false;
+        await loadProgressionAdminData({ force: true });
+        await loadAccountProfiles();
+    } catch (error) {
+        console.error("Could not grant cosmetic", error);
+        progression.error = progressionAdminErrorMessage(error, "Could not grant this cosmetic.");
+    } finally {
+        progression.saving = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+async function revokeProgressionGrant(profileId, cosmeticType, cosmeticId) {
+    const progression = state.progression;
+    const grant = progression.grants.find((entry) =>
+        entry.profile_id === profileId && entry.cosmetic_type === cosmeticType && entry.cosmetic_id === cosmeticId
+    );
+    if (!grant || !progression.api || progression.saving || !isPlaytestAdmin()) return;
+    if (!window.confirm("Revoke this cosmetic from the player account?")) return;
+
+    progression.saving = true;
+    progression.error = "";
+    try {
+        const result = await progression.api.revokeCosmetic(profileId, cosmeticType, cosmeticId);
+        if (result.error) throw result.error;
+        progression.message = "Cosmetic grant revoked.";
+        progression.loaded = false;
+        await loadProgressionAdminData({ force: true });
+        await loadAccountProfiles();
+    } catch (error) {
+        console.error("Could not revoke cosmetic", error);
+        progression.error = progressionAdminErrorMessage(error, "Could not revoke this cosmetic.");
+    } finally {
+        progression.saving = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+function progressionCatalogItem(value) {
+    const [type, id, extra] = String(value || "").split(":");
+    if (extra || !type || !id) return null;
+    return state.store.catalogItems.find((item) => item.remoteCatalog && item.type === type && item.id === id) || null;
+}
+
+function progressionAdminErrorMessage(error, fallback = "Progression administration is unavailable.") {
+    const code = String(error?.code || "");
+    const message = String(error?.message || error || "");
+    if (["42P01", "42703", "PGRST204", "PGRST205"].includes(code) || /schema|relation|column|progression/i.test(message)) {
+        return "Run the current Supabase security and progression setup script, then retry.";
+    }
+    if (/row-level security|permission|unauthorized|forbidden/i.test(message)) {
+        return "Supabase did not verify this account as an administrator.";
+    }
+    return message || fallback;
+}
+
 async function loadCosmeticCatalog({ force = false } = {}) {
     if (state.store.catalogLoading || (state.store.catalogLoaded && !force)) return;
     state.store.catalogLoading = true;
@@ -2966,28 +3458,35 @@ async function loadCosmeticCatalog({ force = false } = {}) {
         state.store.catalogLoaded = true;
         state.store.catalogLoading = false;
         state.store.catalogReady = false;
+        state.store.catalogProgressionReady = false;
         return;
     }
 
     const adminCatalog = isPlaytestAdmin();
     const source = adminCatalog ? COSMETIC_CATALOG_TABLE : PUBLIC_COSMETIC_CATALOG_VIEW;
-    const columns = adminCatalog
+    const legacyColumns = adminCatalog
         ? "cosmetic_type, cosmetic_id, name, description, category, rarity, image_url, title_text, border_inset, active, shop_enabled, shop_unit_amount, shop_currency, shop_featured, sort_order, created_at, updated_at"
         : "cosmetic_type, cosmetic_id, name, description, category, rarity, image_url, title_text, border_inset, active, sort_order, created_at, updated_at";
-    const result = await state.authClient
+    const progressionColumns = `${legacyColumns}, acquisition_type, available_from, available_until, supply_limit`;
+    const runCatalogQuery = (columns) => state.authClient
         .from(source)
         .select(columns)
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true });
+    let result = await runCatalogQuery(progressionColumns);
+    const progressionReady = !result.error;
+    if (result.error) result = await runCatalogQuery(legacyColumns);
 
     if (result.error) {
         if (adminCatalog) console.warn("Cosmetic catalog is unavailable", result.error);
         state.store.catalogItems = [];
         state.store.catalogReady = false;
+        state.store.catalogProgressionReady = false;
         state.store.catalogMessage = "Cosmetic catalog management is not configured.";
     } else {
         state.store.catalogItems = (result.data || []).map(normalizeCosmeticCatalogRow).filter(Boolean);
         state.store.catalogReady = true;
+        state.store.catalogProgressionReady = progressionReady;
     }
     state.store.catalogLoaded = true;
     state.store.catalogLoading = false;
@@ -3001,6 +3500,11 @@ function normalizeCosmeticCatalogRow(value) {
     const name = String(value?.name || id).trim().slice(0, 80) || id;
     const imageUrl = String(value?.image_url || value?.image || "").trim();
     const shopEnabled = Boolean(value?.shop_enabled ?? value?.shopEnabled);
+    const savedAcquisition = String(value?.acquisition_type || value?.acquisitionType || "").trim().toLowerCase();
+    const acquisitionType = COSMETIC_ACQUISITION_VALUES.has(savedAcquisition)
+        ? savedAcquisition
+        : shopEnabled ? "store" : "exclusive";
+    const supplyLimitValue = Number(value?.supply_limit ?? value?.supplyLimit);
     return {
         type,
         id,
@@ -3012,9 +3516,13 @@ function normalizeCosmeticCatalogRow(value) {
         image: imageUrl,
         text: String(value?.title_text || value?.text || name).trim().slice(0, 48),
         inset: Math.min(30, Math.max(0, number(value?.border_inset ?? value?.inset))),
-        unlock: shopEnabled ? "store" : "inventory",
+        unlock: acquisitionType === "store" ? "store" : "inventory",
         active: value?.active !== false,
         shopEnabled,
+        acquisitionType,
+        availableFrom: value?.available_from || value?.availableFrom || "",
+        availableUntil: value?.available_until || value?.availableUntil || "",
+        supplyLimit: Number.isInteger(supplyLimitValue) && supplyLimitValue > 0 ? supplyLimitValue : null,
         unitAmount: Math.max(0, Math.floor(number(value?.shop_unit_amount ?? value?.unitAmount))),
         currency: String(value?.shop_currency || value?.currency || "eur").trim().toLowerCase(),
         featured: Boolean(value?.shop_featured ?? value?.featured),
@@ -3278,6 +3786,10 @@ function renderCatalogEditor(item = null) {
         text: "",
         inset: 0,
         active: true,
+        acquisitionType: "exclusive",
+        availableFrom: "",
+        availableUntil: "",
+        supplyLimit: null,
         shopEnabled: false,
         unitAmount: 499,
         currency: "eur",
@@ -3311,6 +3823,10 @@ function renderCatalogEditor(item = null) {
                 <label class="wide"><span>Description</span><textarea name="description" maxlength="300" rows="3" placeholder="Shown in cosmetic details and the future shop.">${escapeHtml(value.description)}</textarea></label>
                 <label><span>Category</span><input name="category" maxlength="40" value="${escapeHtml(value.category)}" placeholder="Store"></label>
                 <label><span>Rarity</span><select name="rarity">${RARITY_ORDER.map((rarity) => `<option value="${rarity}" ${value.rarity === rarity ? "selected" : ""}>${RARITY_LABELS[rarity]}</option>`).join("")}</select></label>
+                <label><span>How it is earned</span><select name="acquisitionType" data-catalog-acquisition ${state.store.catalogProgressionReady ? "" : "disabled"}>${COSMETIC_ACQUISITION_TYPES.map((option) => `<option value="${escapeHtml(option.value)}" ${value.acquisitionType === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select></label>
+                <label><span>Supply limit</span><input name="supplyLimit" type="number" min="1" max="100000000" step="1" value="${escapeHtml(value.supplyLimit || "")}" placeholder="Unlimited" ${state.store.catalogProgressionReady ? "" : "disabled"}></label>
+                <label><span>Available from</span><input name="availableFrom" type="datetime-local" value="${escapeHtml(catalogDateTimeInputValue(value.availableFrom))}" ${state.store.catalogProgressionReady ? "" : "disabled"}></label>
+                <label><span>Available until</span><input name="availableUntil" type="datetime-local" value="${escapeHtml(catalogDateTimeInputValue(value.availableUntil))}" ${state.store.catalogProgressionReady ? "" : "disabled"}></label>
                 <label><span>Title text</span><input name="titleText" maxlength="48" value="${escapeHtml(value.text)}" placeholder="Used only for title cosmetics"></label>
                 <label><span>Border inset %</span><input name="borderInset" type="number" min="0" max="30" step="0.5" value="${escapeHtml(String(value.inset))}"></label>
                 <label class="wide catalog-file-field">
@@ -3320,12 +3836,11 @@ function renderCatalogEditor(item = null) {
                 </label>
                 <label><span>Sort order</span><input name="sortOrder" type="number" min="0" max="100000" step="1" value="${escapeHtml(String(value.sortOrder))}"></label>
                 <label class="catalog-check"><input type="checkbox" name="active" ${value.active ? "checked" : ""}><span>Visible in collections</span></label>
-                <label class="catalog-check"><input type="checkbox" name="shopEnabled" data-catalog-shop-toggle ${value.shopEnabled ? "checked" : ""}><span>Future shop item</span></label>
-                <label class="catalog-check"><input type="checkbox" name="shopFeatured" ${value.featured ? "checked" : ""}><span>Featured listing</span></label>
             </div>
-            <div class="catalog-shop-fields" data-catalog-shop-fields ${value.shopEnabled ? "" : "hidden"}>
+            <div class="catalog-shop-fields" data-catalog-shop-fields ${value.acquisitionType === "store" ? "" : "hidden"}>
                 <label><span>Preview price</span><input name="shopPrice" type="number" min="0.01" max="10000" step="0.01" value="${escapeHtml(price)}"></label>
                 <label><span>Currency</span><select name="shopCurrency">${["eur", "usd", "gbp"].map((currency) => `<option value="${currency}" ${value.currency === currency ? "selected" : ""}>${currency.toUpperCase()}</option>`).join("")}</select></label>
+                <label class="catalog-check"><input type="checkbox" name="shopFeatured" ${value.featured ? "checked" : ""}><span>Featured listing</span></label>
             </div>
             <p class="catalog-form-status" data-catalog-form-status></p>
             <button class="catalog-save-button" type="submit" ${state.store.savingCatalog ? "disabled" : ""}>${state.store.savingCatalog ? "Saving..." : editing ? "Save changes" : "Create cosmetic"}</button>
@@ -3350,16 +3865,34 @@ function catalogAssetRecommendation(type) {
     return "Title cosmetics use the title text field; an asset is optional.";
 }
 
+function catalogDateTimeInputValue(value) {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+    return localDate.toISOString().slice(0, 16);
+}
+
+function catalogOptionalIsoDate(value) {
+    const text = String(value || "").trim();
+    if (!text) return null;
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) throw new Error("Enter a valid availability date and time.");
+    return date.toISOString();
+}
+
 function renderCatalogAdminItem(item) {
     const price = item.shopEnabled && item.unitAmount > 0 ? formatStorePrice(item) : "Not listed";
     const status = item.active ? "Visible" : "Archived";
+    const acquisition = progressionOptionLabel(COSMETIC_ACQUISITION_TYPES, item.acquisitionType, "Exclusive");
+    const supply = item.supplyLimit ? `${formatNumber(item.supplyLimit)} total` : "Unlimited";
     return `
         <article class="catalog-admin-item rarity-${escapeHtml(item.rarity)} ${item.active ? "" : "inactive"}">
             <div class="catalog-admin-item-preview">${renderCatalogEditorPreview(item)}</div>
             <div class="catalog-admin-item-copy">
                 <span>${escapeHtml(STORE_CATEGORY_LABELS[item.type] || item.type)} / ${escapeHtml(RARITY_LABELS[item.rarity])}</span>
                 <strong>${escapeHtml(item.name)}</strong>
-                <small>${escapeHtml(status)} / ${escapeHtml(price)}</small>
+                <small>${escapeHtml(status)} / ${escapeHtml(acquisition)} / ${escapeHtml(supply)} / ${escapeHtml(price)}</small>
             </div>
             <div class="catalog-admin-item-actions">
                 <button type="button" data-store-catalog-edit="${escapeHtml(cosmeticCatalogKey(item.type, item.id))}">Edit</button>
@@ -3389,7 +3922,12 @@ async function submitCatalogForm(form) {
 
         const name = String(values.get("name") || "").trim().replace(/\s+/g, " ").slice(0, 80);
         if (!name) throw new Error("Enter a cosmetic name.");
-        const shopEnabled = values.get("shopEnabled") === "on";
+        const acquisitionType = String(values.get("acquisitionType") || editing?.acquisitionType || "exclusive").trim();
+        if (!COSMETIC_ACQUISITION_VALUES.has(acquisitionType)) throw new Error("Choose how this cosmetic is earned.");
+        if (!state.store.catalogProgressionReady && acquisitionType !== (editing?.acquisitionType || "exclusive")) {
+            throw new Error("Run the current Supabase progression setup before changing unlock behavior.");
+        }
+        const shopEnabled = acquisitionType === "store";
         const priceNumber = Number(values.get("shopPrice"));
         const unitAmount = shopEnabled ? Math.round(priceNumber * 100) : 0;
         if (shopEnabled && (!Number.isFinite(unitAmount) || unitAmount < 1)) throw new Error("Enter a shop preview price above zero.");
@@ -3414,6 +3952,17 @@ async function submitCatalogForm(form) {
 
         if (status) status.textContent = "Saving cosmetic...";
 
+        const availableFrom = catalogOptionalIsoDate(values.get("availableFrom"));
+        const availableUntil = catalogOptionalIsoDate(values.get("availableUntil"));
+        if (availableFrom && availableUntil && Date.parse(availableUntil) <= Date.parse(availableFrom)) {
+            throw new Error("Available until must be later than available from.");
+        }
+        const supplyInput = String(values.get("supplyLimit") || "").trim();
+        const supplyLimit = supplyInput ? Number(supplyInput) : null;
+        if (supplyLimit !== null && (!Number.isInteger(supplyLimit) || supplyLimit < 1 || supplyLimit > 100_000_000)) {
+            throw new Error("Supply limit must be a whole number above zero, or left empty.");
+        }
+
         const now = new Date().toISOString();
         const payload = {
             cosmetic_type: type,
@@ -3434,6 +3983,14 @@ async function submitCatalogForm(form) {
             created_by: state.authSession.user.id,
             updated_at: now
         };
+        if (state.store.catalogProgressionReady) {
+            Object.assign(payload, {
+                acquisition_type: acquisitionType,
+                available_from: availableFrom,
+                available_until: availableUntil,
+                supply_limit: supplyLimit
+            });
+        }
 
         const result = await state.authClient
             .from(COSMETIC_CATALOG_TABLE)
@@ -9109,6 +9666,7 @@ function cleanProfileIcon(value, account = null, badgeState = null) {
 
 function profileIconUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "custom") return Boolean(account?.custom_avatar_url);
+    if (profileCosmeticInventoryHas(account, "icon", id)) return true;
     if (arrayField(account?.unlocked_icons).includes(id)) return true;
     const option = cosmeticCatalogItem("icon", id);
     if (!option) return false;
@@ -9119,6 +9677,7 @@ function profileIconUnlocked(id, account, badgeState = accountBadgeState(account
 function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "default") return true;
     if (id === "custom") return Boolean(account?.custom_background_url);
+    if (profileCosmeticInventoryHas(account, "background", id)) return true;
     if (arrayField(account?.unlocked_backgrounds).includes(id)) return true;
     const option = cosmeticCatalogItem("background", id);
     if (!option) return false;
@@ -9128,6 +9687,7 @@ function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(a
 
 function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "none") return true;
+    if (profileCosmeticInventoryHas(account, "border", id)) return true;
     if (arrayField(account?.unlocked_pfp_borders).includes(id)) return true;
     const option = cosmeticCatalogItem("border", id);
     if (!option) return false;
@@ -9137,11 +9697,17 @@ function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, 
 
 function profileTitleUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "none") return true;
+    if (profileCosmeticInventoryHas(account, "title", id)) return true;
     if (arrayField(account?.unlocked_titles).includes(id)) return true;
     const option = cosmeticCatalogItem("title", id);
     if (!option) return false;
     if (!option.unlock || option.unlock === "default") return true;
     return badgeState.unlockedIds?.has(option.unlock) || false;
+}
+
+function profileCosmeticInventoryHas(account, type, id) {
+    return Array.isArray(account?.cosmetic_inventory)
+        && account.cosmetic_inventory.some((item) => item?.type === type && item?.id === id);
 }
 
 function cleanProfileBackground(value, account = null, badgeState = null) {

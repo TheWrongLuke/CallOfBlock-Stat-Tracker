@@ -116,7 +116,7 @@ export function createFeedbackApi(client) {
         async listAdmins() {
             return client
                 .from("profiles")
-                .select("id, username, display_name, avatar_url, discord_id, minecraft_player_name")
+                .select("id, username, display_name, avatar_url")
                 .eq("is_admin", true)
                 .order("username", { ascending: true });
         },
@@ -124,9 +124,7 @@ export function createFeedbackApi(client) {
         async getReporter(userId) {
             return client
                 .from("profiles")
-                .select(
-                    "id, username, display_name, avatar_url, discord_id, minecraft_player_name, minecraft_player_id, minecraft_player_uuid, created_at"
-                )
+                .select("id, username, display_name, avatar_url, minecraft_player_name, created_at")
                 .eq("id", userId)
                 .maybeSingle();
         },

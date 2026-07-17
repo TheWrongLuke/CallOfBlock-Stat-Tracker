@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { renderFeedbackContent, renderTicketDetailContent } from "../../src/views/feedback.js";
+import {
+    renderAdminTicketsContent,
+    renderFeedbackContent,
+    renderTicketDetailContent
+} from "../../src/views/feedback.js";
 
 const ticket = {
     id: "123e4567-e89b-42d3-a456-426614174000",
@@ -36,6 +40,23 @@ describe("feedback views", () => {
             error: ""
         });
         expect(html).toContain("Login with Discord");
+    });
+
+    it("renders local draft status and discard controls for a signed-in reporter", () => {
+        const html = renderFeedbackContent({
+            authConfigured: true,
+            authReady: true,
+            loggedIn: true,
+            loading: false,
+            tickets: [],
+            statusFilter: "all",
+            categoryFilter: "all",
+            message: "",
+            error: ""
+        });
+        expect(html).toContain("data-feedback-draft-status");
+        expect(html).toContain("data-feedback-draft-attachment");
+        expect(html).toContain("data-feedback-draft-discard");
     });
 
     it("escapes submitted content and rejects unsafe media links", () => {
@@ -106,5 +127,57 @@ describe("feedback views", () => {
         expect(html).toContain("Attached screenshot evidence");
         expect(html).toContain("token=test");
         expect(html).not.toContain(privateTicket.external_media_url);
+    });
+
+    it("uses Discord usernames instead of numeric Discord IDs in admin identity details", () => {
+        const html = renderTicketDetailContent({
+            authConfigured: true,
+            authReady: true,
+            loggedIn: true,
+            admin: true,
+            loading: false,
+            ticket,
+            messages: [],
+            history: [],
+            reporter: {
+                id: "user-1",
+                username: "reporter_name",
+                display_name: "Reporter",
+                discord_id: "123456789012345678",
+                minecraft_player_name: "ReporterMC",
+                created_at: "2026-07-01T12:00:00Z"
+            },
+            admins: [],
+            accountId: "admin-1",
+            error: "",
+            message: "",
+            authorNames: new Map()
+        });
+
+        expect(html).toContain("Discord username");
+        expect(html).toContain("@reporter_name");
+        expect(html).not.toContain("123456789012345678");
+        expect(html).not.toContain("Discord ID");
+    });
+
+    it("renders the remembered closed-ticket filter", () => {
+        const html = renderAdminTicketsContent({
+            loading: false,
+            tickets: [],
+            filters: {
+                search: "",
+                category: "all",
+                status: "all",
+                severity: "all",
+                sort: "updated",
+                hideClosed: true
+            },
+            counts: { open: 0, needInfo: 0, confirmed: 0, planned: 0, resolved: 0, highPriority: 0 },
+            error: ""
+        });
+
+        expect(html).toContain("data-admin-ticket-hide-closed");
+        expect(html).toContain("Hide closed tickets");
+        expect(html).toMatch(/data-admin-ticket-hide-closed checked/);
     });
 });
