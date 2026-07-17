@@ -1,12 +1,21 @@
-.env
-.env.*
-!.env.example
-!discord-bot/.env.example
+# Never publish local configuration, SQL, or operational documentation.
+.env*
+*.sql
+*.md
+!/README.md
+private/
+secrets/
+credentials/
+database/
+supabase/
+
+# Generated development output.
 .vs/
 node_modules/
+dist/
+coverage/
+test-results/
+playwright-report/
 .bot-state.json
 discord-bot/.bot-state.json
 discord-bot/logs/
-supabase/
-assets/README.md
-assets/**/README.md

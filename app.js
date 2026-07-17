@@ -1,3 +1,23 @@
+import { createFeedbackApi } from "./src/api/feedback.js";
+import { isAdminProfile } from "./src/auth/permissions.js";
+import {
+    TICKET_SUBMIT_COOLDOWN_MS,
+    USER_CLOSABLE_TICKET_STATUSES,
+    USER_REOPENABLE_TICKET_STATUSES,
+    ticketCategoryLabel,
+    ticketContextLabel,
+    ticketSeverityLabel,
+    ticketSeverityRank,
+    ticketStatusLabel
+} from "./src/config/feedback.js";
+import { validateReplyInput, validateTicketInput } from "./src/utils/feedback-validation.js";
+import {
+    renderAdminDocumentationContent,
+    renderAdminTicketsContent,
+    renderFeedbackContent,
+    renderTicketDetailContent
+} from "./src/views/feedback.js";
+
 const MODE_LABELS = {
     overall: "Overall",
     battleRoyale: "Battle Royale",
@@ -298,6 +318,39 @@ const state = {
         checkoutHandled: false,
         checkoutFinalizing: false
     },
+    feedback: {
+        api: null,
+        tickets: [],
+        ticketsLoaded: false,
+        ticketsLoading: false,
+        adminTickets: [],
+        adminTicketsLoaded: false,
+        adminTicketsLoading: false,
+        selectedTicket: null,
+        selectedTicketId: "",
+        detailLoadedId: "",
+        detailLoading: false,
+        messages: [],
+        history: [],
+        reporter: null,
+        admins: [],
+        adminMetadataLoaded: false,
+        documentation: [],
+        documentationLoaded: false,
+        documentationLoading: false,
+        submitting: false,
+        replying: false,
+        updating: false,
+        cooldownUntil: 0,
+        message: "",
+        error: "",
+        formErrors: {},
+        statusFilter: "all",
+        categoryFilter: "all",
+        severityFilter: "all",
+        search: "",
+        sort: "updated"
+    },
     weeklyMissions: {
         loading: false,
         syncing: false,
@@ -336,6 +389,7 @@ const state = {
 };
 let activeBadgeProgressHost = null;
 let badgeTooltipFrame = 0;
+let adminTicketSearchTimer = 0;
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
@@ -383,12 +437,13 @@ function setupAuthClient() {
             }
         }
     });
+    state.feedback.api = createFeedbackApi(state.authClient);
 }
 
 async function initAuth() {
     if (!state.authClient) {
         state.authReady = true;
-        enforcePrivateStoreRoute();
+        enforceProtectedAdminRoute();
         render();
         return;
     }
@@ -407,7 +462,8 @@ async function initAuth() {
         state.authReady = true;
         state.authMessage = "Discord login is unavailable right now.";
         resetPlaytestViewer();
-        enforcePrivateStoreRoute();
+        resetFeedbackSessionState();
+        enforceProtectedAdminRoute();
         render();
     }
 }
@@ -422,11 +478,12 @@ async function applyAuthSession(session, shouldRender = false) {
         state.accountPanelOpen = false;
         resetWeeklyMissionState();
         resetStoreSessionState({ resetCatalog: true });
+        resetFeedbackSessionState();
         resetPlaytestViewer();
         await loadCosmeticCatalog({ force: true });
         await loadAccountProfiles();
         await loadRemotePlaytests({ silent: true });
-        enforcePrivateStoreRoute();
+        enforceProtectedAdminRoute();
         if (shouldRender) render();
         return;
     }
@@ -437,9 +494,10 @@ async function applyAuthSession(session, shouldRender = false) {
     await loadAccountProfiles();
     await loadRemotePlaytests({ silent: true });
     await syncWeeklyMissions();
+    resetFeedbackSessionState();
     consumeAuthReturn();
     resetStoreSessionState();
-    enforcePrivateStoreRoute();
+    enforceProtectedAdminRoute();
     if (state.view === "store" && isPlaytestAdmin()) await loadStoreData();
     if (shouldRender) render();
 }
@@ -452,7 +510,7 @@ async function signInWithDiscord() {
     }
 
     state.authMessage = "";
-    if (state.view === "playtests" || state.view === "store") rememberAuthReturn(state.view);
+    if (["playtests", "store", "feedback", "ticket"].includes(state.view)) rememberAuthReturn();
     const { error } = await state.authClient.auth.signInWithOAuth({
         provider: "discord",
         options: {
@@ -482,11 +540,12 @@ async function signOutDiscord() {
     state.authMessage = "";
     resetWeeklyMissionState();
     resetStoreSessionState({ resetCatalog: true });
+    resetFeedbackSessionState();
     resetPlaytestViewer();
     await loadCosmeticCatalog({ force: true });
     await loadAccountProfiles();
     await loadRemotePlaytests({ silent: true });
-    enforcePrivateStoreRoute();
+    enforceProtectedAdminRoute();
     render();
 }
 
@@ -504,10 +563,12 @@ function playtestAuthRedirectUrl() {
     return url.toString();
 }
 
-function rememberAuthReturn(view) {
-    if (view !== "playtests" && view !== "store") return;
+function rememberAuthReturn() {
+    const route = window.location.hash.replace(/^#/, "");
+    const allowed = new Set(["playtests", "store", "feedback"]);
+    if (!allowed.has(route) && !/^ticket=[0-9a-f-]{36}$/i.test(route)) return;
     try {
-        window.localStorage?.setItem(PLAYTEST_AUTH_RETURN_KEY, view);
+        window.localStorage?.setItem(PLAYTEST_AUTH_RETURN_KEY, route);
     } catch (_error) {
         // Returning to the public root is still valid if storage is unavailable.
     }
@@ -515,15 +576,12 @@ function rememberAuthReturn(view) {
 
 function consumeAuthReturn() {
     try {
-        const view = window.localStorage?.getItem(PLAYTEST_AUTH_RETURN_KEY);
-        if (view !== "playtests" && view !== "store") return;
+        const route = window.localStorage?.getItem(PLAYTEST_AUTH_RETURN_KEY) || "";
+        const allowed = new Set(["playtests", "store", "feedback"]);
+        if (!allowed.has(route) && !/^ticket=[0-9a-f-]{36}$/i.test(route)) return;
         window.localStorage.removeItem(PLAYTEST_AUTH_RETURN_KEY);
-        state.view = view;
-        state.selectedId = null;
-        state.profilePreviewOpen = false;
-        if (window.location.hash.replace(/^#/, "") !== view) {
-            window.location.hash = view;
-        }
+        if (window.location.hash.replace(/^#/, "") !== route) window.location.hash = route;
+        applyRoute();
     } catch (_error) {
         // Ignore storage issues; the user can still open the playtest view normally.
     }
@@ -531,6 +589,59 @@ function consumeAuthReturn() {
 
 function bindStaticEvents() {
     document.addEventListener("click", (event) => {
+        const feedbackRetry = event.target.closest("[data-feedback-retry]");
+        if (feedbackRetry) {
+            event.preventDefault();
+            state.feedback.ticketsLoaded = false;
+            void loadOwnFeedbackTickets({ force: true });
+            return;
+        }
+
+        const ticketRetry = event.target.closest("[data-ticket-retry]");
+        if (ticketRetry) {
+            event.preventDefault();
+            state.feedback.detailLoadedId = "";
+            void loadFeedbackTicketDetail(state.feedback.selectedTicketId, { force: true });
+            return;
+        }
+
+        const adminTicketsRetry = event.target.closest("[data-admin-tickets-retry]");
+        if (adminTicketsRetry) {
+            event.preventDefault();
+            state.feedback.adminTicketsLoaded = false;
+            void loadAdminFeedbackTickets({ force: true });
+            return;
+        }
+
+        const adminDocsRetry = event.target.closest("[data-admin-docs-retry]");
+        if (adminDocsRetry) {
+            event.preventDefault();
+            state.feedback.documentationLoaded = false;
+            void loadAdminDocumentation({ force: true });
+            return;
+        }
+
+        const ticketStatus = event.target.closest("[data-ticket-user-status]");
+        if (ticketStatus) {
+            event.preventDefault();
+            void updateUserTicketStatus(ticketStatus.dataset.ticketUserStatus || "");
+            return;
+        }
+
+        const copyTicketId = event.target.closest("[data-ticket-copy-id]");
+        if (copyTicketId) {
+            event.preventDefault();
+            void copyTicketText(copyTicketId.dataset.ticketCopyId || "", "Ticket ID copied.");
+            return;
+        }
+
+        const copyTicketSummary = event.target.closest("[data-ticket-copy-summary]");
+        if (copyTicketSummary) {
+            event.preventDefault();
+            void copyTicketText(ticketSummaryText(state.feedback.selectedTicket), "Ticket summary copied.");
+            return;
+        }
+
         const storePurchaseClose = event.target.closest("[data-store-purchase-close]");
         if (storePurchaseClose || event.target.matches("[data-store-purchase-backdrop]")) {
             event.preventDefault();
@@ -707,6 +818,24 @@ function bindStaticEvents() {
     });
 
     document.addEventListener("submit", (event) => {
+        if (event.target.matches("[data-feedback-create]")) {
+            event.preventDefault();
+            void submitFeedbackTicket(event.target);
+            return;
+        }
+
+        if (event.target.matches("[data-ticket-reply]")) {
+            event.preventDefault();
+            void submitTicketReply(event.target);
+            return;
+        }
+
+        if (event.target.matches("[data-admin-ticket-update]")) {
+            event.preventDefault();
+            void submitAdminTicketUpdate(event.target);
+            return;
+        }
+
         if (event.target.matches("[data-account-form]")) {
             event.preventDefault();
             void submitAccountForm(event.target);
@@ -737,6 +866,24 @@ function bindStaticEvents() {
     });
 
     document.addEventListener("change", (event) => {
+        if (event.target.matches("[data-feedback-filter]")) {
+            const filter = event.target.dataset.feedbackFilter;
+            if (filter === "status") state.feedback.statusFilter = event.target.value;
+            if (filter === "category") state.feedback.categoryFilter = event.target.value;
+            renderFeedbackPage();
+            return;
+        }
+
+        if (event.target.matches("[data-admin-ticket-filter]")) {
+            const filter = event.target.dataset.adminTicketFilter;
+            if (filter === "status") state.feedback.statusFilter = event.target.value;
+            if (filter === "category") state.feedback.categoryFilter = event.target.value;
+            if (filter === "severity") state.feedback.severityFilter = event.target.value;
+            if (filter === "sort") state.feedback.sort = event.target.value;
+            renderAdminTicketsPage();
+            return;
+        }
+
         const accountForm = event.target.closest("[data-account-form]");
         if (accountForm && event.target.matches("[name='avatarSource'], [name='profileBackground'], [name='pfpBorder'], [name='profileTitle']")) {
             updateAccountCustomizePreview(accountForm);
@@ -763,6 +910,21 @@ function bindStaticEvents() {
     });
 
     document.addEventListener("input", (event) => {
+        if (event.target.matches("[data-admin-ticket-filter='search']")) {
+            state.feedback.search = event.target.value.slice(0, 200);
+            window.clearTimeout(adminTicketSearchTimer);
+            const caret = event.target.selectionStart;
+            adminTicketSearchTimer = window.setTimeout(() => {
+                renderAdminTicketsPage();
+                window.requestAnimationFrame(() => {
+                    const input = document.querySelector("[data-admin-ticket-filter='search']");
+                    input?.focus();
+                    if (Number.isInteger(caret)) input?.setSelectionRange(caret, caret);
+                });
+            }, 160);
+            return;
+        }
+
         const accountForm = event.target.closest("[data-account-form]");
         if (accountForm && event.target.matches("[name='displayName']")) {
             updateAccountCustomizePreview(accountForm);
@@ -783,6 +945,12 @@ function bindStaticEvents() {
     });
 
     document.addEventListener("mouseover", handleBadgeSeenEvent);
+    document.addEventListener("error", (event) => {
+        const image = event.target;
+        if (image instanceof HTMLImageElement && image.hasAttribute("data-avatar-fallbacks")) {
+            handleAvatarFallback(image);
+        }
+    }, true);
     document.addEventListener("focusin", handleBadgeSeenEvent);
     document.addEventListener("mouseover", handleBadgeProgressEnter);
     document.addEventListener("mouseout", handleBadgeProgressLeave);
@@ -923,8 +1091,35 @@ function applyRoute() {
         state.pendingScrollTarget = "help";
         return;
     }
+    if (route === "how-to-play" || route === "faq") {
+        state.view = "home";
+        state.pendingScrollTarget = route;
+        return;
+    }
     if (route === "admin-help") {
+        if (state.authReady && !isPlaytestAdmin()) {
+            state.view = "home";
+            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            return;
+        }
         state.view = "adminHelp";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        return;
+    }
+    if (route === "feedback") {
+        state.view = "feedback";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        return;
+    }
+    if (route === "admin-tickets") {
+        if (state.authReady && !isPlaytestAdmin()) {
+            state.view = "feedback";
+            window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#feedback`);
+            return;
+        }
+        state.view = "adminTickets";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
@@ -960,6 +1155,11 @@ function applyRoute() {
         return;
     }
     if (route === "community-dates") {
+        if (state.authReady && !isPlaytestAdmin()) {
+            state.view = "playtests";
+            window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#playtests`);
+            return;
+        }
         state.view = "communityAdmin";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -977,6 +1177,15 @@ function applyRoute() {
         const sort = params.get("sort");
         if (SORT_LABELS[sort]) state.sort = sort;
         state.page = 1;
+        return;
+    }
+
+    const ticketId = params.get("ticket");
+    if (ticketId) {
+        state.view = "ticket";
+        state.feedback.selectedTicketId = ticketId;
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
         return;
     }
 
@@ -1012,13 +1221,26 @@ function setRouteHash(hash) {
     return true;
 }
 
-function enforcePrivateStoreRoute() {
-    if (state.view !== "store" || !state.authReady || isPlaytestAdmin()) return;
-    state.view = "home";
+function enforceProtectedAdminRoute() {
+    if (!state.authReady || isPlaytestAdmin()) return;
+    const protectedView = state.view;
+    if (!["store", "adminHelp", "adminTickets", "communityAdmin"].includes(protectedView)) return;
+
+    let hash = "";
+    if (protectedView === "adminTickets") {
+        state.view = "feedback";
+        hash = "#feedback";
+    } else if (protectedView === "communityAdmin") {
+        state.view = "playtests";
+        hash = "#playtests";
+    } else {
+        state.view = "home";
+    }
+
     state.store.pendingPurchase = null;
     state.store.checkoutStatus = "";
     state.store.checkoutSessionId = "";
-    window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}${hash}`);
 }
 
 function routeTo(route) {
@@ -1036,11 +1258,44 @@ function routeTo(route) {
         if (!setRouteHash("help")) render();
         return;
     }
+    if (route === "how-to-play" || route === "faq") {
+        state.view = "home";
+        state.pendingScrollTarget = route;
+        if (!setRouteHash(route)) render();
+        return;
+    }
     if (route === "admin-help") {
+        if (!isPlaytestAdmin()) {
+            state.view = "home";
+            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            render();
+            return;
+        }
         state.view = "adminHelp";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         if (!setRouteHash("admin-help")) render();
+        return;
+    }
+    if (route === "feedback") {
+        state.view = "feedback";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        if (!setRouteHash("feedback")) render();
+        return;
+    }
+    if (route === "admin-tickets") {
+        if (!isPlaytestAdmin()) {
+            state.view = "feedback";
+            state.selectedId = null;
+            state.profilePreviewOpen = false;
+            if (!setRouteHash("feedback")) render();
+            return;
+        }
+        state.view = "adminTickets";
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
+        if (!setRouteHash("admin-tickets")) render();
         return;
     }
     if (route === "playtests") {
@@ -1731,6 +1986,7 @@ function emptyAccountProfileIndex() {
     return {
         ready: false,
         candidates: [],
+        byId: new Map(),
         byPlayerId: new Map(),
         byName: new Map()
     };
@@ -1745,6 +2001,7 @@ function rebuildAccountProfileIndex() {
         if (!account?.id || seen.has(account.id)) continue;
         seen.add(account.id);
         index.candidates.push(account);
+        index.byId.set(account.id, account);
 
         for (const id of [account.minecraft_player_id, account.minecraft_player_uuid]) {
             const key = String(id || "").trim();
@@ -1805,6 +2062,18 @@ function render() {
         case "communityAdmin":
             renderCommunityAdminPage();
             break;
+        case "feedback":
+            renderFeedbackPage();
+            break;
+        case "ticket":
+            renderTicketDetailPage();
+            break;
+        case "adminTickets":
+            renderAdminTicketsPage();
+            break;
+        case "adminHelp":
+            renderAdminDocumentationPage();
+            break;
         case "account":
             renderAccountPage();
             break;
@@ -1837,6 +2106,9 @@ function renderRoute() {
     document.getElementById("home-view").classList.toggle("hidden", state.view !== "home");
     document.getElementById("admin-help-view").classList.toggle("hidden", state.view !== "adminHelp");
     document.getElementById("playtests-view").classList.toggle("hidden", state.view !== "playtests");
+    document.getElementById("feedback-view").classList.toggle("hidden", state.view !== "feedback");
+    document.getElementById("ticket-view").classList.toggle("hidden", state.view !== "ticket");
+    document.getElementById("admin-tickets-view").classList.toggle("hidden", state.view !== "adminTickets");
     document.getElementById("community-admin-view").classList.toggle("hidden", state.view !== "communityAdmin");
     document.getElementById("account-view").classList.toggle("hidden", state.view !== "account");
     document.getElementById("store-view").classList.toggle("hidden", state.view !== "store");
@@ -1973,9 +2245,14 @@ function renderAccountSidePanel() {
                         ${renderAccountLevelPill(account)}
                     </div>
                 </div>
-                <div class="profile-drawer-actions ${isPlaytestAdmin() ? "" : "single"}">
+                <div class="profile-drawer-actions ${isPlaytestAdmin() ? "admin" : ""}">
                     <button class="profile-drawer-customize" type="button" data-route="account">Customize profile</button>
-                    ${isPlaytestAdmin() ? `<button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>` : ""}
+                    <button class="profile-drawer-support" type="button" data-route="feedback">Feedback &amp; support</button>
+                    ${isPlaytestAdmin() ? `
+                        <button class="profile-drawer-tickets" type="button" data-route="admin-tickets">Ticket dashboard</button>
+                        <button class="profile-drawer-docs" type="button" data-route="admin-help">Admin documentation</button>
+                        <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
+                    ` : ""}
                 </div>
                 ${renderWeeklyMissions(profile)}
             </aside>
@@ -2009,7 +2286,7 @@ function renderAccountPage() {
         ? ""
         : `<p class="account-warning">Run the updated Supabase schema to unlock profile customization and Minecraft linking on the website.</p>`;
     const cosmeticSchemaNote = state.authProfileExtended && !state.authCosmeticInventoryExtended
-        ? `<p class="account-warning">Run <code>supabase/cosmetic-titles.sql</code> in Supabase to enable equipable titles and future icon inventories. Existing customization remains available.</p>`
+        ? `<p class="account-warning">Additional cosmetic inventory fields are not configured yet. Existing customization remains available.</p>`
         : "";
 
     body.innerHTML = `
@@ -2066,6 +2343,557 @@ function resetStoreSessionState({ resetCatalog = false } = {}) {
     }
 }
 
+function resetFeedbackSessionState() {
+    const feedback = state.feedback;
+    feedback.tickets = [];
+    feedback.ticketsLoaded = false;
+    feedback.ticketsLoading = false;
+    feedback.adminTickets = [];
+    feedback.adminTicketsLoaded = false;
+    feedback.adminTicketsLoading = false;
+    feedback.selectedTicket = null;
+    feedback.selectedTicketId = state.view === "ticket"
+        ? new URLSearchParams(window.location.hash.replace(/^#/, "")).get("ticket") || ""
+        : "";
+    feedback.detailLoading = false;
+    feedback.detailLoadedId = "";
+    feedback.messages = [];
+    feedback.history = [];
+    feedback.reporter = null;
+    feedback.admins = [];
+    feedback.adminMetadataLoaded = false;
+    feedback.documentation = [];
+    feedback.documentationLoaded = false;
+    feedback.documentationLoading = false;
+    feedback.submitting = false;
+    feedback.replying = false;
+    feedback.updating = false;
+    feedback.cooldownUntil = 0;
+    feedback.message = "";
+    feedback.error = "";
+    feedback.formErrors = {};
+}
+
+function renderFeedbackPage() {
+    const body = document.getElementById("feedback-body");
+    if (!body) return;
+    const loggedIn = isDiscordLoggedIn();
+    if (loggedIn && !state.feedback.ticketsLoaded && !state.feedback.ticketsLoading) {
+        void loadOwnFeedbackTickets();
+    }
+    body.innerHTML = renderFeedbackContent({
+        authConfigured: Boolean(state.feedback.api),
+        authReady: state.authReady,
+        loggedIn,
+        loading: state.feedback.ticketsLoading,
+        tickets: state.feedback.tickets,
+        statusFilter: state.feedback.statusFilter,
+        categoryFilter: state.feedback.categoryFilter,
+        message: state.feedback.message,
+        error: state.feedback.error
+    });
+}
+
+async function loadOwnFeedbackTickets({ force = false } = {}) {
+    const feedback = state.feedback;
+    const userId = state.authSession?.user?.id;
+    if (!feedback.api || !userId || feedback.ticketsLoading || (feedback.ticketsLoaded && !force)) return;
+    feedback.ticketsLoading = true;
+    feedback.error = "";
+    if (state.view === "feedback") renderFeedbackPage();
+    try {
+        const result = await feedback.api.listOwnTickets(userId);
+        if (result.error) throw result.error;
+        feedback.tickets = Array.isArray(result.data) ? result.data : [];
+        feedback.ticketsLoaded = true;
+    } catch (error) {
+        console.error("Could not load feedback tickets", error);
+        feedback.error = feedbackErrorMessage(error, "Could not load your tickets.");
+        feedback.ticketsLoaded = true;
+    } finally {
+        feedback.ticketsLoading = false;
+        if (state.view === "feedback") renderFeedbackPage();
+    }
+}
+
+async function submitFeedbackTicket(form) {
+    const feedback = state.feedback;
+    const userId = state.authSession?.user?.id;
+    if (!feedback.api || !userId || feedback.submitting) return;
+    const status = form.querySelector("[data-feedback-form-status]");
+    const submit = form.querySelector("button[type='submit']");
+    clearFeedbackFieldErrors(form);
+
+    if (Date.now() < feedback.cooldownUntil) {
+        const seconds = Math.max(1, Math.ceil((feedback.cooldownUntil - Date.now()) / 1000));
+        if (status) status.textContent = `Please wait ${seconds} seconds before submitting another ticket.`;
+        return;
+    }
+
+    const values = new FormData(form);
+    const validation = validateTicketInput(Object.fromEntries(values.entries()));
+    if (!validation.valid) {
+        applyFeedbackFieldErrors(form, validation.errors);
+        if (status) status.textContent = "Check the highlighted fields.";
+        focusFirstFeedbackError(form, validation.errors);
+        return;
+    }
+
+    feedback.submitting = true;
+    if (submit) {
+        submit.disabled = true;
+        submit.textContent = "Submitting...";
+    }
+    if (status) status.textContent = "Creating ticket...";
+    try {
+        const result = await feedback.api.createTicket(validation.value, userId);
+        if (result.error) throw result.error;
+        feedback.cooldownUntil = Date.now() + TICKET_SUBMIT_COOLDOWN_MS;
+        feedback.tickets = [result.data, ...feedback.tickets.filter((ticket) => ticket.id !== result.data.id)];
+        feedback.ticketsLoaded = true;
+        feedback.message = "Ticket submitted.";
+        feedback.error = "";
+        form.reset();
+        window.location.hash = `ticket=${encodeURIComponent(result.data.id)}`;
+    } catch (error) {
+        console.error("Could not create feedback ticket", error);
+        if (status) status.textContent = feedbackErrorMessage(error, "Could not submit the ticket.");
+    } finally {
+        feedback.submitting = false;
+        if (submit) {
+            submit.disabled = false;
+            submit.textContent = "Submit ticket";
+        }
+    }
+}
+
+function clearFeedbackFieldErrors(form) {
+    form.querySelectorAll("[data-feedback-field-error]").forEach((element) => {
+        element.textContent = "";
+    });
+    form.querySelectorAll("[aria-invalid='true']").forEach((element) => element.removeAttribute("aria-invalid"));
+}
+
+function applyFeedbackFieldErrors(form, errors) {
+    for (const [name, message] of Object.entries(errors)) {
+        const field = form.elements.namedItem(name);
+        if (field instanceof HTMLElement) field.setAttribute("aria-invalid", "true");
+        const error = form.querySelector(`[data-feedback-field-error='${CSS.escape(name)}']`);
+        if (error) error.textContent = message;
+    }
+}
+
+function focusFirstFeedbackError(form, errors) {
+    const firstName = Object.keys(errors)[0];
+    const field = firstName ? form.elements.namedItem(firstName) : null;
+    if (field instanceof HTMLElement) field.focus();
+}
+
+function renderTicketDetailPage() {
+    const body = document.getElementById("ticket-detail-body");
+    if (!body) return;
+    const feedback = state.feedback;
+    const ticketId = feedback.selectedTicketId;
+    const loggedIn = isDiscordLoggedIn();
+    if (loggedIn && isFeedbackTicketId(ticketId) && feedback.detailLoadedId !== ticketId && !feedback.detailLoading) {
+        void loadFeedbackTicketDetail(ticketId);
+    }
+    const authorNames = feedbackAuthorNames();
+    body.innerHTML = renderTicketDetailContent({
+        authConfigured: Boolean(feedback.api),
+        authReady: state.authReady,
+        loggedIn,
+        admin: isPlaytestAdmin(),
+        loading: feedback.detailLoading || (loggedIn && feedback.detailLoadedId !== ticketId),
+        ticket: feedback.selectedTicket,
+        messages: feedback.messages,
+        history: feedback.history,
+        reporter: feedback.reporter,
+        admins: feedback.admins,
+        accountId: state.authSession?.user?.id || "",
+        error: !isFeedbackTicketId(ticketId) ? "Invalid ticket ID." : feedback.error,
+        message: feedback.message,
+        authorNames
+    });
+}
+
+async function loadFeedbackTicketDetail(ticketId, { force = false } = {}) {
+    const feedback = state.feedback;
+    if (!feedback.api || !state.authSession?.user || feedback.detailLoading) return;
+    if (!force && feedback.detailLoadedId === ticketId) return;
+    if (!isFeedbackTicketId(ticketId)) {
+        feedback.error = "Invalid ticket ID.";
+        feedback.detailLoadedId = ticketId;
+        renderTicketDetailPage();
+        return;
+    }
+
+    feedback.detailLoading = true;
+    feedback.error = "";
+    if (feedback.detailLoadedId !== ticketId) feedback.message = "";
+    feedback.selectedTicket = null;
+    feedback.messages = [];
+    feedback.history = [];
+    feedback.reporter = null;
+    if (state.view === "ticket") renderTicketDetailPage();
+    try {
+        const ticketResult = await feedback.api.getTicket(ticketId);
+        if (ticketResult.error) throw ticketResult.error;
+        feedback.selectedTicket = ticketResult.data || null;
+        if (!feedback.selectedTicket) {
+            feedback.detailLoadedId = ticketId;
+            return;
+        }
+
+        const messagesResult = await feedback.api.listMessages(ticketId);
+        if (messagesResult.error) throw messagesResult.error;
+        feedback.messages = Array.isArray(messagesResult.data) ? messagesResult.data : [];
+
+        if (isPlaytestAdmin()) {
+            const [historyResult, reporterResult, adminsResult] = await Promise.all([
+                feedback.api.listHistory(ticketId),
+                feedback.api.getReporter(feedback.selectedTicket.created_by),
+                feedback.adminMetadataLoaded ? Promise.resolve({ data: feedback.admins, error: null }) : feedback.api.listAdmins()
+            ]);
+            if (historyResult.error) throw historyResult.error;
+            feedback.history = Array.isArray(historyResult.data) ? historyResult.data : [];
+            if (reporterResult.error) console.warn("Could not load ticket reporter", reporterResult.error);
+            else feedback.reporter = reporterResult.data || null;
+            if (adminsResult.error) console.warn("Could not load ticket administrators", adminsResult.error);
+            else {
+                feedback.admins = Array.isArray(adminsResult.data) ? adminsResult.data : [];
+                feedback.adminMetadataLoaded = true;
+            }
+        }
+        feedback.detailLoadedId = ticketId;
+    } catch (error) {
+        console.error("Could not load ticket detail", error);
+        feedback.error = feedbackErrorMessage(error, "Could not load this ticket.");
+        feedback.detailLoadedId = ticketId;
+    } finally {
+        feedback.detailLoading = false;
+        if (state.view === "ticket") renderTicketDetailPage();
+    }
+}
+
+async function submitTicketReply(form) {
+    const feedback = state.feedback;
+    const ticket = feedback.selectedTicket;
+    const userId = state.authSession?.user?.id;
+    if (!feedback.api || !ticket || !userId || feedback.replying) return;
+    const textarea = form.elements.namedItem("message");
+    const errorHost = form.querySelector("[data-ticket-reply-error]");
+    const status = form.querySelector("[data-ticket-reply-status]");
+    const submit = form.querySelector("button[type='submit']");
+    const validation = validateReplyInput(textarea?.value);
+    if (errorHost) errorHost.textContent = validation.error;
+    if (!validation.valid) {
+        textarea?.setAttribute("aria-invalid", "true");
+        textarea?.focus();
+        return;
+    }
+
+    feedback.replying = true;
+    textarea?.removeAttribute("aria-invalid");
+    if (submit) {
+        submit.disabled = true;
+        submit.textContent = "Sending...";
+    }
+    if (status) status.textContent = "Sending reply...";
+    try {
+        const privateNote = isPlaytestAdmin() && Boolean(form.elements.namedItem("privateNote")?.checked);
+        const result = await feedback.api.addMessage(ticket.id, userId, validation.value, {
+            staff: isPlaytestAdmin(),
+            privateNote
+        });
+        if (result.error) throw result.error;
+        feedback.messages.push(result.data);
+        feedback.message = privateNote ? "Private staff note added." : "Reply sent.";
+        feedback.adminTicketsLoaded = false;
+        form.reset();
+        await loadFeedbackTicketDetail(ticket.id, { force: true });
+    } catch (error) {
+        console.error("Could not add ticket reply", error);
+        if (status) status.textContent = feedbackErrorMessage(error, "Could not send the reply.");
+    } finally {
+        feedback.replying = false;
+        if (submit) {
+            submit.disabled = false;
+            submit.textContent = isPlaytestAdmin() ? "Add staff message" : "Send reply";
+        }
+    }
+}
+
+async function updateUserTicketStatus(status) {
+    const feedback = state.feedback;
+    const ticket = feedback.selectedTicket;
+    if (!feedback.api || !ticket || feedback.updating || isPlaytestAdmin()) return;
+    const allowed = status === "closed"
+        ? USER_CLOSABLE_TICKET_STATUSES.includes(ticket.status)
+        : status === "open" && USER_REOPENABLE_TICKET_STATUSES.includes(ticket.status);
+    if (!allowed) return;
+    if (status === "closed" && !window.confirm("Close this ticket? You can reopen it later.")) return;
+    feedback.updating = true;
+    try {
+        const result = await feedback.api.updateTicket(ticket.id, { status });
+        if (result.error) throw result.error;
+        feedback.selectedTicket = result.data;
+        feedback.message = status === "closed" ? "Ticket closed." : "Ticket reopened.";
+        feedback.ticketsLoaded = false;
+        feedback.detailLoadedId = ticket.id;
+    } catch (error) {
+        console.error("Could not change ticket status", error);
+        feedback.error = feedbackErrorMessage(error, "Could not update the ticket.");
+    } finally {
+        feedback.updating = false;
+        renderTicketDetailPage();
+    }
+}
+
+async function submitAdminTicketUpdate(form) {
+    const feedback = state.feedback;
+    const ticket = feedback.selectedTicket;
+    if (!feedback.api || !ticket || !isPlaytestAdmin() || feedback.updating) return;
+    const values = new FormData(form);
+    const statusValue = String(values.get("status") || "");
+    const severity = String(values.get("severity") || "");
+    const assignedAdmin = String(values.get("assignedAdmin") || "") || null;
+    const statusHost = form.querySelector("[data-admin-ticket-status]");
+    const submit = form.querySelector("button[type='submit']");
+    if (["closed", "rejected"].includes(statusValue) && statusValue !== ticket.status
+        && !window.confirm(`Change this ticket to ${ticketStatusLabel(statusValue)}?`)) return;
+
+    feedback.updating = true;
+    if (submit) {
+        submit.disabled = true;
+        submit.textContent = "Saving...";
+    }
+    if (statusHost) statusHost.textContent = "Saving admin changes...";
+    try {
+        const result = await feedback.api.updateTicket(ticket.id, { status: statusValue, severity, assignedAdmin });
+        if (result.error) throw result.error;
+        feedback.selectedTicket = result.data;
+        feedback.message = "Admin changes saved.";
+        feedback.adminTicketsLoaded = false;
+        feedback.detailLoadedId = "";
+        await loadFeedbackTicketDetail(ticket.id, { force: true });
+    } catch (error) {
+        console.error("Could not update ticket", error);
+        if (statusHost) statusHost.textContent = feedbackErrorMessage(error, "Could not save admin changes.");
+    } finally {
+        feedback.updating = false;
+        if (submit) {
+            submit.disabled = false;
+            submit.textContent = "Save admin changes";
+        }
+    }
+}
+
+function renderAdminTicketsPage() {
+    const body = document.getElementById("admin-tickets-body");
+    if (!body) return;
+    if (!state.authReady) {
+        body.innerHTML = renderAdminTicketsContent({ loading: true, tickets: [], filters: adminTicketFilters(), counts: emptyAdminTicketCounts(), error: "" });
+        return;
+    }
+    if (!isPlaytestAdmin()) {
+        enforceProtectedAdminRoute();
+        return;
+    }
+    if (!state.feedback.adminTicketsLoaded && !state.feedback.adminTicketsLoading) void loadAdminFeedbackTickets();
+    body.innerHTML = renderAdminTicketsContent({
+        loading: state.feedback.adminTicketsLoading,
+        tickets: filteredAdminFeedbackTickets(),
+        filters: adminTicketFilters(),
+        counts: adminTicketCounts(state.feedback.adminTickets),
+        error: state.feedback.error
+    });
+}
+
+async function loadAdminFeedbackTickets({ force = false } = {}) {
+    const feedback = state.feedback;
+    if (!feedback.api || !isPlaytestAdmin() || feedback.adminTicketsLoading || (feedback.adminTicketsLoaded && !force)) return;
+    feedback.adminTicketsLoading = true;
+    feedback.error = "";
+    if (state.view === "adminTickets") renderAdminTicketsPage();
+    try {
+        const result = await feedback.api.listAdminTickets();
+        if (result.error) throw result.error;
+        feedback.adminTickets = (Array.isArray(result.data) ? result.data : []).map((ticket) => ({
+            ...ticket,
+            reporterLabel: feedbackReporterLabel(ticket.created_by)
+        }));
+        feedback.adminTicketsLoaded = true;
+    } catch (error) {
+        console.error("Could not load admin tickets", error);
+        feedback.error = feedbackErrorMessage(error, "Could not load support tickets.");
+        feedback.adminTicketsLoaded = true;
+    } finally {
+        feedback.adminTicketsLoading = false;
+        if (state.view === "adminTickets") renderAdminTicketsPage();
+    }
+}
+
+function adminTicketFilters() {
+    return {
+        search: state.feedback.search,
+        category: state.feedback.categoryFilter,
+        status: state.feedback.statusFilter,
+        severity: state.feedback.severityFilter,
+        sort: state.feedback.sort
+    };
+}
+
+function filteredAdminFeedbackTickets() {
+    const feedback = state.feedback;
+    const query = feedback.search.trim().toLowerCase();
+    const rows = feedback.adminTickets.filter((ticket) => {
+        if (feedback.categoryFilter !== "all" && ticket.category !== feedback.categoryFilter) return false;
+        if (feedback.statusFilter !== "all" && ticket.status !== feedback.statusFilter) return false;
+        if (feedback.severityFilter !== "all" && ticket.severity !== feedback.severityFilter) return false;
+        if (!query) return true;
+        return [
+            ticket.id,
+            ticket.title,
+            ticket.reporterLabel,
+            ticket.map_name,
+            ticket.weapon_or_item,
+            ticket.match_id
+        ].some((value) => String(value || "").toLowerCase().includes(query));
+    });
+
+    return [...rows].sort((a, b) => {
+        if (feedback.sort === "oldest") return dateValue(a.created_at) - dateValue(b.created_at);
+        if (feedback.sort === "newest") return dateValue(b.created_at) - dateValue(a.created_at);
+        if (feedback.sort === "severity") {
+            const severity = ticketSeverityRank(b.severity) - ticketSeverityRank(a.severity);
+            return severity || dateValue(b.updated_at) - dateValue(a.updated_at);
+        }
+        return dateValue(b.updated_at) - dateValue(a.updated_at);
+    });
+}
+
+function adminTicketCounts(tickets) {
+    const finalStatuses = new Set(["resolved", "closed", "rejected"]);
+    return {
+        open: tickets.filter((ticket) => !finalStatuses.has(ticket.status)).length,
+        needInfo: tickets.filter((ticket) => ticket.status === "need_more_information").length,
+        confirmed: tickets.filter((ticket) => ticket.status === "confirmed").length,
+        planned: tickets.filter((ticket) => ticket.status === "planned").length,
+        resolved: tickets.filter((ticket) => ticket.status === "resolved").length,
+        highPriority: tickets.filter((ticket) => ["high", "critical"].includes(ticket.severity)).length
+    };
+}
+
+function emptyAdminTicketCounts() {
+    return { open: 0, needInfo: 0, confirmed: 0, planned: 0, resolved: 0, highPriority: 0 };
+}
+
+function feedbackReporterLabel(userId) {
+    const account = state.accountProfileIndex?.byId?.get(userId)
+        || state.accountProfiles.find((profile) => profile.id === userId)
+        || (state.authProfile?.id === userId ? state.authProfile : null);
+    return account ? accountDisplayName(account) : String(userId || "Unknown player").slice(0, 8);
+}
+
+function feedbackAuthorNames() {
+    const names = new Map();
+    if (state.authProfile?.id) names.set(state.authProfile.id, accountDisplayName(state.authProfile));
+    if (state.feedback.reporter?.id) {
+        names.set(state.feedback.reporter.id, state.feedback.reporter.display_name || state.feedback.reporter.username || "Reporter");
+    }
+    for (const admin of state.feedback.admins) {
+        names.set(admin.id, admin.display_name || admin.username || "Administrator");
+    }
+    return names;
+}
+
+function isFeedbackTicketId(value) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+function feedbackErrorMessage(error, fallback) {
+    const code = String(error?.code || "");
+    const message = String(error?.message || "");
+    if (["42P01", "PGRST205"].includes(code) || /feedback_(tickets|ticket_messages)/i.test(message) && /not find|does not exist/i.test(message)) {
+        return "Feedback is temporarily unavailable because its database setup is incomplete.";
+    }
+    if (code === "42501" || /permission|row-level security|not authorized/i.test(message)) {
+        return "This account does not have permission to perform that ticket action.";
+    }
+    if (/wait|already submitted|already sent|reopen the ticket/i.test(message)) return message;
+    if (/jwt|session|token/i.test(message)) return "Your Discord session expired. Sign in again.";
+    return fallback;
+}
+
+async function copyTicketText(value, successMessage) {
+    try {
+        await navigator.clipboard.writeText(value);
+        state.feedback.message = successMessage;
+        renderTicketDetailPage();
+    } catch (error) {
+        console.error("Could not copy ticket text", error);
+        state.feedback.error = "Could not copy to the clipboard.";
+        renderTicketDetailPage();
+    }
+}
+
+function ticketSummaryText(ticket) {
+    if (!ticket) return "";
+    return [
+        `[${ticketSeverityLabel(ticket.severity)}] ${ticket.title}`,
+        `Ticket: ${ticket.id}`,
+        `Status: ${ticketStatusLabel(ticket.status)}`,
+        `Category: ${ticketCategoryLabel(ticket.category)}`,
+        `Area: ${ticketContextLabel(ticket.context_area)}`,
+        ticket.map_name ? `Map: ${ticket.map_name}` : "",
+        ticket.weapon_or_item ? `Weapon/item: ${ticket.weapon_or_item}` : "",
+        ticket.match_id ? `Match ID: ${ticket.match_id}` : "",
+        "",
+        ticket.description
+    ].filter((line, index, lines) => line || (index > 0 && index < lines.length - 1)).join("\n");
+}
+
+function renderAdminDocumentationPage() {
+    const body = document.getElementById("admin-documentation-body");
+    if (!body) return;
+    if (!state.authReady || state.feedback.documentationLoading) {
+        body.innerHTML = renderAdminDocumentationContent({ loading: true, sections: [], error: "" });
+        return;
+    }
+    if (!isPlaytestAdmin()) {
+        enforceProtectedAdminRoute();
+        return;
+    }
+    if (!state.feedback.documentationLoaded) void loadAdminDocumentation();
+    body.innerHTML = renderAdminDocumentationContent({
+        loading: state.feedback.documentationLoading,
+        sections: state.feedback.documentation,
+        error: state.feedback.error
+    });
+}
+
+async function loadAdminDocumentation({ force = false } = {}) {
+    const feedback = state.feedback;
+    if (!feedback.api || !isPlaytestAdmin() || feedback.documentationLoading || (feedback.documentationLoaded && !force)) return;
+    feedback.documentationLoading = true;
+    feedback.error = "";
+    if (state.view === "adminHelp") renderAdminDocumentationPage();
+    try {
+        const result = await feedback.api.listAdminDocumentation();
+        if (result.error) throw result.error;
+        feedback.documentation = Array.isArray(result.data) ? result.data : [];
+        feedback.documentationLoaded = true;
+    } catch (error) {
+        console.error("Could not load admin documentation", error);
+        feedback.error = feedbackErrorMessage(error, "Could not load protected documentation.");
+        feedback.documentationLoaded = true;
+    } finally {
+        feedback.documentationLoading = false;
+        if (state.view === "adminHelp") renderAdminDocumentationPage();
+    }
+}
+
 async function loadCosmeticCatalog({ force = false } = {}) {
     if (state.store.catalogLoading || (state.store.catalogLoaded && !force)) return;
     state.store.catalogLoading = true;
@@ -2094,7 +2922,7 @@ async function loadCosmeticCatalog({ force = false } = {}) {
         if (adminCatalog) console.warn("Cosmetic catalog is unavailable", result.error);
         state.store.catalogItems = [];
         state.store.catalogReady = false;
-        state.store.catalogMessage = "Run supabase/cosmetic-catalog-admin.sql to enable website catalog management.";
+        state.store.catalogMessage = "Cosmetic catalog management is not configured.";
     } else {
         state.store.catalogItems = (result.data || []).map(normalizeCosmeticCatalogRow).filter(Boolean);
         state.store.catalogReady = true;
@@ -2293,7 +3121,7 @@ function renderStorePage() {
     }
     if (!isPlaytestAdmin()) {
         body.innerHTML = "";
-        enforcePrivateStoreRoute();
+        enforceProtectedAdminRoute();
         return;
     }
     if (!state.store.loaded && !state.store.loading) void loadStoreData();
@@ -2348,10 +3176,9 @@ function renderStoreCatalogAdmin() {
     if (!state.store.catalogReady) {
         return `
             <section class="catalog-setup-required">
-                <p class="panel-kicker">Setup Required</p>
-                <h3>Install the admin catalog table</h3>
+                <p class="panel-kicker">Unavailable</p>
+                <h3>Catalog management is not configured</h3>
                 <p>${escapeHtml(state.store.catalogMessage || "The cosmetic catalog table is unavailable.")}</p>
-                <code>supabase/cosmetic-catalog-admin.sql</code>
             </section>
         `;
     }
@@ -2782,8 +3609,8 @@ async function submitStorePurchase() {
         let checkoutUrl;
         try {
             checkoutUrl = new URL(data?.url || "");
-        } catch (_error) {
-            throw new Error("Checkout returned an invalid URL.");
+        } catch (error) {
+            throw new Error("Checkout returned an invalid URL.", { cause: error });
         }
         if (checkoutUrl.protocol !== "https:") throw new Error("Checkout returned an insecure URL.");
         window.location.assign(checkoutUrl.href);
@@ -5998,7 +6825,7 @@ function activePlaytest(playtests = activePlaytests()) {
 }
 
 function isPlaytestAdmin() {
-    return Boolean(PLAYTEST_VIEWER.isAdmin);
+    return isAdminProfile(state.authProfile);
 }
 
 function isDiscordLoggedIn() {
@@ -6221,11 +7048,6 @@ async function createRemoteCommunitySlot(playtestId, selectedKey, timeRange = no
         render();
         return null;
     }
-}
-
-function confirmedSlotId(playtestId) {
-    const confirmations = state.playtests.confirmedSlots?.[playtestId] || {};
-    return Object.keys(confirmations)[0] || "";
 }
 
 function confirmationForSlot(playtestId, slotId) {
@@ -6723,21 +7545,6 @@ function duplicatePlaytest(playtest) {
     };
     state.playtests.localPlaytests.push(clone);
     state.playtests.activeId = id;
-}
-
-function deletePlaytest(playtestId) {
-    if (!isPlaytestAdmin()) return;
-    const before = state.playtests.localPlaytests.length;
-    state.playtests.localPlaytests = state.playtests.localPlaytests.filter((playtest) => playtest.id !== playtestId);
-    if (state.playtests.localPlaytests.length === before) return;
-    delete state.playtests.votes[playtestId];
-    delete state.playtests.preferences[playtestId];
-    delete state.playtests.confirmedSlots[playtestId];
-    delete state.playtests.notificationSubscriptions[playtestId];
-    delete state.playtests.deletedSlots[playtestId];
-    state.playtests.adminVoteEvents = state.playtests.adminVoteEvents.filter((event) => event.playtestId !== playtestId);
-    const next = activePlaytests()[0];
-    state.playtests.activeId = next?.id || "";
 }
 
 function loadPlaytestState() {
@@ -7655,7 +8462,7 @@ function renderAvatarImage(url, account, profile, size, loading = "lazy", extraA
     const fallbacks = avatarFallbackUrls(currentUrl, account, profile, size);
     const fallbackAttr = escapeHtml(JSON.stringify(fallbacks));
     const attrs = extraAttributes ? ` ${extraAttributes}` : "";
-    return `<img src="${escapeHtml(currentUrl)}" alt="" loading="${escapeHtml(loading)}" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackAttr}" onerror="handleAvatarFallback(this);"${attrs}>`;
+    return `<img src="${escapeHtml(currentUrl)}" alt="" loading="${escapeHtml(loading)}" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackAttr}"${attrs}>`;
 }
 
 function avatarFallbackUrls(currentUrl, account, profile, size) {
@@ -7677,7 +8484,6 @@ function avatarFallbackUrls(currentUrl, account, profile, size) {
 function setAvatarFallbacks(image, currentUrl, account, profile, size) {
     if (!image) return;
     image.dataset.avatarFallbacks = JSON.stringify(avatarFallbackUrls(currentUrl, account, profile, size));
-    image.onerror = () => handleAvatarFallback(image);
 }
 
 function handleAvatarFallback(image) {
@@ -7686,7 +8492,7 @@ function handleAvatarFallback(image) {
     try {
         fallbacks = JSON.parse(image.dataset.avatarFallbacks || "[]");
     } catch (_error) {
-        fallbacks = [];
+        // Invalid fallback metadata leaves the list empty.
     }
     const next = fallbacks.shift();
     if (next) {
@@ -7694,7 +8500,7 @@ function handleAvatarFallback(image) {
         image.src = next;
         return;
     }
-    image.onerror = null;
+    image.removeAttribute("data-avatar-fallbacks");
 }
 
 function accountAvatarUrl(account, profile, size = 64) {
@@ -9277,10 +10083,6 @@ function compactModeLabel(value) {
 
 function viewerTimeZoneLabel() {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "your timezone";
-}
-
-function playerSkinUrl(player, profile, size) {
-    return skinHeadUrl(player?.name || profile?.name || DEFAULT_SKIN_NAME, size);
 }
 
 function skinHeadUrl(name, size) {

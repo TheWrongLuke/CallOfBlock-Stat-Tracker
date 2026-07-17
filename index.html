@@ -3,10 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Call of Block Stats</title>
+    <title>Call of Block 2 | Stats, Playtests and Community Support</title>
+    <meta name="description" content="Call of Block 2 community hub with Battle Royale and Deathmatch statistics, player profiles, playtest scheduling, and support tickets.">
+    <meta name="theme-color" content="#090d10">
+    <link rel="canonical" href="https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Call of Block 2">
+    <meta property="og:title" content="Call of Block 2 | Stats, Playtests and Community Support">
+    <meta property="og:description" content="Track Battle Royale and Deathmatch statistics, manage your player profile, schedule playtests, and contact support.">
+    <meta property="og:url" content="https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/">
+    <meta property="og:image" content="https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/assets/home-hero-bg.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Call of Block 2">
+    <meta name="twitter:description" content="Call of Block 2 statistics, profiles, playtests, and community support.">
+    <meta name="twitter:image" content="https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/assets/home-hero-bg.png">
     <link rel="icon" type="image/png" href="./Icon.png">
     <link rel="apple-touch-icon" href="./Icon.png">
-    <link rel="stylesheet" href="./styles.css?v=store-admin-3">
+    <link rel="manifest" href="./site.webmanifest">
+    <link rel="stylesheet" href="./styles.css?v=feedback-1">
 </head>
 <body class="home-route">
 <div class="app-shell">
@@ -21,6 +35,7 @@
                 <a class="join-link" href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord invite</a>
                 <a class="join-link" href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">YouTube</a>
                 <a class="join-link" href="#playtests">Playtests</a>
+                <a class="join-link" href="#feedback">Feedback &amp; Support</a>
                 <a class="join-link" href="#help">Help</a>
                 <span class="server-pill">Server access in Discord</span>
             </div>
@@ -183,7 +198,7 @@
         </section>
 
         <section class="guide-grid">
-            <article class="guide-panel">
+            <article class="guide-panel" id="how-to-play" tabindex="-1">
                 <p class="panel-kicker">Getting Started</p>
                 <h2>How to play</h2>
                 <ol class="step-list">
@@ -201,7 +216,7 @@
                 </div>
             </article>
 
-            <article class="guide-panel">
+            <article class="guide-panel" id="faq" tabindex="-1">
                 <p class="panel-kicker">Questions</p>
                 <h2>FAQ</h2>
                 <details open>
@@ -267,13 +282,7 @@
                 <span>Requirements</span>
                 <p>Player commands require being on the server. Voting requires being queued for Deathmatch. Kit changing requires an active Deathmatch round. Admin commands require permission level 2.</p>
             </div>
-            <div class="admin-help-callout">
-                <div>
-                    <span>Admin Reference</span>
-                    <p>Full setup commands for BR points, DM maps, spawns, reset snapshots, chests, vehicles, leaderboards, Discord sync, and test starts.</p>
-                </div>
-                <a href="#admin-help">Open admin commands</a>
-            </div>
+
         </section>
     </main>
 
@@ -361,6 +370,34 @@
         </section>
     </main>
 
+    <main class="feedback-view hidden" id="feedback-view">
+        <section class="feedback-hero">
+            <div>
+                <p class="panel-kicker">Feedback &amp; Support</p>
+                <h2>Report an issue or help shape the game.</h2>
+                <p>Report bugs, send balancing feedback, suggest gameplay changes, flag website or account problems, and request support from the Call of Block team.</p>
+            </div>
+            <button type="button" data-route="home">Back to hub</button>
+        </section>
+        <div class="feedback-body" id="feedback-body" aria-live="polite"></div>
+    </main>
+
+    <main class="ticket-view hidden" id="ticket-view">
+        <div class="ticket-detail-body" id="ticket-detail-body" aria-live="polite"></div>
+    </main>
+
+    <main class="admin-tickets-view hidden" id="admin-tickets-view">
+        <section class="feedback-hero">
+            <div>
+                <p class="panel-kicker">Admin Support</p>
+                <h2>Ticket dashboard.</h2>
+                <p>Review reports, request information, record private notes, assign work, and audit every status change.</p>
+            </div>
+            <button type="button" data-route="feedback">Public support page</button>
+        </section>
+        <div class="admin-tickets-body" id="admin-tickets-body" aria-live="polite"></div>
+    </main>
+
     <main class="community-admin-view hidden" id="community-admin-view">
         <section class="playtests-hero">
             <div>
@@ -374,231 +411,19 @@
         </section>
         <section id="community-admin-board" class="community-admin-board" aria-live="polite"></section>
     </main>
-
     <main class="admin-help-view hidden" id="admin-help-view">
         <section class="admin-help-hero">
             <div>
                 <p class="panel-kicker">Admin Reference</p>
-                <h2>Setup and control commands</h2>
-                <p>These commands require permission level 2 unless noted. Use <code>/bradmin doctor</code> after edits to check the important server pieces.</p>
+                <h2>Protected operations documentation.</h2>
+                <p>Documentation is loaded only after Supabase verifies an authenticated administrator.</p>
             </div>
-            <a href="#help">Player help</a>
+            <div class="admin-help-actions">
+                <button type="button" data-route="admin-tickets">Ticket dashboard</button>
+                <a href="#help">Player help</a>
+            </div>
         </section>
-
-        <section class="admin-command-grid">
-            <article class="admin-command-group">
-                <h3>Core Checks</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin doctor</code><em>Checks hub, arena, reset region, datapack, TACZ loot pool integrity, DM maps, lobbies, and Discord sync.</em></li>
-                    <li><code>/bradmin sethub</code><em>Saves the current player position as the hub spawn.</em></li>
-                    <li><code>/bradmin mode hub|battle_royale|deathmatch</code><em>Manually sets the server mode state.</em></li>
-                    <li><code>/bradmin reloadkits</code><em>Reloads kit configuration.</em></li>
-                    <li><code>/kit save &lt;id&gt; [displayName]</code><em>Saves your current inventory as a kit.</em></li>
-                    <li><code>/kit overwrite &lt;id&gt; [displayName]</code><em>Overwrites an existing kit with your current inventory.</em></li>
-                    <li><code>/kit delete &lt;id&gt;</code><em>Deletes a kit.</em></li>
-                    <li><code>/kit give &lt;id&gt;</code><em>Applies a kit to yourself immediately for admin debugging, even outside an active DM round.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>Battle Royale Runtime</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin br start</code><em>Starts Battle Royale from the current queued players and setup config.</em></li>
-                    <li><code>/bradmin br end</code><em>Forces the running BR match into end/celebration cleanup.</em></li>
-                    <li><code>/bradmin br cleanupoffline</code><em>Removes offline BR participants from runtime state.</em></li>
-                    <li><code>/bradmin br cleandisconnected</code><em>Alias for cleanupoffline.</em></li>
-                    <li><code>/bradmin bridge br_start|br_end</code><em>Legacy/datapack bridge aliases for BR start/end.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>BR Config</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin br config show</code><em>Shows loot pool, chest range, vehicle range, zone, respawn, prep, and bus settings.</em></li>
-                    <li><code>/bradmin br config reload</code><em>Reloads BR setup config.</em></li>
-                    <li><code>/bradmin br config chests &lt;min&gt; &lt;max&gt;</code><em>Sets chest placement count range.</em></li>
-                    <li><code>/bradmin br config vehicles &lt;type&gt; &lt;min&gt; &lt;max&gt;</code><em>Sets vehicle spawn range for a vehicle type.</em></li>
-                    <li><code>/bradmin br config preset &lt;name&gt;</code><em>Applies a BR round preset.</em></li>
-                    <li><code>/bradmin br config pool &lt;id&gt;</code><em>Selects the main BR loot pool.</em></li>
-                    <li><code>/bradmin br config zonepreset &lt;id&gt;</code><em>Selects the zone preset.</em></li>
-                    <li><code>/bradmin br config usezone on|off</code><em>Toggles BR zone usage.</em></li>
-                    <li><code>/bradmin br config respawn on|off</code><em>Toggles BR redeploy respawns.</em></li>
-                    <li><code>/bradmin br config prepchunks &lt;value&gt;</code><em>Sets prep/reset chunk work per step.</em></li>
-                    <li><code>/bradmin br config prepticks &lt;value&gt;</code><em>Sets ticks between prep/reset steps.</em></li>
-                    <li><code>/bradmin br config bus dropallowed get|set &lt;value&gt;</code><em>Reads or sets the allowed bus drop distance.</em></li>
-                    <li><code>/bradmin br config bus centeralign get|set &lt;value&gt;</code><em>Reads or sets max bus center alignment.</em></li>
-                    <li><code>/bradmin brconfig ...</code><em>Legacy alias for most BR config commands, including wallheight/zonewallheight.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>Arena And Zone</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin zone setarena &lt;radius&gt; &lt;margin&gt;</code><em>Saves BR arena center at your current position.</em></li>
-                    <li><code>/bradmin zone reload</code><em>Reloads zone phase config.</em></li>
-                    <li><code>/bradmin zone configstart</code><em>Begins the configured zone run from your position.</em></li>
-                    <li><code>/bradmin zone begin &lt;seconds&gt; &lt;targetRadius&gt; &lt;damage&gt;</code><em>Starts a manual random zone shift.</em></li>
-                    <li><code>/bradmin zone stop</code><em>Stops the active zone.</em></li>
-                    <li><code>/bradmin brrulesdisplay status</code><em>Shows BR rules display status.</em></li>
-                    <li><code>/bradmin brrulesdisplay sethere</code><em>Places the BR rules display at your position.</em></li>
-                    <li><code>/bradmin brrulesdisplay refresh</code><em>Refreshes the BR rules display.</em></li>
-                    <li><code>/bradmin brrulesdisplay clear</code><em>Clears the BR rules display.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>Reset Region</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin resetregion set1</code><em>Sets reset region corner one at your position.</em></li>
-                    <li><code>/bradmin resetregion set2</code><em>Sets reset region corner two at your position.</em></li>
-                    <li><code>/bradmin resetregion show</code><em>Shows the selected reset region.</em></li>
-                    <li><code>/bradmin resetregion save [chunksPerStep] [ticksBetweenSteps]</code><em>Saves a reset snapshot for the selected region.</em></li>
-                    <li><code>/bradmin resetregion start [chunksPerStep] [ticksBetweenSteps]</code><em>Restores the saved snapshot.</em></li>
-                    <li><code>/bradmin resetregion cancel</code><em>Cancels reset work.</em></li>
-                    <li><code>/bradmin resetregion status</code><em>Shows reset worker status.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>Deathmatch Config</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin dm config show</code><em>Shows DM time, kill limit, celebration, vote, and block-damage settings.</em></li>
-                    <li><code>/bradmin dm config reload</code><em>Reloads DM config.</em></li>
-                    <li><code>/bradmin dm config time &lt;seconds&gt;</code><em>Sets DM time limit.</em></li>
-                    <li><code>/bradmin dm config kills &lt;kills&gt;</code><em>Sets DM kill limit.</em></li>
-                    <li><code>/bradmin dm config celebration &lt;seconds&gt;</code><em>Sets end celebration length.</em></li>
-                    <li><code>/bradmin dm config vote &lt;seconds&gt;</code><em>Sets vote duration.</em></li>
-                    <li><code>/bradmin dm config blockdamage on|off</code><em>Toggles DM block damage config.</em></li>
-                    <li><code>/bradmin dmconfig ...</code><em>Legacy alias for DM config commands.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>Deathmatch Maps</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin dmmap list</code><em>Lists DM maps.</em></li>
-                    <li><code>/bradmin dmmap show &lt;id&gt;</code><em>Shows one DM map.</em></li>
-                    <li><code>/bradmin dmmap create &lt;id&gt; [displayName]</code><em>Creates a DM map.</em></li>
-                    <li><code>/bradmin dmmap delete &lt;id&gt;</code><em>Deletes a DM map.</em></li>
-                    <li><code>/bradmin dmmap setlobby &lt;id&gt; &lt;lobby&gt;</code><em>Assigns a lobby to a map.</em></li>
-                    <li><code>/bradmin dmmap clearlobby &lt;id&gt;</code><em>Clears a map lobby override.</em></li>
-                    <li><code>/bradmin dmmap addspawn &lt;id&gt; &lt;team&gt;</code><em>Adds a team spawn at your position.</em></li>
-                    <li><code>/bradmin dmmap removenearestspawn &lt;id&gt; &lt;team&gt;</code><em>Removes the nearest spawn for a team.</em></li>
-                    <li><code>/bradmin dmmap tprandom &lt;id&gt; &lt;team&gt;</code><em>Teleports you to a random spawn for testing.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>Deathmatch Lobbies</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin dmlobby list</code><em>Lists DM lobbies.</em></li>
-                    <li><code>/bradmin dmlobby show &lt;id&gt;</code><em>Shows a DM lobby.</em></li>
-                    <li><code>/bradmin dmlobby create &lt;id&gt; [displayName]</code><em>Creates a DM lobby.</em></li>
-                    <li><code>/bradmin dmlobby delete &lt;id&gt;</code><em>Deletes a DM lobby.</em></li>
-                    <li><code>/bradmin dmlobby setspawn &lt;id&gt;</code><em>Sets lobby spawn at your position.</em></li>
-                    <li><code>/bradmin dmlobby tp &lt;id&gt;</code><em>Teleports you to a lobby.</em></li>
-                    <li><code>/bradmin dmlobby setgeneral &lt;id&gt;</code><em>Sets the general DM lobby used by the queue.</em></li>
-                    <li><code>/dmqueue</code><em>Shows the queued DM players.</em></li>
-                    <li><code>/dmqueue sendmain</code><em>Sends queued DM players to the general lobby.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>DM Runtime And Votes</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin dm runtime status</code><em>Shows DM runtime status.</em></li>
-                    <li><code>/bradmin dm runtime start [map]</code><em>Starts DM directly, optionally on a map.</em></li>
-                    <li><code>/bradmin dm runtime end</code><em>Stops DM runtime.</em></li>
-                    <li><code>/bradmin dmruntime status|start [map]|end</code><em>Legacy runtime alias with lobby warmup behavior.</em></li>
-                    <li><code>/bradmin dm vote start</code><em>Starts a DM vote session.</em></li>
-                    <li><code>/bradmin dm vote show</code><em>Shows DM votes.</em></li>
-                    <li><code>/bradmin dm vote endnow</code><em>Ends the current vote immediately.</em></li>
-                    <li><code>/bradmin dmvote show|clear|status|start|endnow</code><em>Legacy DM vote command set.</em></li>
-                    <li><code>/bradmin bridge dm_start|dm_end</code><em>Legacy/datapack bridge aliases for DM start/end.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>BR Vehicles</h3>
-                <ul class="command-list">
-                    <li><code>/bradmin vehicles reload</code><em>Reloads vehicle configs.</em></li>
-                    <li><code>/bradmin vehicles template saveheld &lt;id&gt; &lt;type&gt; [weight]</code><em>Saves the held vehicle item as a template.</em></li>
-                    <li><code>/bradmin vehicles template delete &lt;id&gt;</code><em>Deletes a vehicle template.</em></li>
-                    <li><code>/bradmin vehicles template list</code><em>Lists vehicle templates.</em></li>
-                    <li><code>/bradmin vehicles pad add &lt;id&gt; &lt;type&gt;</code><em>Adds a vehicle pad at your position.</em></li>
-                    <li><code>/bradmin vehicles pad removeNearest</code><em>Removes the nearest pad within 8 blocks.</em></li>
-                    <li><code>/bradmin vehicles pad nearest</code><em>Prints the nearest pad within 64 blocks.</em></li>
-                    <li><code>/bradmin vehicles pad tp &lt;id&gt;</code><em>Teleports you to a pad.</em></li>
-                    <li><code>/bradmin vehicles pad show|hide</code><em>Shows or hides pad markers.</em></li>
-                    <li><code>/bradmin vehicles pad remove &lt;id&gt;</code><em>Removes a pad by ID.</em></li>
-                    <li><code>/bradmin vehicles pad list</code><em>Lists vehicle pads.</em></li>
-                    <li><code>/bradmin vehicles spawnround &lt;ground&gt; &lt;heli&gt; &lt;plane&gt; &lt;mixed&gt;</code><em>Spawns a test vehicle round.</em></li>
-                    <li><code>/bradmin vehicles round show</code><em>Shows round vehicle spawn config.</em></li>
-                    <li><code>/bradmin vehicles round set &lt;type&gt; &lt;min&gt; &lt;max&gt;</code><em>Sets vehicle round range by type.</em></li>
-                    <li><code>/bradmin vehicles clearpads</code><em>Deletes all vehicle pads.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>Vehicle Arena</h3>
-                <ul class="command-list">
-                    <li><code>/vaqueue</code><em>Shows vehicle arena queue.</em></li>
-                    <li><code>/vehiclearena</code><em>Shows vehicle arena status.</em></li>
-                    <li><code>/vehiclearena queue</code><em>Shows queue details.</em></li>
-                    <li><code>/vehiclearena templates</code><em>Lists available vehicle templates.</em></li>
-                    <li><code>/vehiclearena reload</code><em>Reloads vehicle arena config.</em></li>
-                    <li><code>/vehiclearena selection</code><em>Starts vehicle selection phase.</em></li>
-                    <li><code>/vehiclearena start</code><em>Forces the vehicle arena match to start.</em></li>
-                    <li><code>/vehiclearena stop</code><em>Stops vehicle arena runtime.</em></li>
-                    <li><code>/vehiclearena mode dogfight|tankwar|combined</code><em>Sets vehicle arena mode.</em></li>
-                    <li><code>/vehiclearena limits &lt;score&gt; &lt;seconds&gt;</code><em>Sets score and time limits.</em></li>
-                    <li><code>/vehiclearena base &lt;team&gt;</code><em>Sets a team base at your position.</em></li>
-                    <li><code>/vehiclearena spawn add &lt;team&gt; [id]</code><em>Adds a team spawn at your position.</em></li>
-                    <li><code>/vehiclearena spawn clear &lt;team&gt;</code><em>Clears team spawns.</em></li>
-                    <li><code>/vehiclearena vehicle add|remove &lt;team&gt; &lt;template&gt;</code><em>Adds or removes team vehicle templates.</em></li>
-                    <li><code>/vehiclearena vehicle clear &lt;team&gt;</code><em>Clears team vehicle templates.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>Leaderboards</h3>
-                <ul class="command-list">
-                    <li><code>/matchleaderboard sortsethere</code><em>Places the shared sort toggle at your position.</em></li>
-                    <li><code>/matchleaderboard sortreset</code><em>Resets the shared sort toggle beside the first board.</em></li>
-                    <li><code>/matchleaderboard resetstats</code><em>Resets all BR and DM match stats.</em></li>
-                    <li><code>/matchleaderboard br sethere</code><em>Places the BR leaderboard at your position.</em></li>
-                    <li><code>/matchleaderboard br clear</code><em>Clears the BR leaderboard display.</em></li>
-                    <li><code>/matchleaderboard br refresh</code><em>Refreshes the BR leaderboard display.</em></li>
-                    <li><code>/matchleaderboard br resetstats</code><em>Resets BR stats.</em></li>
-                    <li><code>/matchleaderboard br status</code><em>Shows BR board status.</em></li>
-                    <li><code>/matchleaderboard dm sethere|clear|refresh|resetstats|status</code><em>Same board controls for Deathmatch.</em></li>
-                </ul>
-            </article>
-
-            <article class="admin-command-group">
-                <h3>Discord Sync</h3>
-                <ul class="command-list">
-                    <li><code>/discordsync</code><em>Shows Discord sync status.</em></li>
-                    <li><code>/discordsync status</code><em>Shows detailed sync status.</em></li>
-                    <li><code>/discordsync enable|disable</code><em>Turns sync on or off.</em></li>
-                    <li><code>/discordsync refresh</code><em>Queues a leaderboard sync.</em></li>
-                    <li><code>/discordsync webhook &lt;url&gt;</code><em>Saves the Discord webhook URL.</em></li>
-                    <li><code>/discordsync webhook clear</code><em>Clears the webhook URL.</em></li>
-                    <li><code>/discordsync token &lt;value&gt;</code><em>Saves the Discord bot token.</em></li>
-                    <li><code>/discordsync token clear</code><em>Clears the bot token.</em></li>
-                    <li><code>/discordsync guild &lt;id&gt;</code><em>Saves the Discord guild ID.</em></li>
-                    <li><code>/discordsync guild clear</code><em>Clears the guild ID.</em></li>
-                    <li><code>/discordsync role &lt;place&gt; &lt;roleId&gt;</code><em>Saves a top 1-3 role ID.</em></li>
-                    <li><code>/discordsync role &lt;place&gt; clear</code><em>Clears a top role ID.</em></li>
-                    <li><code>/discordsync source br|dm</code><em>Selects whether roles use BR or DM wins.</em></li>
-                    <li><code>/discordsync bind &lt;player&gt; &lt;discordUserId&gt;</code><em>Binds a player to a Discord user.</em></li>
-                    <li><code>/discordsync bindme &lt;discordUserId&gt;</code><em>Binds yourself.</em></li>
-                    <li><code>/discordsync binduuid &lt;uuid&gt; &lt;discordUserId&gt;</code><em>Binds a UUID directly.</em></li>
-                    <li><code>/discordsync unbind &lt;player|uuid&gt;</code><em>Removes a Discord binding.</em></li>
-                    <li><code>/discordsync unbindme</code><em>Removes your binding.</em></li>
-                </ul>
-            </article>
-        </section>
+        <div id="admin-documentation-body" aria-live="polite"></div>
     </main>
 
     <section class="player-view panel hidden" id="player-view">
@@ -634,6 +459,9 @@
             <a href="https://ko-fi.com/J3J17SDR6" target="_blank" rel="noopener noreferrer">Ko-fi</a>
             <a class="hidden" href="#store" data-admin-store-link hidden>Store</a>
             <a href="#playtests">Playtests</a>
+            <a href="#feedback">Feedback &amp; Support</a>
+            <a href="#how-to-play">How to Play</a>
+            <a href="#faq">FAQ</a>
             <a href="#help">Help</a>
             <button type="button" data-contact-email>Email</button>
         </nav>
@@ -643,6 +471,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./api-config.js?v=site-1"></script>
 <script src="./store-catalog.js?v=store-1"></script>
-<script src="./app.js?v=store-admin-3" defer></script>
+<script type="module" src="./app.js?v=feedback-1"></script>
 </body>
 </html>

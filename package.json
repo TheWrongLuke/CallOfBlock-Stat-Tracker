@@ -1,0 +1,30 @@
+{
+    "name": "call-of-block-stat-tracker",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "description": "Call of Block 2 community hub, stat tracker, profiles, playtests, and support tickets.",
+    "engines": {
+        "node": ">=22.0.0"
+    },
+    "scripts": {
+        "dev": "node scripts/static-server.mjs --root=. --port=4173",
+        "build": "node scripts/build.mjs",
+        "preview": "node scripts/static-server.mjs --root=dist --port=4174",
+        "lint": "eslint app.js src scripts tests *.config.js",
+        "stylelint": "stylelint styles.css",
+        "format": "prettier --write \"src/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\" \"*.config.js\" package.json README.md \".github/**/*.yml\" site.config.json site.webmanifest",
+        "format:check": "prettier --check \"src/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\" \"*.config.js\" package.json README.md \".github/**/*.yml\" site.config.json site.webmanifest",
+        "test": "vitest run",
+        "test:e2e": "npm run build && playwright test"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@playwright/test": "^1.61.1",
+        "eslint": "^10.7.0",
+        "globals": "^17.7.0",
+        "prettier": "^3.9.5",
+        "stylelint": "^17.14.0",
+        "vitest": "^4.1.10"
+    }
+}
