@@ -2,7 +2,6 @@
 .env*
 *.sql
 *.md
-!/README.md
 private/
 secrets/
 credentials/

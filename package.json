@@ -13,8 +13,8 @@
         "preview": "node scripts/static-server.mjs --root=dist --port=4174",
         "lint": "eslint app.js src scripts tests *.config.js",
         "stylelint": "stylelint styles.css",
-        "format": "prettier --write \"src/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\" \"*.config.js\" package.json README.md \".github/**/*.yml\" site.config.json site.webmanifest",
-        "format:check": "prettier --check \"src/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\" \"*.config.js\" package.json README.md \".github/**/*.yml\" site.config.json site.webmanifest",
+        "format": "prettier --write \"src/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\" \"*.config.js\" package.json \".github/**/*.yml\" site.config.json site.webmanifest",
+        "format:check": "prettier --check \"src/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\" \"*.config.js\" package.json \".github/**/*.yml\" site.config.json site.webmanifest",
         "test": "vitest run",
         "test:e2e": "npm run build && playwright test"
     },

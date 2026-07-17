@@ -21,6 +21,7 @@ describe("formatting and mappings", () => {
 
     it("maps ticket values to labels and severity order", () => {
         expect(ticketCategoryLabel("bug_report")).toBe("Bug Report");
+        expect(ticketCategoryLabel("cheat_report")).toBe("Cheat Report");
         expect(ticketStatusLabel("need_more_information")).toBe("Need More Information");
         expect(ticketSeverityRank("critical")).toBeGreaterThan(ticketSeverityRank("high"));
     });

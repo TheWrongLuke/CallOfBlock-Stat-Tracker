@@ -1,5 +1,6 @@
 export const TICKET_CATEGORIES = Object.freeze([
     { value: "bug_report", label: "Bug Report" },
+    { value: "cheat_report", label: "Cheat Report" },
     { value: "balance_feedback", label: "Balance Feedback" },
     { value: "gameplay_suggestion", label: "Gameplay Suggestion" },
     { value: "website_issue", label: "Website Issue" },

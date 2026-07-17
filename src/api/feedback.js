@@ -49,10 +49,11 @@ export function createFeedbackApi(client) {
             return client.from("feedback_tickets").select(TICKET_COLUMNS).eq("id", ticketId).maybeSingle();
         },
 
-        async createTicket(value, userId) {
+        async createTicket(value, userId, ticketId) {
             return client
                 .from("feedback_tickets")
                 .insert({
+                    ...(ticketId ? { id: ticketId } : {}),
                     created_by: userId,
                     category: value.category,
                     title: value.title,

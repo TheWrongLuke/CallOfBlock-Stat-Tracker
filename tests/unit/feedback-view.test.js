@@ -71,4 +71,40 @@ describe("feedback views", () => {
         expect(html).toContain("&lt;script&gt;");
         expect(html).toContain("&lt;svg onload=alert(1)&gt;");
     });
+
+    it("renders signed private screenshot evidence without exposing the stored bucket URL", () => {
+        const privateTicket = {
+            ...ticket,
+            external_media_url:
+                "https://project.supabase.co/storage/v1/object/public/feedback-attachments/123e4567-e89b-42d3-a456-426614174000/223e4567-e89b-42d3-a456-426614174000/evidence-323e4567-e89b-42d3-a456-426614174000.png"
+        };
+        const html = renderTicketDetailContent({
+            authConfigured: true,
+            authReady: true,
+            loggedIn: true,
+            admin: false,
+            loading: false,
+            ticket: privateTicket,
+            messages: [],
+            history: [],
+            reporter: null,
+            admins: [],
+            accountId: "user-1",
+            error: "",
+            message: "",
+            authorNames: new Map(),
+            attachment: {
+                managed: true,
+                loading: false,
+                signedUrl:
+                    "https://project.supabase.co/storage/v1/object/sign/feedback-attachments/evidence.png?token=test",
+                kind: "image",
+                error: ""
+            }
+        });
+
+        expect(html).toContain("Attached screenshot evidence");
+        expect(html).toContain("token=test");
+        expect(html).not.toContain(privateTicket.external_media_url);
+    });
 });

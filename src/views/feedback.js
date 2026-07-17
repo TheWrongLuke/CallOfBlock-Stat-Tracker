@@ -15,6 +15,7 @@ import {
 import { formatDateTime } from "../utils/dates.js";
 import { escapeHtml } from "../utils/sanitization.js";
 import { validateExternalUrl } from "../utils/feedback-validation.js";
+import { FEEDBACK_ATTACHMENT_ACCEPT, feedbackAttachmentPathFromUrl } from "../services/feedback-attachments.js";
 
 function renderOptions(options, selected, allLabel = "") {
     return [
@@ -151,6 +152,13 @@ function renderTicketForm() {
                         <label class="wide"><span>Steps to reproduce</span><textarea name="reproductionSteps" maxlength="${TICKET_LIMITS.reproductionSteps}" rows="5"></textarea>${renderFieldError("reproductionSteps")}</label>
                         <label class="wide"><span>Expected result</span><textarea name="expectedResult" maxlength="${TICKET_LIMITS.expectedResult}" rows="4"></textarea>${renderFieldError("expectedResult")}</label>
                         <label class="wide"><span>Actual result</span><textarea name="actualResult" maxlength="${TICKET_LIMITS.actualResult}" rows="4"></textarea>${renderFieldError("actualResult")}</label>
+                        <label class="wide ticket-attachment-field">
+                            <span>Attach screenshot or short clip</span>
+                            <input name="attachment" type="file" accept="${escapeHtml(FEEDBACK_ATTACHMENT_ACCEPT)}" aria-describedby="feedback-attachment-help feedback-attachment-error">
+                            <small class="ticket-attachment-help" id="feedback-attachment-help">PNG, JPEG, WebP, GIF, MP4, WebM, or MOV. Maximum 6 MB. Attachments are private to you and staff.</small>
+                            ${renderFieldError("attachment")}
+                        </label>
+                        <div class="ticket-media-divider wide" aria-hidden="true"><span>or</span></div>
                         <label class="wide"><span>External screenshot or video URL</span><input name="externalMediaUrl" type="url" inputmode="url" maxlength="${TICKET_LIMITS.externalMediaUrl}" placeholder="https://">${renderFieldError("externalMediaUrl")}</label>
                     </div>
                 </details>
@@ -191,7 +199,8 @@ export function renderTicketDetailContent({
     accountId,
     error,
     message,
-    authorNames
+    authorNames,
+    attachment = null
 }) {
     if (!authConfigured) return renderFeedbackAccessState("Discord login is not configured for this site yet.", false);
     if (!authReady || loading) return renderLoadingState("Loading ticket...");
@@ -224,7 +233,7 @@ export function renderTicketDetailContent({
         ${message ? `<p class="feedback-notice success" role="status">${escapeHtml(message)}</p>` : ""}
         <div class="ticket-detail-layout">
             <div class="ticket-detail-main">
-                ${renderTicketReport(ticket)}
+                ${renderTicketReport(ticket, attachment)}
                 ${renderTicketConversation(ticket, messages, admin, accountId, authorNames)}
             </div>
             <aside class="ticket-detail-sidebar">
@@ -236,8 +245,7 @@ export function renderTicketDetailContent({
     `;
 }
 
-function renderTicketReport(ticket) {
-    const media = validateExternalUrl(ticket.external_media_url);
+function renderTicketReport(ticket, attachment) {
     const fields = [
         ["Game mode or area", ticketContextLabel(ticket.context_area)],
         ["Map", ticket.map_name],
@@ -255,9 +263,35 @@ function renderTicketReport(ticket) {
             </header>
             <div class="ticket-description">${escapeHtml(ticket.description)}</div>
             ${fields.length ? `<dl class="ticket-context-list">${fields.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}</dl>` : ""}
-            ${media.valid && media.value ? `<a class="ticket-media-link" href="${escapeHtml(media.value)}" target="_blank" rel="noopener noreferrer">Open external media</a>` : ""}
+            ${renderTicketMedia(ticket.external_media_url, attachment)}
         </section>
     `;
+}
+
+function renderTicketMedia(storedUrl, attachment) {
+    const managed = Boolean(feedbackAttachmentPathFromUrl(storedUrl));
+    if (managed) {
+        if (attachment?.loading) return `<p class="ticket-attachment-state">Loading private attachment...</p>`;
+        if (attachment?.error) {
+            return `<p class="ticket-attachment-state error">${escapeHtml(attachment.error)}</p>`;
+        }
+        const signed = validateExternalUrl(attachment?.signedUrl);
+        if (!signed.valid || !signed.value) {
+            return `<p class="ticket-attachment-state error">Private attachment is unavailable.</p>`;
+        }
+        if (attachment.kind === "image") {
+            return `<figure class="ticket-attachment-preview"><a href="${escapeHtml(signed.value)}" target="_blank" rel="noopener noreferrer"><img src="${escapeHtml(signed.value)}" alt="Attached screenshot evidence" loading="lazy" referrerpolicy="no-referrer"></a><figcaption>Private screenshot attachment</figcaption></figure>`;
+        }
+        if (attachment.kind === "video") {
+            return `<figure class="ticket-attachment-preview"><video src="${escapeHtml(signed.value)}" controls preload="metadata" playsinline></video><figcaption><a href="${escapeHtml(signed.value)}" target="_blank" rel="noopener noreferrer">Open private clip</a></figcaption></figure>`;
+        }
+        return `<a class="ticket-media-link" href="${escapeHtml(signed.value)}" target="_blank" rel="noopener noreferrer">Open private attachment</a>`;
+    }
+
+    const media = validateExternalUrl(storedUrl);
+    return media.valid && media.value
+        ? `<a class="ticket-media-link" href="${escapeHtml(media.value)}" target="_blank" rel="noopener noreferrer">Open external media</a>`
+        : "";
 }
 
 function renderTicketConversation(ticket, messages, admin, accountId, authorNames) {

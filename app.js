@@ -12,6 +12,14 @@ import {
 } from "./src/config/feedback.js";
 import { validateReplyInput, validateTicketInput } from "./src/utils/feedback-validation.js";
 import {
+    createFeedbackAttachmentView,
+    createFeedbackTicketId,
+    feedbackAttachmentErrorMessage,
+    removeFeedbackAttachment,
+    uploadFeedbackAttachment,
+    validateFeedbackAttachment
+} from "./src/services/feedback-attachments.js";
+import {
     renderAdminDocumentationContent,
     renderAdminTicketsContent,
     renderFeedbackContent,
@@ -330,6 +338,7 @@ const state = {
         selectedTicketId: "",
         detailLoadedId: "",
         detailLoading: false,
+        attachment: { managed: false, loading: false, signedUrl: "", kind: "file", error: "" },
         messages: [],
         history: [],
         reporter: null,
@@ -2357,6 +2366,7 @@ function resetFeedbackSessionState() {
         : "";
     feedback.detailLoading = false;
     feedback.detailLoadedId = "";
+    feedback.attachment = { managed: false, loading: false, signedUrl: "", kind: "file", error: "" };
     feedback.messages = [];
     feedback.history = [];
     feedback.reporter = null;
@@ -2432,10 +2442,19 @@ async function submitFeedbackTicket(form) {
 
     const values = new FormData(form);
     const validation = validateTicketInput(Object.fromEntries(values.entries()));
-    if (!validation.valid) {
-        applyFeedbackFieldErrors(form, validation.errors);
+    const attachmentInput = form.elements.namedItem("attachment");
+    const attachmentFile = attachmentInput instanceof HTMLInputElement ? attachmentInput.files?.[0] : null;
+    const attachmentValidation = validateFeedbackAttachment(attachmentFile);
+    const errors = { ...validation.errors };
+    if (!attachmentValidation.valid) errors.attachment = attachmentValidation.error;
+    if (attachmentFile && validation.value.externalMediaUrl) {
+        errors.attachment = "Choose either a direct attachment or an external URL, not both.";
+        errors.externalMediaUrl = "Remove this URL to upload the selected attachment.";
+    }
+    if (Object.keys(errors).length) {
+        applyFeedbackFieldErrors(form, errors);
         if (status) status.textContent = "Check the highlighted fields.";
-        focusFirstFeedbackError(form, validation.errors);
+        focusFirstFeedbackError(form, errors);
         return;
     }
 
@@ -2444,20 +2463,38 @@ async function submitFeedbackTicket(form) {
         submit.disabled = true;
         submit.textContent = "Submitting...";
     }
-    if (status) status.textContent = "Creating ticket...";
+    let uploadedPath = "";
+    if (status) status.textContent = attachmentFile ? "Uploading private attachment..." : "Creating ticket...";
     try {
-        const result = await feedback.api.createTicket(validation.value, userId);
+        const ticketId = createFeedbackTicketId();
+        if (attachmentFile) {
+            const upload = await uploadFeedbackAttachment(state.authClient, {
+                file: attachmentFile,
+                userId,
+                ticketId
+            });
+            uploadedPath = upload.path;
+            validation.value.externalMediaUrl = upload.storedUrl;
+            if (status) status.textContent = "Creating ticket...";
+        }
+        const result = await feedback.api.createTicket(validation.value, userId, ticketId);
         if (result.error) throw result.error;
         feedback.cooldownUntil = Date.now() + TICKET_SUBMIT_COOLDOWN_MS;
         feedback.tickets = [result.data, ...feedback.tickets.filter((ticket) => ticket.id !== result.data.id)];
         feedback.ticketsLoaded = true;
-        feedback.message = "Ticket submitted.";
+        feedback.message = attachmentFile ? "Ticket and private attachment submitted." : "Ticket submitted.";
         feedback.error = "";
         form.reset();
         window.location.hash = `ticket=${encodeURIComponent(result.data.id)}`;
     } catch (error) {
         console.error("Could not create feedback ticket", error);
-        if (status) status.textContent = feedbackErrorMessage(error, "Could not submit the ticket.");
+        const failedDuringUpload = Boolean(attachmentFile) && !uploadedPath;
+        if (uploadedPath) await removeFeedbackAttachment(state.authClient, uploadedPath);
+        if (status) {
+            status.textContent = failedDuringUpload
+                ? feedbackAttachmentErrorMessage(error)
+                : feedbackErrorMessage(error, "Could not submit the ticket.");
+        }
     } finally {
         feedback.submitting = false;
         if (submit) {
@@ -2513,7 +2550,8 @@ function renderTicketDetailPage() {
         accountId: state.authSession?.user?.id || "",
         error: !isFeedbackTicketId(ticketId) ? "Invalid ticket ID." : feedback.error,
         message: feedback.message,
-        authorNames
+        authorNames,
+        attachment: feedback.attachment
     });
 }
 
@@ -2535,6 +2573,7 @@ async function loadFeedbackTicketDetail(ticketId, { force = false } = {}) {
     feedback.messages = [];
     feedback.history = [];
     feedback.reporter = null;
+    feedback.attachment = { managed: false, loading: false, signedUrl: "", kind: "file", error: "" };
     if (state.view === "ticket") renderTicketDetailPage();
     try {
         const ticketResult = await feedback.api.getTicket(ticketId);
@@ -2543,6 +2582,29 @@ async function loadFeedbackTicketDetail(ticketId, { force = false } = {}) {
         if (!feedback.selectedTicket) {
             feedback.detailLoadedId = ticketId;
             return;
+        }
+
+        try {
+            const attachment = await createFeedbackAttachmentView(
+                state.authClient,
+                feedback.selectedTicket.external_media_url
+            );
+            feedback.attachment = {
+                managed: attachment.managed,
+                loading: false,
+                signedUrl: attachment.signedUrl,
+                kind: attachment.kind,
+                error: ""
+            };
+        } catch (error) {
+            console.warn("Could not open private feedback attachment", error);
+            feedback.attachment = {
+                managed: true,
+                loading: false,
+                signedUrl: "",
+                kind: "file",
+                error: feedbackAttachmentErrorMessage(error)
+            };
         }
 
         const messagesResult = await feedback.api.listMessages(ticketId);

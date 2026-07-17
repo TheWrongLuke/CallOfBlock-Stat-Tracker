@@ -50,6 +50,26 @@ async function openApp(page, hash = "") {
     await page.waitForLoadState("domcontentloaded");
 }
 
+async function openAuthenticatedApp(page, hash = "") {
+    const authenticatedStub = supabaseStub.replace(
+        "session: null",
+        `session: {
+            user: {
+                id: "123e4567-e89b-42d3-a456-426614174000",
+                user_metadata: { sub: "discord-test-user", global_name: "Test Player" }
+            }
+        }`
+    );
+    await page.route("https://cdn.jsdelivr.net/**", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: authenticatedStub })
+    );
+    await page.route("**/api-config.js*", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: configStub })
+    );
+    await page.goto(`/${hash}`);
+    await page.waitForLoadState("domcontentloaded");
+}
+
 test("homepage and primary navigation load without fatal errors", async ({ page }) => {
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -84,6 +104,20 @@ test("feedback asks logged-out visitors to sign in", async ({ page }) => {
     await openApp(page, "#feedback");
     await expect(page.locator("#feedback-view")).toBeVisible();
     await expect(page.getByRole("button", { name: "Login with Discord" })).toBeVisible();
+});
+
+test("signed-in feedback includes cheat reports and private evidence upload", async ({ page }) => {
+    await openAuthenticatedApp(page, "#feedback");
+    const form = page.locator("[data-feedback-create]");
+    await expect(form).toBeVisible();
+    await expect(form.locator("select[name='category'] option[value='cheat_report']")).toHaveText("Cheat Report");
+    await form.locator(".ticket-optional-fields").evaluate((details) => {
+        details.open = true;
+    });
+    const attachment = form.locator("input[name='attachment']");
+    await expect(attachment).toBeVisible();
+    await expect(attachment).toHaveAttribute("accept", /image\/png/);
+    await expect(attachment).toHaveAttribute("accept", /video\/mp4/);
 });
 
 test("admin routes reject a logged-out visitor", async ({ page }) => {

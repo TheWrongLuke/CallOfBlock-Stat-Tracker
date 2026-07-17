@@ -202,6 +202,54 @@
     line-height: 1.5;
 }
 
+.ticket-attachment-field input[type="file"] {
+    padding: 7px;
+}
+
+.ticket-attachment-field input[type="file"]::file-selector-button {
+    min-height: 30px;
+    margin-right: 10px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    cursor: pointer;
+    font: inherit;
+    padding: 4px 10px;
+}
+
+.ticket-attachment-help,
+.ticket-attachment-state {
+    color: var(--muted);
+    font-size: 0.76rem;
+    line-height: 1.4;
+}
+
+.ticket-attachment-state {
+    margin: 16px 0 0;
+}
+
+.ticket-attachment-state.error {
+    color: #ffaaa1;
+}
+
+.ticket-media-divider {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+}
+
+.ticket-media-divider::before,
+.ticket-media-divider::after {
+    height: 1px;
+    background: var(--line);
+    content: "";
+}
+
 .feedback-form-grid [aria-invalid="true"],
 .ticket-reply-form [aria-invalid="true"] {
     border-color: var(--red);
@@ -547,6 +595,29 @@
     display: inline-block;
     margin-top: 16px;
     color: var(--blue);
+}
+
+.ticket-attachment-preview {
+    display: grid;
+    gap: 8px;
+    margin: 18px 0 0;
+}
+
+.ticket-attachment-preview img,
+.ticket-attachment-preview video {
+    display: block;
+    width: 100%;
+    max-height: min(62vh, 680px);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #05080c;
+    object-fit: contain;
+}
+
+.ticket-attachment-preview figcaption,
+.ticket-attachment-preview figcaption a {
+    color: var(--muted);
+    font-size: 0.78rem;
 }
 
 .ticket-message-list {
