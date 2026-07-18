@@ -390,7 +390,25 @@ test("an administrator can search players, inspect collections, and open protect
     await member.click();
 
     await expect(page.getByText("Complete Collection", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Backgrounds", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Profile icons", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Icon borders", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Titles", exact: true })).toBeVisible();
+    await page.locator("[data-player-collection-sort]").selectOption("alphabetical");
+    await expect(page.locator("[data-player-collection-sort]")).toHaveValue("alphabetical");
     expect(await page.locator("[data-progression-grant-revoke]").count()).toBeGreaterThan(0);
+    await page.locator("[data-progression-grant-revoke]").first().click();
+    const revokeDialog = page.locator("[data-player-revoke-form]");
+    await expect(revokeDialog).toBeVisible();
+    await expect(revokeDialog.locator('textarea[name="note"]')).toHaveAttribute("required", "");
+    await page.locator("[data-player-revoke-backdrop]").evaluate((backdrop) => {
+        backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await page.keyboard.press("Escape");
+    await expect(revokeDialog).toBeVisible();
+    await page.locator("[data-player-revoke-close]").click();
+    await expect(revokeDialog).toBeHidden();
+
     const give = page.locator("[data-player-grant-open]:not([disabled])").first();
     await expect(give).toBeVisible();
     await give.click();

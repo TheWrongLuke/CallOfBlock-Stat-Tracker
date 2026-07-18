@@ -74,7 +74,7 @@ describe("progression admin API", () => {
             source: "friend",
             note: "Thanks for helping"
         });
-        await api.revokePlayerCosmetic("player-1", "title", "founder");
+        await api.revokePlayerCosmetic("player-1", "title", "founder", "Season reward correction");
         await api.listOwnCosmeticGifts();
 
         expect(rpc).toHaveBeenNthCalledWith(1, "admin_set_player_community_ban", {
@@ -89,10 +89,11 @@ describe("progression admin API", () => {
             p_source: "friend",
             p_note: "Thanks for helping"
         });
-        expect(rpc).toHaveBeenNthCalledWith(3, "admin_revoke_player_cosmetic", {
+        expect(rpc).toHaveBeenNthCalledWith(3, "admin_revoke_player_cosmetic_with_note", {
             p_profile_id: "player-1",
             p_cosmetic_type: "title",
-            p_cosmetic_id: "founder"
+            p_cosmetic_id: "founder",
+            p_note: "Season reward correction"
         });
         expect(rpc).toHaveBeenNthCalledWith(4, "list_my_cosmetic_gifts");
     });

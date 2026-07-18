@@ -79,8 +79,9 @@ const baseProps = {
     revocations: [],
     selectedId: "player-1",
     currentUserId: "owner-id",
-    filters: { search: "", collection: "all" },
+    filters: { search: "", collection: "all", sort: "ownership" },
     grantKey: "",
+    revokeKey: "",
     banOpen: false,
     message: "",
     error: "",
@@ -103,11 +104,41 @@ describe("Player Manager view", () => {
         const html = renderPlayerManagerContent(baseProps);
 
         expect(html).toContain("1 owned / 2 catalog items");
+        expect(html).toContain("Backgrounds");
+        expect(html).toContain("Profile icons");
+        expect(html).toContain("Icon borders");
+        expect(html).toContain("Titles");
         expect(html).toContain("Founder Night");
         expect(html).toContain("Earned Title");
         expect(html).toContain("Progression reward");
         expect(html).toContain('data-cosmetic-id="earned"');
         expect(html).toContain('data-player-grant-open="background:founder"');
+        expect(html).toContain("data-player-collection-sort");
+    });
+
+    it("applies one ownership or alphabetical sort to every collection section", () => {
+        const sortingCatalog = [
+            ...catalog,
+            {
+                type: "title",
+                id: "alpha",
+                name: "Alpha Title",
+                text: "Alpha",
+                rarity: "common",
+                active: true,
+                acquisitionType: "exclusive"
+            }
+        ];
+        const ownedFirst = renderPlayerManagerContent({ ...baseProps, catalog: sortingCatalog });
+        const alphabetical = renderPlayerManagerContent({
+            ...baseProps,
+            catalog: sortingCatalog,
+            filters: { ...baseProps.filters, sort: "alphabetical" }
+        });
+
+        expect(ownedFirst.indexOf("Earned Title")).toBeLessThan(ownedFirst.indexOf("Alpha Title"));
+        expect(alphabetical.indexOf("Alpha Title")).toBeLessThan(alphabetical.indexOf("Earned Title"));
+        expect(alphabetical).toContain('<option value="alphabetical" selected>');
     });
 
     it("shows revoked cosmetics as restorable", () => {
@@ -144,6 +175,21 @@ describe("Player Manager view", () => {
         expect(html).not.toMatch(/data-player-grant-backdrop[^>]*data-player-grant-close/);
     });
 
+    it("requires a stored note before an owned cosmetic can be revoked", () => {
+        const html = renderPlayerManagerContent({
+            ...baseProps,
+            revokeKey: "title:earned"
+        });
+
+        expect(html).toContain("data-player-revoke-form");
+        expect(html).toContain('name="note"');
+        expect(html).toContain('minlength="3"');
+        expect(html).toContain('maxlength="300"');
+        expect(html).toContain("Confirm revocation");
+        expect(html.match(/data-player-revoke-close/g)).toHaveLength(1);
+        expect(html).not.toMatch(/data-player-revoke-backdrop[^>]*data-player-revoke-close/);
+    });
+
     it("shows ban history and renders a protected unban confirmation", () => {
         const html = renderPlayerManagerContent({
             ...baseProps,
@@ -160,7 +206,7 @@ describe("Player Manager view", () => {
     it("filters the directory and has an independent setup state", () => {
         const filtered = renderPlayerManagerContent({
             ...baseProps,
-            filters: { search: "BlockedMC", collection: "all" }
+            filters: { search: "BlockedMC", collection: "all", sort: "ownership" }
         });
         const unavailable = renderPlayerManagerContent({ ...baseProps, ready: false, error: "Install schema" });
 

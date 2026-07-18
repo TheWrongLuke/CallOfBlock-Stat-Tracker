@@ -2,6 +2,12 @@ import { formatDateTime } from "../utils/dates.js";
 import { escapeHtml } from "../utils/sanitization.js";
 
 const REQUIRED_FALLBACKS = new Set(["icon:minecraft", "background:default", "border:none", "title:none"]);
+const COLLECTION_GROUPS = [
+    { type: "background", label: "Backgrounds" },
+    { type: "icon", label: "Profile icons" },
+    { type: "border", label: "Icon borders" },
+    { type: "title", label: "Titles" }
+];
 
 export function renderPlayerManagerContent({
     ready,
@@ -13,6 +19,7 @@ export function renderPlayerManagerContent({
     currentUserId = "",
     filters = {},
     grantKey = "",
+    revokeKey = "",
     banOpen = false,
     message = "",
     error = "",
@@ -54,10 +61,11 @@ export function renderPlayerManagerContent({
                 </div>
             </div>
             <div class="player-manager-detail">
-                ${selected ? renderPlayerDetail(selected, catalog, selectedGrants, selectedRevocations, filters.collection, currentUserId) : renderNoPlayerSelected(players.length)}
+                ${selected ? renderPlayerDetail(selected, catalog, selectedGrants, selectedRevocations, filters.collection, filters.sort, currentUserId) : renderNoPlayerSelected(players.length)}
             </div>
         </section>
         ${selected && grantKey ? renderGiftDialog(selected, catalog, selectedRevocations, grantKey, saving) : ""}
+        ${selected && revokeKey ? renderRevokeDialog(selected, catalog, revokeKey, saving) : ""}
         ${selected && banOpen ? renderBanDialog(selected, currentUserId, saving) : ""}
     `;
 }
@@ -77,10 +85,10 @@ function renderPlayerRow(profile, selectedId) {
     `;
 }
 
-function renderPlayerDetail(profile, catalog, grants, revocations, collectionFilter, currentUserId) {
+function renderPlayerDetail(profile, catalog, grants, revocations, collectionFilter, collectionSort, currentUserId) {
     const inventory = new Map(grants.map((grant) => [cosmeticKey(grant), grant]));
     const revoked = new Map(revocations.map((entry) => [cosmeticKey(entry), entry]));
-    const collection = filterCollection(catalog, inventory, collectionFilter);
+    const collectionGroups = groupCollection(catalog, inventory, collectionFilter, collectionSort);
     const canBan = profile.id !== currentUserId && !profile.is_owner;
     return `
         <header class="player-manager-identity">
@@ -114,15 +122,40 @@ function renderPlayerDetail(profile, catalog, grants, revocations, collectionFil
                 <p class="panel-kicker">Complete Collection</p>
                 <strong>${escapeHtml(`${inventory.size} owned / ${catalog.length} catalog items`)}</strong>
             </div>
-            <div class="player-collection-filters" aria-label="Collection filter">
-                ${renderCollectionFilter("all", "All", collectionFilter)}
-                ${renderCollectionFilter("owned", "Owned", collectionFilter)}
-                ${renderCollectionFilter("unowned", "Unowned", collectionFilter)}
+            <div class="player-collection-controls">
+                <div class="player-collection-filters" aria-label="Collection filter">
+                    ${renderCollectionFilter("all", "All", collectionFilter)}
+                    ${renderCollectionFilter("owned", "Owned", collectionFilter)}
+                    ${renderCollectionFilter("unowned", "Unowned", collectionFilter)}
+                </div>
+                <label class="player-collection-sort">
+                    <span>Sort every section</span>
+                    <select data-player-collection-sort aria-label="Sort every cosmetic section">
+                        <option value="ownership" ${collectionSort !== "alphabetical" ? "selected" : ""}>Owned first</option>
+                        <option value="alphabetical" ${collectionSort === "alphabetical" ? "selected" : ""}>Alphabetical</option>
+                    </select>
+                </label>
             </div>
         </div>
-        <div class="player-collection-grid">
-            ${collection.length ? collection.map((item) => renderCollectionItem(profile, item, inventory.get(cosmeticKey(item)), revoked.get(cosmeticKey(item)))).join("") : `<p class="progression-empty">No cosmetics match this collection filter.</p>`}
+        <div class="player-collection-groups">
+            ${collectionGroups.map((group) => renderCollectionGroup(profile, group, inventory, revoked, collectionFilter)).join("")}
         </div>
+    `;
+}
+
+function renderCollectionGroup(profile, group, inventory, revoked, collectionFilter) {
+    const filterLabel =
+        collectionFilter === "owned" ? "owned" : collectionFilter === "unowned" ? "unowned" : "matching";
+    return `
+        <section class="player-collection-group" data-player-collection-group="${escapeHtml(group.type)}">
+            <header class="player-collection-group-header">
+                <h4>${escapeHtml(group.label)}</h4>
+                <span>${escapeHtml(`${group.ownedCount} owned / ${group.totalCount}`)}</span>
+            </header>
+            <div class="player-collection-grid">
+                ${group.items.length ? group.items.map((item) => renderCollectionItem(profile, item, inventory.get(cosmeticKey(item)), revoked.get(cosmeticKey(item)))).join("") : `<p class="progression-empty">No ${escapeHtml(filterLabel)} ${escapeHtml(group.label.toLowerCase())}.</p>`}
+            </div>
+        </section>
     `;
 }
 
@@ -196,6 +229,38 @@ function renderGiftDialog(profile, catalog, revocations, grantKey, saving) {
     `;
 }
 
+function renderRevokeDialog(profile, catalog, revokeKey, saving) {
+    const item = catalog.find((entry) => cosmeticKey(entry) === revokeKey);
+    if (!item || REQUIRED_FALLBACKS.has(revokeKey)) return "";
+    return `
+        <div class="progression-modal-backdrop" data-player-revoke-backdrop>
+            <section class="progression-cosmetic-dialog player-action-dialog" role="dialog" aria-modal="true" aria-labelledby="player-revoke-title">
+                <header class="progression-dialog-header player-action-dialog-header">
+                    <div class="player-action-dialog-preview">${renderCosmeticPreview(item)}</div>
+                    <div>
+                        <p class="panel-kicker">Revoke Cosmetic</p>
+                        <h3 id="player-revoke-title">Revoke ${escapeHtml(item.name || item.id)}</h3>
+                        <span>${escapeHtml(`Player: ${playerName(profile)}`)}</span>
+                    </div>
+                    <button class="progression-dialog-close" type="button" data-player-revoke-close aria-label="Close revoke dialog">X</button>
+                </header>
+                <form class="progression-cosmetic-form player-action-form" data-player-revoke-form>
+                    <input type="hidden" name="profileId" value="${escapeHtml(profile.id)}">
+                    <input type="hidden" name="cosmeticKey" value="${escapeHtml(revokeKey)}">
+                    <label>
+                        <span>Revocation note</span>
+                        <textarea name="note" rows="4" minlength="3" maxlength="300" required placeholder="Why this cosmetic is being revoked"></textarea>
+                    </label>
+                    <p class="progression-editor-status" role="status">The note is kept with the revocation. Automatic unlocks cannot return this cosmetic until an administrator restores it.</p>
+                    <footer class="progression-dialog-actions">
+                        <button class="danger" type="submit" ${saving ? "disabled" : ""}>${saving ? "Saving..." : "Confirm revocation"}</button>
+                    </footer>
+                </form>
+            </section>
+        </div>
+    `;
+}
+
 function renderBanDialog(profile, currentUserId, saving) {
     const banned = profile.banned_from_voting;
     const protectedProfile = profile.id === currentUserId || profile.is_owner;
@@ -260,19 +325,29 @@ function filterPlayers(players, searchValue) {
         );
 }
 
-function filterCollection(catalog, inventory, filter) {
-    return [...catalog]
-        .filter(
-            (item) =>
-                filter === "all" ||
-                (filter === "owned" ? inventory.has(cosmeticKey(item)) : !inventory.has(cosmeticKey(item)))
-        )
-        .sort(
-            (a, b) =>
-                Number(inventory.has(cosmeticKey(b))) - Number(inventory.has(cosmeticKey(a))) ||
-                String(a.type).localeCompare(String(b.type)) ||
-                String(a.name || a.id).localeCompare(String(b.name || b.id))
-        );
+function groupCollection(catalog, inventory, filter, sort) {
+    return COLLECTION_GROUPS.map((group) => {
+        const groupCatalog = catalog.filter((item) => item.type === group.type);
+        const items = groupCatalog
+            .filter(
+                (item) =>
+                    filter === "all" ||
+                    (filter === "owned" ? inventory.has(cosmeticKey(item)) : !inventory.has(cosmeticKey(item)))
+            )
+            .sort((a, b) => compareCollectionItems(a, b, inventory, sort));
+        return {
+            ...group,
+            items,
+            ownedCount: groupCatalog.filter((item) => inventory.has(cosmeticKey(item))).length,
+            totalCount: groupCatalog.length
+        };
+    });
+}
+
+function compareCollectionItems(a, b, inventory, sort) {
+    const nameOrder = String(a.name || a.label || a.id).localeCompare(String(b.name || b.label || b.id));
+    if (sort === "alphabetical") return nameOrder;
+    return Number(inventory.has(cosmeticKey(b))) - Number(inventory.has(cosmeticKey(a))) || nameOrder;
 }
 
 function renderPlayerAvatar(profile, size) {

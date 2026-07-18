@@ -412,7 +412,9 @@ const state = {
         playerSelectedId: "",
         playerSearch: "",
         playerCollectionFilter: "all",
+        playerCollectionSort: "ownership",
         playerGrantKey: "",
+        playerRevokeKey: "",
         playerBanOpen: false,
         playerMessage: "",
         playerError: "",
@@ -770,6 +772,7 @@ function bindStaticEvents() {
             state.progression.weeklyEditorId = "";
             state.progression.creatingWeekly = false;
             state.progression.playerGrantKey = "";
+            state.progression.playerRevokeKey = "";
             state.progression.playerBanOpen = false;
             renderProgressionAdminPage();
             return;
@@ -880,6 +883,7 @@ function bindStaticEvents() {
             event.preventDefault();
             state.progression.playerSelectedId = playerManagerSelect.dataset.playerManagerSelect || "";
             state.progression.playerGrantKey = "";
+            state.progression.playerRevokeKey = "";
             state.progression.playerBanOpen = false;
             state.progression.playerMessage = "";
             state.progression.playerError = "";
@@ -901,6 +905,7 @@ function bindStaticEvents() {
         if (playerGrantOpen) {
             event.preventDefault();
             state.progression.playerGrantKey = playerGrantOpen.dataset.playerGrantOpen || "";
+            state.progression.playerRevokeKey = "";
             state.progression.playerBanOpen = false;
             renderProgressionAdminPage();
             focusProgressionEditor();
@@ -920,6 +925,7 @@ function bindStaticEvents() {
             event.preventDefault();
             state.progression.playerBanOpen = true;
             state.progression.playerGrantKey = "";
+            state.progression.playerRevokeKey = "";
             renderProgressionAdminPage();
             focusProgressionEditor();
             return;
@@ -936,11 +942,29 @@ function bindStaticEvents() {
         const progressionGrantRevoke = event.target.closest("[data-progression-grant-revoke]");
         if (progressionGrantRevoke) {
             event.preventDefault();
-            void revokeProgressionGrant(
-                progressionGrantRevoke.dataset.profileId || "",
-                progressionGrantRevoke.dataset.cosmeticType || "",
-                progressionGrantRevoke.dataset.cosmeticId || ""
-            );
+            const profileId = progressionGrantRevoke.dataset.profileId || "";
+            const cosmeticType = progressionGrantRevoke.dataset.cosmeticType || "";
+            const cosmeticId = progressionGrantRevoke.dataset.cosmeticId || "";
+            if (requiredFallbackCosmetic(cosmeticType, cosmeticId)) {
+                state.progression.playerError = "The account's required fallback cosmetic cannot be revoked.";
+                renderProgressionAdminPage();
+                return;
+            }
+            state.progression.playerSelectedId = profileId;
+            state.progression.playerRevokeKey = `${cosmeticType}:${cosmeticId}`;
+            state.progression.playerGrantKey = "";
+            state.progression.playerBanOpen = false;
+            state.progression.playerError = "";
+            renderProgressionAdminPage();
+            focusProgressionEditor();
+            return;
+        }
+
+        const playerRevokeClose = event.target.closest("[data-player-revoke-close]");
+        if (playerRevokeClose) {
+            event.preventDefault();
+            state.progression.playerRevokeKey = "";
+            renderProgressionAdminPage();
             return;
         }
 
@@ -1201,6 +1225,12 @@ function bindStaticEvents() {
             return;
         }
 
+        if (event.target.matches("[data-player-revoke-form]")) {
+            event.preventDefault();
+            void submitProgressionRevoke(event.target);
+            return;
+        }
+
         if (event.target.matches("[data-player-ban-form]")) {
             event.preventDefault();
             void submitPlayerCommunityBan(event.target);
@@ -1266,6 +1296,14 @@ function bindStaticEvents() {
 
         if (event.target.matches("[data-weekly-template-show-archived]")) {
             state.progression.weeklyShowArchived = Boolean(event.target.checked);
+            renderProgressionAdminPage();
+            return;
+        }
+
+        if (event.target.matches("[data-player-collection-sort]")) {
+            const sort = event.target.value;
+            if (!["ownership", "alphabetical"].includes(sort)) return;
+            state.progression.playerCollectionSort = sort;
             renderProgressionAdminPage();
             return;
         }
@@ -2997,7 +3035,9 @@ function resetProgressionAdminState() {
     progression.playerSelectedId = "";
     progression.playerSearch = "";
     progression.playerCollectionFilter = "all";
+    progression.playerCollectionSort = "ownership";
     progression.playerGrantKey = "";
+    progression.playerRevokeKey = "";
     progression.playerBanOpen = false;
     progression.playerMessage = "";
     progression.playerError = "";
@@ -3683,9 +3723,11 @@ function renderProgressionAdminPage() {
             currentUserId: state.authSession?.user?.id || "",
             filters: {
                 search: state.progression.playerSearch,
-                collection: state.progression.playerCollectionFilter
+                collection: state.progression.playerCollectionFilter,
+                sort: state.progression.playerCollectionSort
             },
             grantKey: state.progression.playerGrantKey,
+            revokeKey: state.progression.playerRevokeKey,
             banOpen: state.progression.playerBanOpen,
             message: state.progression.playerMessage,
             error: state.progression.playerError || (!state.progression.ready ? state.progression.error : ""),
@@ -3874,7 +3916,7 @@ function normalizeCosmeticRevocation(row) {
 }
 
 function focusProgressionEditor() {
-    window.requestAnimationFrame(() => document.querySelector("[data-progression-cosmetic-close], [data-weekly-template-close], [data-player-grant-close], [data-player-ban-close]")?.focus());
+    window.requestAnimationFrame(() => document.querySelector("[data-progression-cosmetic-close], [data-weekly-template-close], [data-player-grant-close], [data-player-revoke-close], [data-player-ban-close]")?.focus());
 }
 
 function progressionEditorOpen() {
@@ -3884,6 +3926,7 @@ function progressionEditorOpen() {
         || state.progression.weeklyEditorId
         || state.progression.creatingWeekly
         || state.progression.playerGrantKey
+        || state.progression.playerRevokeKey
         || state.progression.playerBanOpen
     );
 }
@@ -4579,26 +4622,31 @@ async function submitProgressionGrant(form) {
     }
 }
 
-async function revokeProgressionGrant(profileId, cosmeticType, cosmeticId) {
+async function submitProgressionRevoke(form) {
     const progression = state.progression;
+    if (!progression.api || progression.saving || !isPlaytestAdmin()) return;
+    const values = new FormData(form);
+    const profileId = String(values.get("profileId") || "").trim();
+    const cosmetic = progressionCatalogItem(values.get("cosmeticKey"));
+    const note = String(values.get("note") || "").trim().replace(/\s+/g, " ").slice(0, 300);
     const grant = playerManagerEffectiveGrants(progressionAdminCatalogItems()).find((entry) =>
-        entry.profile_id === profileId && entry.cosmetic_type === cosmeticType && entry.cosmetic_id === cosmeticId
+        entry.profile_id === profileId && entry.cosmetic_type === cosmetic?.type && entry.cosmetic_id === cosmetic?.id
     );
-    if (!grant || !progression.api || progression.saving || !isPlaytestAdmin()) return;
-    if (requiredFallbackCosmetic(cosmeticType, cosmeticId)) {
-        progression.playerError = "The account's required fallback cosmetic cannot be revoked.";
-        renderProgressionAdminPage();
-        return;
-    }
-    if (!window.confirm("Revoke this cosmetic and prevent automatic ownership until an admin restores it?")) return;
-
-    progression.saving = true;
-    progression.playerError = "";
-    progression.playerMessage = "";
     try {
-        const result = await progression.api.revokePlayerCosmetic(profileId, cosmeticType, cosmeticId);
+        if (!cosmetic || !grant) throw new Error("Choose an owned cosmetic from the selected player.");
+        if (requiredFallbackCosmetic(cosmetic.type, cosmetic.id)) {
+            throw new Error("The account's required fallback cosmetic cannot be revoked.");
+        }
+        if (note.length < 3) throw new Error("Add a revocation note of at least 3 characters.");
+
+        progression.saving = true;
+        progression.playerError = "";
+        progression.playerMessage = "";
+        renderProgressionAdminPage();
+        const result = await progression.api.revokePlayerCosmetic(profileId, cosmetic.type, cosmetic.id, note);
         if (result.error) throw result.error;
-        progression.playerMessage = "Cosmetic revoked. Automatic unlocks will not restore it until an admin gives it back.";
+        progression.playerRevokeKey = "";
+        progression.playerMessage = `${cosmetic.name || "Cosmetic"} revoked. The note was saved with the revocation.`;
         progression.loaded = false;
         await loadProgressionAdminData({ force: true });
         await loadAccountProfiles();
@@ -4684,6 +4732,9 @@ function weeklyMissionAdminErrorMessage(error, fallback = "Weekly mission admini
 function playerManagerErrorMessage(error, fallback = "Player Manager is unavailable.") {
     const code = String(error?.code || "");
     const message = String(error?.message || error || "");
+    if (/admin_revoke_player_cosmetic_with_note/i.test(message)) {
+        return "Run the newest incremental Supabase cosmetic revoke notes script, then retry.";
+    }
     if (["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code)
         || /admin_list_managed_players|cosmetic_revocations|admin_set_player_community_ban|admin_(grant|revoke)_player_cosmetic|schema cache/i.test(message)) {
         return "Run the newest incremental Supabase cosmetic ownership repair script, then retry.";

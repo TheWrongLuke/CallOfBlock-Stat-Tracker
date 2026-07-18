@@ -59,11 +59,12 @@ export function createProgressionAdminApi(client) {
             });
         },
 
-        async revokePlayerCosmetic(profileId, cosmeticType, cosmeticId) {
-            return client.rpc("admin_revoke_player_cosmetic", {
+        async revokePlayerCosmetic(profileId, cosmeticType, cosmeticId, note) {
+            return client.rpc("admin_revoke_player_cosmetic_with_note", {
                 p_profile_id: profileId,
                 p_cosmetic_type: cosmeticType,
-                p_cosmetic_id: cosmeticId
+                p_cosmetic_id: cosmeticId,
+                p_note: note
             });
         },
 
