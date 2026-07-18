@@ -10491,6 +10491,7 @@ function accountAvatarUrl(account, profile, size = 64) {
     const source = cleanAvatarSource(account?.avatar_source);
     if (source === "custom" && account?.custom_avatar_url) return account.custom_avatar_url;
     if (source === "discord" && account?.avatar_url) return account.avatar_url;
+    if (source === "minecraft") return skinHeadUrl(accountMinecraftName(account, profile), size);
     const option = cosmeticCatalogItem("icon", source);
     if (option?.image) return safeCssUrl(option.image);
     return skinHeadUrl(accountMinecraftName(account, profile), size);

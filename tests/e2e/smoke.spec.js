@@ -48,6 +48,7 @@ const adminSupabaseStub = `
         username: "test-admin",
         display_name: "Test Admin",
         avatar_url: null,
+        avatar_source: "minecraft",
         is_admin: true,
         is_owner: true,
         banned_from_voting: false,
@@ -79,6 +80,32 @@ const adminSupabaseStub = `
         const single = calls.some(([method]) => method === "single" || method === "maybeSingle");
         if (table === "profiles") return { data: single ? profile : [profile], error: null };
         if (table === "public_profiles") return { data: [profile], error: null };
+        if (table === "cosmetic_catalog_items") return {
+            data: [{
+                cosmetic_type: "icon",
+                cosmetic_id: "minecraft",
+                name: "Minecraft skin",
+                description: "Use the linked Minecraft skin.",
+                category: "Default",
+                rarity: "common",
+                image_url: "./Icon.png",
+                title_text: null,
+                border_inset: 0,
+                active: true,
+                shop_enabled: false,
+                shop_unit_amount: 0,
+                shop_currency: "eur",
+                shop_featured: false,
+                sort_order: 2,
+                acquisition_type: "default",
+                available_from: null,
+                available_until: null,
+                supply_limit: null,
+                created_at: "2026-07-01T12:00:00Z",
+                updated_at: "2026-07-01T12:00:00Z"
+            }],
+            error: null
+        };
         if (table === "profile_cosmetic_inventory") return {
             data: [{
                 profile_id: member.id,
@@ -446,6 +473,19 @@ test("an administrator can search players, inspect collections, and open protect
     await expect(page.locator('[data-player-ban-form] textarea[name="reason"]')).toBeVisible();
     await page.locator("[data-player-ban-close]").click();
     await expect(page.locator("[data-player-ban-form]")).toBeHidden();
+});
+
+test("the Minecraft avatar ignores its catalog placeholder image", async ({ page }) => {
+    await openAdminApp(page, "#account");
+    await expect(page.locator("[data-account-form]")).toBeVisible();
+    await expect(page.locator(".account-hero .account-avatar-large img")).toHaveAttribute(
+        "src",
+        /https:\/\/api\.mcheads\.org\/head\/AdminMC\//
+    );
+    await expect(page.locator("[data-account-preview-img]")).toHaveAttribute(
+        "src",
+        /https:\/\/api\.mcheads\.org\/head\/AdminMC\//
+    );
 });
 
 test("personal cosmetics remember the Show unowned preference after reload", async ({ page }) => {
