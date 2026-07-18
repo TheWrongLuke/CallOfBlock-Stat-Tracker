@@ -162,7 +162,8 @@ function renderCollectionGroup(profile, group, inventory, revocationHistory, col
 function renderCollectionItem(profile, item, grant, revocation) {
     const owned = Boolean(grant);
     const requiredFallback = REQUIRED_FALLBACKS.has(cosmeticKey(item));
-    const revocable = owned && !requiredFallback;
+    const automaticProtected = grant?.source === "default" || grant?.source === "owner";
+    const revocable = owned && !requiredFallback && !automaticProtected;
     const ownerRestricted = item.acquisitionType === "owner" && !profile.is_owner;
     const grantDisabled = item.active === false || ownerRestricted;
     const key = cosmeticKey(item);

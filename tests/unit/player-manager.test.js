@@ -145,6 +145,52 @@ describe("Player Manager view", () => {
         expect(html).not.toContain("Earlier removal");
     });
 
+    it("protects automatic default and owner inventory rows from manual revocation", () => {
+        const protectedCatalog = [
+            {
+                type: "icon",
+                id: "default",
+                name: "Default icon",
+                rarity: "common",
+                active: true,
+                acquisitionType: "default"
+            },
+            {
+                type: "title",
+                id: "owner",
+                name: "Owner",
+                text: "Owner",
+                rarity: "mythic",
+                active: true,
+                acquisitionType: "owner"
+            }
+        ];
+        const protectedGrants = [
+            {
+                profile_id: "player-1",
+                cosmetic_type: "icon",
+                cosmetic_id: "default",
+                source: "default"
+            },
+            {
+                profile_id: "player-1",
+                cosmetic_type: "title",
+                cosmetic_id: "owner",
+                source: "owner"
+            }
+        ];
+
+        const html = renderPlayerManagerContent({
+            ...baseProps,
+            catalog: protectedCatalog,
+            grants: protectedGrants
+        });
+
+        expect(html).not.toContain("data-progression-grant-revoke");
+        expect(html).toContain("Default item");
+        expect(html).toContain("Owner item");
+    });
+
     it("applies one ownership or alphabetical sort to every collection section", () => {
         const sortingCatalog = [
             ...catalog,

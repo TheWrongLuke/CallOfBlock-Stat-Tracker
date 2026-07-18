@@ -25,6 +25,10 @@ import {
 } from "./src/config/feedback.js";
 import { validateReplyInput, validateTicketInput } from "./src/utils/feedback-validation.js";
 import {
+    headshotRatePercent,
+    meetsSharpshooterRequirement
+} from "./src/utils/cosmetic-progress.js";
+import {
     createFeedbackAttachmentView,
     createFeedbackTicketId,
     feedbackAttachmentErrorMessage,
@@ -41,6 +45,7 @@ import {
     loadCosmeticPickerPreferences,
     saveCosmeticPickerPreferences
 } from "./src/services/cosmetic-picker-preferences.js";
+import { claimCanonicalProgressionCosmetics } from "./src/services/progression-claims.js";
 import {
     renderAdminDocumentationContent,
     renderAdminTicketsContent,
@@ -277,7 +282,7 @@ const BADGE_CATALOG = [
     { id: "br_mvp_100", label: "BR MVP 100", rarity: "legendary", description: "Earn MVP 100 times in Battle Royale.", progress: { scope: "battleRoyale", stat: "mvp", target: 100, unit: "BR MVP awards" }, test: ({ br }) => br.stats.mvp >= 100 },
     { id: "dm_mvp_10", label: "DM MVP 10", rarity: "rare", description: "Earn MVP 10 times in Deathmatch.", progress: { scope: "deathmatch", stat: "mvp", target: 10, unit: "DM MVP awards" }, test: ({ dm }) => dm.stats.mvp >= 10 },
     { id: "dm_mvp_100", label: "DM MVP 100", rarity: "legendary", description: "Earn MVP 100 times in Deathmatch.", progress: { scope: "deathmatch", stat: "mvp", target: 100, unit: "DM MVP awards" }, test: ({ dm }) => dm.stats.mvp >= 100 },
-    { id: "sharpshooter", label: "Sharpshooter", rarity: "epic", description: "Reach 35% headshot rate with at least 20 hits.", progress: { type: "sharpshooter", rateTarget: 35, hitsTarget: 20 }, test: ({ stats, derived }) => stats.hits >= 20 && derived.headshotRate >= 35 },
+    { id: "sharpshooter", label: "Sharpshooter", rarity: "epic", description: "Reach 35% headshot rate with at least 20 hits.", progress: { type: "sharpshooter", rateTarget: 35, hitsTarget: 20 }, test: ({ stats, derived }) => meetsSharpshooterRequirement(stats, derived) },
     { id: "veteran", label: "Veteran", rarity: "rare", description: "Play 25 games.", progress: { scope: "overall", stat: "games", target: 25, unit: "games" }, test: ({ stats }) => stats.games >= 25 }
 ];
 const DEFAULT_PLAYTEST_VIEWER = {
@@ -613,7 +618,7 @@ async function applyAuthSession(session, shouldRender = false) {
 async function claimProgressionCosmetics() {
     if (!state.authClient || !state.authSession?.user || isCurrentAccountCommunityBanned()) return;
     try {
-        const result = await state.authClient.rpc("claim_progression_cosmetics");
+        const result = await claimCanonicalProgressionCosmetics(state.authClient);
         if (result.error) {
             const code = String(result.error.code || "");
             if (["42883", "PGRST202"].includes(code) || /could not find.*claim_progression_cosmetics/i.test(result.error.message || "")) return;
@@ -10798,7 +10803,7 @@ function badgeProgressState(badge, context, unlocked) {
     if (requirement.type === "sharpshooter") {
         const rateTarget = number(requirement.rateTarget);
         const hitsTarget = number(requirement.hitsTarget);
-        const actualRate = number(context?.derived?.headshotRate);
+        const actualRate = headshotRatePercent(context?.derived?.headshotRate);
         const actualHits = number(context?.stats?.hits);
         const shownRate = unlocked ? Math.max(actualRate, rateTarget) : Math.min(actualRate, rateTarget);
         const shownHits = unlocked ? Math.max(actualHits, hitsTarget) : Math.min(actualHits, hitsTarget);

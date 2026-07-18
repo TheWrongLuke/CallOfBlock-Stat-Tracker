@@ -137,7 +137,7 @@ export function createProgressionAdminApi(client) {
         },
 
         async reconcileCosmetic(cosmeticType, cosmeticId) {
-            return client.rpc("reconcile_cosmetic_ownership", {
+            return client.rpc("reconcile_cosmetic_ownership_v2", {
                 p_cosmetic_type: cosmeticType,
                 p_cosmetic_id: cosmeticId
             });

@@ -8,7 +8,7 @@ describe("progression admin API", () => {
 
         const result = await api.reconcileCosmetic("background", "battle_royale");
 
-        expect(rpc).toHaveBeenCalledWith("reconcile_cosmetic_ownership", {
+        expect(rpc).toHaveBeenCalledWith("reconcile_cosmetic_ownership_v2", {
             p_cosmetic_type: "background",
             p_cosmetic_id: "battle_royale"
         });

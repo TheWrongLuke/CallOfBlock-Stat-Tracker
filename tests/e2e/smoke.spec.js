@@ -157,7 +157,7 @@ const adminSupabaseStub = `
                 },
                 from: (table) => builder(table),
                 rpc: async (name) => ({
-                    data: name === "reconcile_cosmetic_ownership"
+                    data: name === "reconcile_cosmetic_ownership_v2"
                         ? { eligible: 0, added: 0, removed: 0 }
                         : name === "admin_list_managed_players"
                             ? [profile, member]
