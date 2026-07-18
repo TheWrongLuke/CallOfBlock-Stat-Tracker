@@ -20,7 +20,7 @@
     <link rel="icon" type="image/png" href="./Icon.png">
     <link rel="apple-touch-icon" href="./Icon.png">
     <link rel="manifest" href="./site.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=inventory-sync-2">
+    <link rel="stylesheet" href="./styles.css?v=player-guide-1">
 </head>
 <body class="home-route">
 <div class="app-shell">
@@ -201,18 +201,43 @@
             <article class="guide-panel" id="how-to-play" tabindex="-1">
                 <p class="panel-kicker">Getting Started</p>
                 <h2>How to play</h2>
+                <p class="guide-lead">Install the matching pack, join an announced server session, then use the in-game Call of Block menu to enter a mode.</p>
                 <ol class="step-list">
-                    <li>Join the Discord to get the current server address, announcements, match times, rules, and updates.</li>
-                    <li>Install the Call of Block modpack from CurseForge or Modrinth so the launcher keeps every dependency matched.</li>
-                    <li>Open the server, queue for Battle Royale or Deathmatch, and pick the team or kit shown in-game.</li>
-                    <li>For Battle Royale, drop from the fly-by, loot Shmar, watch the zone, and survive to the final fight.</li>
-                    <li>For Deathmatch, choose a kit, play with your team, and reach the target score before the other side.</li>
+                    <li><strong>Install the official modpack.</strong><span>Use its CurseForge or Modrinth launcher profile for Minecraft 1.20.1 Forge so every required mod stays on the matching version.</span></li>
+                    <li><strong>Check the current session.</strong><span>Join Discord for the server address, whitelist or access instructions, announcements, rules, and scheduled playtest time.</span></li>
+                    <li><strong>Open the game menu.</strong><span>Bind <code>Open Call of Block Menu</code> under Minecraft Controls, or type <code>/brmenu</code>, then join the Battle Royale or Deathmatch queue.</span></li>
                 </ol>
+                <div class="mode-guide-grid">
+                    <section class="mode-guide" aria-labelledby="how-to-play-br">
+                        <span>Battle Royale</span>
+                        <h3 id="how-to-play-br">Drop, loot, survive.</h3>
+                        <ul>
+                            <li>Choose solo or team play from the Call of Block menu. You can create a team before joining the queue.</li>
+                            <li>Ride the fly-by over Shmar, choose your drop, then search chests for weapons, attachments, healing, utility, explosives, and possible vehicles.</li>
+                            <li>Keep moving with the closing zone and survive until one player or team remains.</li>
+                            <li>Night Vision Goggles are equipped at round start and begin switched off. Bind <code>Toggle Night Vision Goggles</code> in the Call of Block controls to use them.</li>
+                        </ul>
+                    </section>
+                    <section class="mode-guide" aria-labelledby="how-to-play-dm">
+                        <span>Deathmatch</span>
+                        <h3 id="how-to-play-dm">Vote, kit up, score.</h3>
+                        <ul>
+                            <li>Join from the menu or with <code>/joindm</code>, then choose a Red, Blue, or random team preference. Teams are balanced when the round starts.</li>
+                            <li>Vote for an available map while queued. Use the menu, <code>/vote map &lt;id&gt;</code>, or <code>/vote random</code>.</li>
+                            <li>Choose a kit during the active round. You respawn after dying and return with your selected kit.</li>
+                            <li>Help your team reach the kill target before the other team or finish ahead when the timer expires.</li>
+                        </ul>
+                    </section>
+                </div>
+                <div class="guide-account-note">
+                    <strong>After the match</strong>
+                    <p>Completed rounds are published to the website for leaderboards, profiles, weapons, maps, and match history. To connect those stats to your website account, run <code>/linkminecraft</code> in Discord and then <code>/discordlink &lt;code&gt;</code> in Minecraft while the bot and server are online.</p>
+                </div>
                 <div class="link-row">
                     <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord invite</a>
                     <a href="https://www.curseforge.com/minecraft/modpacks/call-of-block" target="_blank" rel="noopener noreferrer">CurseForge</a>
                     <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Modrinth</a>
-                    <span class="download-note">Use a launcher profile</span>
+                    <a href="#playtests">Playtests</a>
                 </div>
             </article>
 
@@ -220,24 +245,44 @@
                 <p class="panel-kicker">Questions</p>
                 <h2>FAQ</h2>
                 <details open>
-                    <summary>Is this vanilla Minecraft?</summary>
-                    <p>No. Call of Block is a modded server and needs the matching modpack version.</p>
+                    <summary>Is the server online all the time?</summary>
+                    <p>No. The community server is not guaranteed to run 24/7. Check Discord announcements and the Playtests page for planned sessions and confirmed dates.</p>
                 </details>
                 <details>
-                    <summary>What version is the server on?</summary>
-                    <p>The server runs Minecraft 1.20.1 on Forge.</p>
+                    <summary>What do I need to install?</summary>
+                    <p>Install the official Call of Block modpack through CurseForge or Modrinth. It runs on Minecraft 1.20.1 Forge. Using the launcher profile is safer than assembling the mods manually.</p>
                 </details>
                 <details>
                     <summary>Can cracked players join?</summary>
-                    <p>The server can allow cracked players, but the modpack is still required.</p>
+                    <p>The server can support cracked accounts during community sessions, but the current whitelist and access instructions still apply. Check Discord before joining, and use the same required modpack.</p>
                 </details>
                 <details>
-                    <summary>What modes are available?</summary>
-                    <p>Battle Royale and Deathmatch are the main modes right now. Vehicle-focused modes are planned later.</p>
+                    <summary>What is the difference between the two modes?</summary>
+                    <p>Battle Royale is a survival match built around dropping, looting, the moving zone, and being the final surviving player or team. Deathmatch is a team mode with map voting, selectable kits, respawns, and a kill target or time limit.</p>
                 </details>
                 <details>
-                    <summary>Where do stats come from?</summary>
-                    <p>Stats are saved by the server after matches and shown here for leaderboards, profiles, weapons, maps, and match history.</p>
+                    <summary>Do I need to log in with Discord?</summary>
+                    <p>No login is needed to browse public stats. Discord login is required for your website account, profile customization, missions, playtest voting and notifications, and Feedback &amp; Support tickets.</p>
+                </details>
+                <details>
+                    <summary>How do I link Discord, Minecraft, and my stats?</summary>
+                    <p>Run <code>/linkminecraft</code> in Discord, then use the displayed <code>/discordlink &lt;code&gt;</code> command in Minecraft before it expires. The bot and server must be online while linking. Once saved, your website profile can load the link while the bot is offline.</p>
+                </details>
+                <details>
+                    <summary>Why have my stats not updated yet?</summary>
+                    <p>Stats are recorded by the server and published after completed matches. Mid-round values do not immediately replace the public profile. Wait for the match and publish process to finish, then reload the page.</p>
+                </details>
+                <details>
+                    <summary>How do community playtests work?</summary>
+                    <p>Open Playtests, select a date, and submit your status and available time range. Times are displayed in your local timezone. A gray Unconfirmed date is only a possibility; the Upcoming Event appears after an administrator confirms the final date and time.</p>
+                </details>
+                <details>
+                    <summary>Who can see my support tickets and evidence?</summary>
+                    <p>Your ticket, replies, and directly uploaded screenshot or clip are available to you and authorized staff, not to other players. Do not include passwords, authentication codes, or other secrets.</p>
+                </details>
+                <details>
+                    <summary>Why do I sometimes still see old website content?</summary>
+                    <p>GitHub Pages and browsers can cache site files for several minutes. First try a normal reload. If a new deployment is still showing an old script or image, use <code>Ctrl+F5</code> once to bypass the cached copy.</p>
                 </details>
             </article>
         </section>
