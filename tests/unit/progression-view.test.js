@@ -91,45 +91,60 @@ describe("progression admin view", () => {
         expect(html).toContain("Save and reconcile ownership");
         expect(html).toContain('name="metric"');
         expect(html).toContain('value="wins" selected');
+        expect(html).toMatch(/data-progression-asset-fields\s*>/);
+        expect(html).toMatch(/data-progression-title-fields hidden/);
+        expect(html).toMatch(/data-progression-border-fields hidden/);
+        expect(html).toMatch(/data-progression-mission-fields\s*>/);
+        expect(html).toMatch(/data-progression-store-fields hidden/);
         expect(html.match(/data-progression-cosmetic-close/g)).toHaveLength(1);
         expect(html).not.toMatch(/data-progression-editor-backdrop[^>]*data-progression-cosmetic-close/);
     });
 
-    it("escapes player labels and only allows direct grants to be revoked", () => {
+    it("only renders the fields used by a title cosmetic", () => {
         const html = renderProgressionAdminContent({
             ...baseProps,
-            profiles: [
-                {
-                    id: "123e4567-e89b-42d3-a456-426614174000",
-                    username: "owner<script>",
-                    display_name: "Owner <img>",
-                    minecraft_player_name: "RTXLuke",
-                    is_owner: true
-                }
-            ],
-            grants: [
-                {
-                    profile_id: "123e4567-e89b-42d3-a456-426614174000",
-                    cosmetic_type: "title",
-                    cosmetic_id: "owner",
-                    source: "owner",
-                    acquired_at: "2026-07-17T12:00:00Z"
-                },
-                {
-                    profile_id: "123e4567-e89b-42d3-a456-426614174000",
-                    cosmetic_type: "background",
-                    cosmetic_id: "founder_night",
-                    source: "admin",
-                    acquired_at: "2026-07-17T12:00:00Z"
-                }
-            ]
+            editorKey: "title:owner"
         });
 
-        expect(html).toContain("data-progression-grant-form");
-        expect(html).not.toContain("<script>");
-        expect(html).not.toContain("Owner <img>");
-        expect(html).toContain("@owner&lt;script&gt;");
-        expect(html.match(/data-progression-grant-revoke/g)).toHaveLength(1);
+        expect(html).toMatch(/data-progression-asset-fields hidden/);
+        expect(html).toMatch(/data-progression-title-fields\s*>/);
+        expect(html).toMatch(/data-progression-border-fields hidden/);
+        expect(html).toMatch(/data-progression-mission-fields hidden/);
+        expect(html).toMatch(/data-progression-store-fields hidden/);
+    });
+
+    it("shows store limits only when the item actually uses them", () => {
+        const html = renderProgressionAdminContent({
+            ...baseProps,
+            catalog: [
+                {
+                    ...catalog[1],
+                    acquisitionType: "store",
+                    availableFrom: "2026-08-01T12:00:00Z",
+                    availableUntil: "2026-08-08T12:00:00Z",
+                    supplyLimit: 25,
+                    unitAmount: 499,
+                    currency: "eur"
+                }
+            ],
+            editorKey: "background:founder_night"
+        });
+
+        expect(html).toMatch(/data-progression-mission-fields hidden/);
+        expect(html).toMatch(/data-progression-store-fields\s*>/);
+        expect(html).toMatch(/data-progression-time-limit checked/);
+        expect(html).toMatch(/data-progression-time-fields\s*>/);
+        expect(html).toMatch(/data-progression-count-limit checked/);
+        expect(html).toMatch(/data-progression-count-fields\s*>/);
+        expect(html).toContain('value="4.99"');
+    });
+
+    it("moves manual ownership controls out of the cosmetic catalog", () => {
+        const html = renderProgressionAdminContent(baseProps);
+
+        expect(html).toContain('data-progression-section="players"');
+        expect(html).not.toContain("data-progression-grant-form");
+        expect(html).not.toContain("progression-grant-workspace");
     });
 
     it("filters archived and unrelated cosmetic types", () => {
@@ -163,5 +178,24 @@ describe("progression admin view", () => {
         expect(html).toContain("Weekly rotation");
         expect(html).toContain("data-weekly-template-new");
         expect(html).not.toContain("data-progression-grant-form");
+    });
+
+    it("switches the protected workspace to Player Manager", () => {
+        const html = renderProgressionAdminContent({
+            ...baseProps,
+            section: "players",
+            player: {
+                ready: true,
+                players: [],
+                catalog,
+                grants: [],
+                filters: { search: "", collection: "all" }
+            }
+        });
+
+        expect(html).toContain('data-progression-section="players"');
+        expect(html).toContain("Registered players");
+        expect(html).toContain("No registered players");
+        expect(html).not.toContain("data-progression-cosmetic-new");
     });
 });

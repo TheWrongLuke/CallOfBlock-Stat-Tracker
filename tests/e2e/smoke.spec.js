@@ -50,12 +50,29 @@ const adminSupabaseStub = `
         avatar_url: null,
         is_admin: true,
         is_owner: true,
+        banned_from_voting: false,
+        minecraft_player_name: "AdminMC",
+        created_at: "2026-07-01T12:00:00Z",
         selected_badges: [],
         unlocked_badges: [],
         unlocked_backgrounds: [],
         unlocked_pfp_borders: [],
         unlocked_icons: [],
         unlocked_titles: []
+    };
+    const member = {
+        id: "223e4567-e89b-42d3-a456-426614174111",
+        username: "community-player",
+        display_name: "Community Player",
+        avatar_url: null,
+        minecraft_player_name: "PlayerMC",
+        is_admin: false,
+        is_owner: false,
+        banned_from_voting: false,
+        ban_reason: null,
+        banned_at: null,
+        banned_by_username: null,
+        created_at: "2026-07-02T12:00:00Z"
     };
 
     function resultFor(table, calls) {
@@ -127,7 +144,14 @@ const adminSupabaseStub = `
                     signOut: async () => ({ error: null })
                 },
                 from: (table) => builder(table),
-                rpc: async (name) => ({ data: name === "reconcile_cosmetic_ownership" ? { eligible: 0, added: 0, removed: 0 } : [], error: null }),
+                rpc: async (name) => ({
+                    data: name === "reconcile_cosmetic_ownership"
+                        ? { eligible: 0, added: 0, removed: 0 }
+                        : name === "admin_list_managed_players"
+                            ? [profile, member]
+                            : [],
+                    error: null
+                }),
                 storage: { from: () => ({}) }
             };
         }
@@ -289,6 +313,52 @@ test("the cosmetic editor stays open until its X button is used", async ({ page 
     await expect(dialog).toBeHidden();
 });
 
+test("new cosmetic fields follow type, ownership, and store limits", async ({ page }) => {
+    await openAdminApp(page);
+    await page.locator("[data-progression-cosmetic-new]").click();
+
+    const form = page.locator("[data-progression-cosmetic-form]");
+    const type = form.locator("[data-progression-cosmetic-type]");
+    const acquisition = form.locator("[data-progression-acquisition]");
+    await expect(form.locator("[data-progression-asset-fields]")).toBeVisible();
+    await expect(form.locator("[data-progression-title-fields]")).toBeHidden();
+    await expect(form.locator("[data-progression-border-fields]")).toBeHidden();
+
+    await type.selectOption("title");
+    await expect(form.locator("[data-progression-asset-fields]")).toBeHidden();
+    await expect(form.locator("[data-progression-title-fields]")).toBeVisible();
+    await expect(form.locator("[data-progression-border-fields]")).toBeHidden();
+
+    await type.selectOption("border");
+    await expect(form.locator("[data-progression-asset-fields]")).toBeVisible();
+    await expect(form.locator("[data-progression-title-fields]")).toBeHidden();
+    await expect(form.locator("[data-progression-border-fields]")).toBeVisible();
+
+    await expect(form.locator("[data-progression-mission-fields]")).toBeHidden();
+    await expect(form.locator("[data-progression-store-fields]")).toBeHidden();
+    await acquisition.selectOption("progression");
+    await expect(form.locator("[data-progression-mission-fields]")).toBeVisible();
+    await expect(form.locator("[data-progression-store-fields]")).toBeHidden();
+
+    await acquisition.selectOption("store");
+    await expect(form.locator("[data-progression-mission-fields]")).toBeHidden();
+    await expect(form.locator("[data-progression-store-fields]")).toBeVisible();
+    await expect(form.locator("[data-progression-time-fields]")).toBeHidden();
+    await expect(form.locator("[data-progression-count-fields]")).toBeHidden();
+
+    await form.locator("[data-progression-time-limit]").check();
+    await expect(form.locator("[data-progression-time-fields]")).toBeVisible();
+    await expect(form.locator("input[name='availableFrom']")).toHaveAttribute("required", "");
+    await form.locator("[data-progression-count-limit]").check();
+    await expect(form.locator("[data-progression-count-fields]")).toBeVisible();
+    await expect(form.locator("input[name='supplyLimit']")).toHaveAttribute("required", "");
+
+    await acquisition.selectOption("exclusive");
+    await expect(form.locator("[data-progression-store-fields]")).toBeHidden();
+    await expect(form.locator("input[name='availableFrom']")).not.toHaveAttribute("required", "");
+    await expect(form.locator("input[name='supplyLimit']")).not.toHaveAttribute("required", "");
+});
+
 test("an administrator can open the weekly mission editor and only close it with X", async ({ page }) => {
     await openAdminApp(page);
     await page.locator('[data-progression-section="weekly"]').click();
@@ -307,4 +377,36 @@ test("an administrator can open the weekly mission editor and only close it with
 
     await page.locator("[data-weekly-template-close]").click();
     await expect(dialog).toBeHidden();
+});
+
+test("an administrator can search players, inspect collections, and open protected actions", async ({ page }) => {
+    await openAdminApp(page);
+    await page.locator('[data-progression-section="players"]').click();
+    const search = page.locator("[data-player-manager-search]");
+    await expect(search).toBeVisible();
+    await search.fill("PlayerMC");
+    const member = page.locator('[data-player-manager-select="223e4567-e89b-42d3-a456-426614174111"]');
+    await expect(member).toBeVisible();
+    await member.click();
+
+    await expect(page.getByText("Complete Collection", { exact: true })).toBeVisible();
+    const give = page.locator("[data-player-grant-open]:not([disabled])").first();
+    await expect(give).toBeVisible();
+    await give.click();
+    const giftDialog = page.locator(".player-action-dialog");
+    await expect(giftDialog).toBeVisible();
+    await expect(giftDialog.locator('textarea[name="note"]')).toBeVisible();
+    await page.locator("[data-player-grant-backdrop]").evaluate((backdrop) => {
+        backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await page.keyboard.press("Escape");
+    await expect(giftDialog).toBeVisible();
+    await page.locator("[data-player-grant-close]").click();
+    await expect(giftDialog).toBeHidden();
+
+    await page.locator("[data-player-ban-open]").click();
+    await expect(page.locator("[data-player-ban-form]")).toBeVisible();
+    await expect(page.locator('[data-player-ban-form] textarea[name="reason"]')).toBeVisible();
+    await page.locator("[data-player-ban-close]").click();
+    await expect(page.locator("[data-player-ban-form]")).toBeHidden();
 });

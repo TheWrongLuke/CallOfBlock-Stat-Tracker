@@ -3,7 +3,7 @@ export const COSMETIC_ACQUISITION_TYPES = Object.freeze([
     { value: "progression", label: "Progression reward" },
     { value: "exclusive", label: "Admin grant / exclusive" },
     { value: "owner", label: "Owner only" },
-    { value: "store", label: "Future store item" }
+    { value: "store", label: "Bought from store" }
 ]);
 
 export const PROGRESSION_MODES = Object.freeze([

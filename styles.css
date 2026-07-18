@@ -1346,6 +1346,409 @@
     color: var(--gold);
 }
 
+.player-manager-layout {
+    min-height: 620px;
+    display: grid;
+    grid-template-columns: minmax(250px, 310px) minmax(0, 1fr);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(9, 15, 23, 0.58);
+}
+
+.player-manager-directory {
+    min-width: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 12px;
+    border-right: 1px solid var(--line);
+    padding: 13px;
+    background: rgba(13, 20, 30, 0.72);
+}
+
+.player-manager-search {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+}
+
+.player-manager-search span {
+    color: var(--muted);
+    font: 700 0.68rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.player-manager-search input {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 8px 10px;
+    background: #0a1018;
+    color: var(--text);
+    font: inherit;
+}
+
+.player-manager-list {
+    min-height: 0;
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.player-manager-row {
+    min-width: 0;
+    min-height: 58px;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 7px;
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+}
+
+.player-manager-row:hover,
+.player-manager-row:focus-visible {
+    border-color: rgba(244, 188, 74, 0.38);
+    outline: none;
+}
+
+.player-manager-row[aria-current="true"] {
+    border-color: rgba(244, 188, 74, 0.58);
+    background: rgba(244, 188, 74, 0.08);
+}
+
+.player-manager-row.banned {
+    border-left-color: var(--red);
+}
+
+.player-manager-row > span:nth-child(2) {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.player-manager-row strong,
+.player-manager-row small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.player-manager-row small {
+    color: var(--muted);
+    font-size: 0.68rem;
+}
+
+.player-manager-row em {
+    color: #ff9b9b;
+    font: 700 0.62rem "Chakra Petch", sans-serif;
+    font-style: normal;
+    text-transform: uppercase;
+}
+
+.player-manager-avatar {
+    position: relative;
+    width: var(--player-avatar-size);
+    height: var(--player-avatar-size);
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #080d14;
+    color: var(--gold);
+    font: 700 0.72rem "Chakra Petch", sans-serif;
+}
+
+.player-manager-avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.player-manager-detail {
+    min-width: 0;
+    padding: 16px;
+}
+
+.player-manager-identity {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 13px;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 15px;
+}
+
+.player-manager-identity h3,
+.player-manager-identity p,
+.player-manager-identity span,
+.player-manager-identity small {
+    margin: 0;
+}
+
+.player-manager-identity > div:nth-child(2) {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+.player-manager-identity h3,
+.player-manager-identity span,
+.player-manager-identity small {
+    overflow-wrap: anywhere;
+}
+
+.player-manager-identity h3 {
+    font-size: 1.25rem;
+}
+
+.player-manager-identity span,
+.player-manager-identity small {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.player-manager-status-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.player-role {
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 3px 7px;
+    font: 700 0.62rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.player-role.owner,
+.player-role.admin {
+    border-color: rgba(244, 188, 74, 0.4);
+    color: var(--gold);
+}
+
+.player-role.active {
+    border-color: rgba(133, 232, 157, 0.36);
+    color: var(--green);
+}
+
+.player-role.banned {
+    border-color: rgba(242, 105, 105, 0.44);
+    color: #ff9b9b;
+}
+
+.player-manager-status-actions button,
+.player-collection-filters button,
+.player-collection-action button {
+    min-height: 34px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.68rem "Chakra Petch", sans-serif;
+}
+
+.player-manager-status-actions button {
+    border-color: rgba(242, 105, 105, 0.38);
+    color: #ff9b9b;
+}
+
+.player-manager-status-actions button:disabled,
+.player-collection-action button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.player-ban-summary {
+    display: grid;
+    gap: 4px;
+    margin: 13px 0 0;
+    border-left: 3px solid var(--red);
+    padding: 9px 12px;
+    background: rgba(242, 105, 105, 0.06);
+}
+
+.player-ban-summary span,
+.player-ban-summary small {
+    color: var(--muted);
+    font-size: 0.72rem;
+    overflow-wrap: anywhere;
+}
+
+.player-collection-toolbar {
+    min-width: 0;
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 16px 0 11px;
+}
+
+.player-collection-toolbar > div:first-child {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+.player-collection-toolbar p {
+    margin: 0;
+}
+
+.player-collection-filters {
+    display: flex;
+    gap: 5px;
+    overflow-x: auto;
+}
+
+.player-collection-filters button[aria-pressed="true"] {
+    border-color: rgba(244, 188, 74, 0.5);
+    color: var(--gold);
+}
+
+.player-collection-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 9px;
+}
+
+.player-collection-item {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 58px minmax(0, 1fr);
+    grid-template-rows: minmax(74px, auto) auto;
+    column-gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 10px;
+    background: rgba(13, 20, 30, 0.72);
+}
+
+.player-collection-item.unowned {
+    opacity: 0.72;
+}
+
+.player-collection-item.archived {
+    opacity: 0.5;
+}
+
+.player-collection-preview,
+.player-action-dialog-preview {
+    width: 58px;
+    height: 58px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: #080d14;
+}
+
+.player-collection-preview img,
+.player-action-dialog-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.player-collection-copy {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 3px;
+}
+
+.player-collection-copy strong,
+.player-collection-copy span,
+.player-collection-copy small,
+.player-collection-copy p {
+    overflow-wrap: anywhere;
+}
+
+.player-collection-copy span,
+.player-collection-copy small,
+.player-collection-copy p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.68rem;
+}
+
+.player-collection-copy p {
+    margin-top: 3px;
+    color: var(--text);
+}
+
+.player-collection-action {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    min-height: 35px;
+    border-top: 1px solid var(--line);
+    padding-top: 8px;
+}
+
+.player-collection-action span {
+    color: var(--muted);
+    font-size: 0.68rem;
+}
+
+.player-manager-empty {
+    min-height: 360px;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 5px;
+    color: var(--muted);
+    text-align: center;
+}
+
+.player-manager-empty strong {
+    color: var(--text);
+}
+
+.player-action-dialog {
+    width: min(680px, 100%);
+}
+
+.player-action-dialog-header {
+    grid-template-columns: 58px minmax(0, 1fr) 40px;
+}
+
+.player-action-form label {
+    display: grid;
+    gap: 5px;
+}
+
+.player-ban-dialog-copy {
+    margin: 0;
+    border-left: 3px solid var(--red);
+    padding: 10px 12px;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
 .progression-dialog-close {
     width: 40px;
     height: 40px;
@@ -1385,10 +1788,22 @@
 
 .progression-editor-fields,
 .progression-mission-fields,
-.progression-store-fields {
+.progression-store-fields,
+.progression-store-limit-fields {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 11px;
+}
+
+.progression-type-fields {
+    grid-column: 1 / -1;
+}
+
+.progression-type-fields[hidden],
+.progression-mission-fields[hidden],
+.progression-store-fields[hidden],
+.progression-store-limit-fields[hidden] {
+    display: none;
 }
 
 .progression-editor-fields .wide,
@@ -1462,6 +1877,40 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .player-manager-layout {
+        min-height: 0;
+        grid-template-columns: 1fr;
+        overflow: visible;
+    }
+
+    .player-manager-directory {
+        max-height: 360px;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+    }
+
+    .player-manager-detail {
+        padding: 12px;
+    }
+
+    .player-manager-identity {
+        grid-template-columns: 56px minmax(0, 1fr);
+    }
+
+    .player-manager-status-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+    }
+
+    .player-collection-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .player-collection-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .progression-modal-backdrop {
         padding: 0;
     }
@@ -1495,13 +1944,15 @@
 
     .progression-editor-fields,
     .progression-mission-fields,
-    .progression-store-fields {
+    .progression-store-fields,
+    .progression-store-limit-fields {
         grid-template-columns: 1fr;
     }
 
     .progression-editor-fields .wide,
     .progression-mission-fields .wide,
-    .progression-store-fields .wide {
+    .progression-store-fields .wide,
+    .progression-store-limit-fields .wide {
         grid-column: auto;
     }
 
@@ -1512,7 +1963,8 @@
 
 @media (max-width: 430px) {
     .progression-catalog-grid,
-    .weekly-template-grid {
+    .weekly-template-grid,
+    .player-collection-grid {
         grid-template-columns: 1fr;
     }
 }
@@ -2155,6 +2607,54 @@ body.account-drawer-open {
     border-color: rgba(255, 203, 107, 0.44);
     background: rgba(255, 203, 107, 0.1);
     color: var(--gold);
+}
+
+.profile-drawer-gifts {
+    display: grid;
+    gap: 9px;
+    margin-top: 20px;
+}
+
+.profile-drawer-gifts > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.profile-drawer-gifts > header p {
+    margin: 0;
+}
+
+.profile-drawer-gifts > header > strong {
+    color: var(--gold);
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.profile-drawer-gifts > div {
+    display: grid;
+    gap: 6px;
+}
+
+.profile-drawer-gifts article {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    border-left: 3px solid var(--gold);
+    padding: 8px 10px;
+    background: rgba(244, 188, 74, 0.06);
+}
+
+.profile-drawer-gifts article strong,
+.profile-drawer-gifts article span,
+.profile-drawer-gifts article small {
+    overflow-wrap: anywhere;
+}
+
+.profile-drawer-gifts article span,
+.profile-drawer-gifts article small {
+    color: var(--muted);
+    font-size: 0.72rem;
 }
 
 .profile-drawer-missions {

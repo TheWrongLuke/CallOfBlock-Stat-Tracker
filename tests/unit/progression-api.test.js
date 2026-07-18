@@ -61,4 +61,39 @@ describe("progression admin API", () => {
             p_template_id: "hard_wins"
         });
     });
+
+    it("uses protected RPCs for Player Manager mutations", async () => {
+        const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+        const api = createProgressionAdminApi({ rpc });
+
+        await api.setPlayerBan("player-1", true, "Repeated abuse");
+        await api.grantPlayerCosmetic({
+            profileId: "player-1",
+            cosmeticType: "title",
+            cosmeticId: "founder",
+            source: "friend",
+            note: "Thanks for helping"
+        });
+        await api.revokePlayerCosmetic("player-1", "title", "founder");
+        await api.listOwnCosmeticGifts();
+
+        expect(rpc).toHaveBeenNthCalledWith(1, "admin_set_player_community_ban", {
+            p_profile_id: "player-1",
+            p_banned: true,
+            p_reason: "Repeated abuse"
+        });
+        expect(rpc).toHaveBeenNthCalledWith(2, "admin_grant_player_cosmetic", {
+            p_profile_id: "player-1",
+            p_cosmetic_type: "title",
+            p_cosmetic_id: "founder",
+            p_source: "friend",
+            p_note: "Thanks for helping"
+        });
+        expect(rpc).toHaveBeenNthCalledWith(3, "admin_revoke_player_cosmetic", {
+            p_profile_id: "player-1",
+            p_cosmetic_type: "title",
+            p_cosmetic_id: "founder"
+        });
+        expect(rpc).toHaveBeenNthCalledWith(4, "list_my_cosmetic_gifts");
+    });
 });

@@ -3,7 +3,6 @@ import { createProgressionAdminApi } from "./src/api/progression.js";
 import { isAdminProfile } from "./src/auth/permissions.js";
 import {
     COSMETIC_ACQUISITION_TYPES,
-    COSMETIC_GRANT_SOURCES,
     PROGRESSION_METRICS,
     PROGRESSION_MODES,
     WEEKLY_MISSION_DIFFICULTIES,
@@ -245,7 +244,7 @@ const STORE_CHECKOUT_ENABLED = window.COB_STORE_CHECKOUT_ENABLED === true;
 const COSMETIC_ACQUISITION_VALUES = new Set(COSMETIC_ACQUISITION_TYPES.map((option) => option.value));
 const PROGRESSION_MODE_VALUES = new Set(PROGRESSION_MODES.map((option) => option.value));
 const PROGRESSION_METRIC_VALUES = new Set(PROGRESSION_METRICS.map((option) => option.value));
-const COSMETIC_GRANT_SOURCE_VALUES = new Set(COSMETIC_GRANT_SOURCES.map((option) => option.value));
+const PLAYER_GRANT_SOURCE_VALUES = new Set(["friend", "admin"]);
 const WEEKLY_DIFFICULTY_VALUES = new Set(WEEKLY_MISSION_DIFFICULTIES.map((option) => option.value));
 const WEEKLY_MODE_VALUES = new Set(WEEKLY_MISSION_MODES.map((option) => option.value));
 const WEEKLY_METRIC_VALUES = new Set(WEEKLY_MISSION_METRICS.map((option) => option.value));
@@ -327,6 +326,8 @@ const state = {
     accountProfilesReady: false,
     accountProfileIndex: emptyAccountProfileIndex(),
     cosmeticOwnershipCache: new Map(),
+    accountGifts: [],
+    accountGiftsLoaded: false,
     accountMessage: "",
     accountSaving: false,
     accountPanelOpen: false,
@@ -404,6 +405,15 @@ const state = {
         rules: [],
         grants: [],
         profiles: [],
+        players: [],
+        playersReady: false,
+        playerSelectedId: "",
+        playerSearch: "",
+        playerCollectionFilter: "all",
+        playerGrantKey: "",
+        playerBanOpen: false,
+        playerMessage: "",
+        playerError: "",
         editorKey: "",
         creating: false,
         filterSearch: "",
@@ -470,6 +480,7 @@ let badgeTooltipFrame = 0;
 let adminTicketSearchTimer = 0;
 let progressionSearchTimer = 0;
 let weeklyTemplateSearchTimer = 0;
+let playerManagerSearchTimer = 0;
 let weeklyTemplateLoadPromise = null;
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -559,6 +570,7 @@ async function applyAuthSession(session, shouldRender = false) {
         state.authProfile = null;
         state.authMessage = "";
         state.accountPanelOpen = false;
+        resetAccountGiftState();
         resetWeeklyMissionState();
         resetStoreSessionState({ resetCatalog: true });
         resetFeedbackSessionState();
@@ -577,6 +589,7 @@ async function applyAuthSession(session, shouldRender = false) {
     await loadCosmeticCatalog({ force: true });
     await claimProgressionCosmetics();
     await loadAccountProfiles();
+    await loadOwnCosmeticGifts();
     await loadRemotePlaytests({ silent: true });
     await syncWeeklyMissions();
     resetFeedbackSessionState();
@@ -590,7 +603,7 @@ async function applyAuthSession(session, shouldRender = false) {
 }
 
 async function claimProgressionCosmetics() {
-    if (!state.authClient || !state.authSession?.user) return;
+    if (!state.authClient || !state.authSession?.user || isCurrentAccountCommunityBanned()) return;
     try {
         const result = await state.authClient.rpc("claim_progression_cosmetics");
         if (result.error) {
@@ -615,6 +628,7 @@ async function signInWithDiscord() {
     }
 
     state.authMessage = "";
+    resetAccountGiftState();
     if (["playtests", "store", "feedback", "ticket"].includes(state.view)) rememberAuthReturn();
     const { error } = await state.authClient.auth.signInWithOAuth({
         provider: "discord",
@@ -643,6 +657,7 @@ async function signOutDiscord() {
     state.accountPanelOpen = false;
     state.accountMessage = "";
     state.authMessage = "";
+    resetAccountGiftState();
     resetWeeklyMissionState();
     resetStoreSessionState({ resetCatalog: true });
     resetFeedbackSessionState();
@@ -746,18 +761,27 @@ function bindStaticEvents() {
         if (progressionSection) {
             event.preventDefault();
             const section = progressionSection.dataset.progressionSection;
-            if (!["cosmetics", "weekly"].includes(section)) return;
+            if (!["cosmetics", "weekly", "players"].includes(section)) return;
             state.progression.section = section;
             state.progression.editorKey = "";
             state.progression.creating = false;
             state.progression.weeklyEditorId = "";
             state.progression.creatingWeekly = false;
+            state.progression.playerGrantKey = "";
+            state.progression.playerBanOpen = false;
             renderProgressionAdminPage();
             return;
         }
 
         const weeklyRetry = event.target.closest("[data-progression-weekly-retry]");
         if (weeklyRetry) {
+            event.preventDefault();
+            void loadProgressionAdminData({ force: true });
+            return;
+        }
+
+        const playerManagerRetry = event.target.closest("[data-player-manager-retry]");
+        if (playerManagerRetry) {
             event.preventDefault();
             void loadProgressionAdminData({ force: true });
             return;
@@ -846,6 +870,64 @@ function bindStaticEvents() {
         if (weeklyTemplateDelete) {
             event.preventDefault();
             void deleteWeeklyMissionTemplate(weeklyTemplateDelete.dataset.weeklyTemplateDelete || "");
+            return;
+        }
+
+        const playerManagerSelect = event.target.closest("[data-player-manager-select]");
+        if (playerManagerSelect) {
+            event.preventDefault();
+            state.progression.playerSelectedId = playerManagerSelect.dataset.playerManagerSelect || "";
+            state.progression.playerGrantKey = "";
+            state.progression.playerBanOpen = false;
+            state.progression.playerMessage = "";
+            state.progression.playerError = "";
+            renderProgressionAdminPage();
+            return;
+        }
+
+        const playerCollectionFilter = event.target.closest("[data-player-collection-filter]");
+        if (playerCollectionFilter) {
+            event.preventDefault();
+            const filter = playerCollectionFilter.dataset.playerCollectionFilter;
+            if (!["all", "owned", "unowned"].includes(filter)) return;
+            state.progression.playerCollectionFilter = filter;
+            renderProgressionAdminPage();
+            return;
+        }
+
+        const playerGrantOpen = event.target.closest("[data-player-grant-open]");
+        if (playerGrantOpen) {
+            event.preventDefault();
+            state.progression.playerGrantKey = playerGrantOpen.dataset.playerGrantOpen || "";
+            state.progression.playerBanOpen = false;
+            renderProgressionAdminPage();
+            focusProgressionEditor();
+            return;
+        }
+
+        const playerGrantClose = event.target.closest("[data-player-grant-close]");
+        if (playerGrantClose) {
+            event.preventDefault();
+            state.progression.playerGrantKey = "";
+            renderProgressionAdminPage();
+            return;
+        }
+
+        const playerBanOpen = event.target.closest("[data-player-ban-open]");
+        if (playerBanOpen && !playerBanOpen.disabled) {
+            event.preventDefault();
+            state.progression.playerBanOpen = true;
+            state.progression.playerGrantKey = "";
+            renderProgressionAdminPage();
+            focusProgressionEditor();
+            return;
+        }
+
+        const playerBanClose = event.target.closest("[data-player-ban-close]");
+        if (playerBanClose) {
+            event.preventDefault();
+            state.progression.playerBanOpen = false;
+            renderProgressionAdminPage();
             return;
         }
 
@@ -1117,6 +1199,12 @@ function bindStaticEvents() {
             return;
         }
 
+        if (event.target.matches("[data-player-ban-form]")) {
+            event.preventDefault();
+            void submitPlayerCommunityBan(event.target);
+            return;
+        }
+
         if (!event.target.matches("[data-confirm-dialog-form]")) return;
         event.preventDefault();
         void submitConfirmDialog(event.target);
@@ -1187,10 +1275,10 @@ function bindStaticEvents() {
             return;
         }
 
-        if (event.target.matches("[data-progression-acquisition]")) {
+        if (event.target.matches("[data-progression-cosmetic-type], [data-progression-acquisition], [data-progression-time-limit], [data-progression-count-limit]")) {
             const form = event.target.closest("[data-progression-cosmetic-form]");
-            form?.querySelector("[data-progression-mission-fields]")?.toggleAttribute("hidden", event.target.value !== "progression");
-            form?.querySelector("[data-progression-store-fields]")?.toggleAttribute("hidden", event.target.value !== "store");
+            syncProgressionCosmeticEditor(form);
+            if (event.target.matches("[data-progression-cosmetic-type]")) updateProgressionDraftPreview(form);
             return;
         }
 
@@ -1281,6 +1369,27 @@ function bindStaticEvents() {
             return;
         }
 
+        if (event.target.matches("[data-player-manager-search]")) {
+            state.progression.playerSearch = event.target.value.slice(0, 200);
+            window.clearTimeout(playerManagerSearchTimer);
+            const caret = event.target.selectionStart;
+            playerManagerSearchTimer = window.setTimeout(() => {
+                renderProgressionAdminPage();
+                window.requestAnimationFrame(() => {
+                    const input = document.querySelector("[data-player-manager-search]");
+                    input?.focus();
+                    if (Number.isInteger(caret)) input?.setSelectionRange(caret, caret);
+                });
+            }, 120);
+            return;
+        }
+
+        const progressionForm = event.target.closest("[data-progression-cosmetic-form]");
+        if (progressionForm && event.target.matches("[name='name'], [name='titleText'], [name='imageUrl']")) {
+            updateProgressionDraftPreview(progressionForm);
+            return;
+        }
+
         const accountForm = event.target.closest("[data-account-form]");
         if (accountForm && event.target.matches("[name='displayName']")) {
             updateAccountCustomizePreview(accountForm);
@@ -1305,6 +1414,8 @@ function bindStaticEvents() {
         const image = event.target;
         if (image instanceof HTMLImageElement && image.hasAttribute("data-avatar-fallbacks")) {
             handleAvatarFallback(image);
+        } else if (image instanceof HTMLImageElement && image.hasAttribute("data-player-manager-avatar")) {
+            image.remove();
         }
     }, true);
     document.addEventListener("focusin", handleBadgeSeenEvent);
@@ -1938,6 +2049,32 @@ async function loadAccountProfiles() {
     // Stats and public account data load independently. Refresh account-backed
     // surfaces when the latter arrives so an already-open preview is not stale.
     if (state.data) render();
+}
+
+function resetAccountGiftState() {
+    state.accountGifts = [];
+    state.accountGiftsLoaded = false;
+}
+
+async function loadOwnCosmeticGifts({ force = false } = {}) {
+    if (!state.progression.api || !state.authSession?.user || (state.accountGiftsLoaded && !force)) return;
+    try {
+        const result = await state.progression.api.listOwnCosmeticGifts();
+        if (result.error) throw result.error;
+        state.accountGifts = (Array.isArray(result.data) ? result.data : []).map((gift) => ({
+            type: String(gift?.cosmetic_type || ""),
+            id: String(gift?.cosmetic_id || ""),
+            source: String(gift?.grant_source || ""),
+            note: String(gift?.gift_note || "").trim().slice(0, 200),
+            acquiredAt: String(gift?.acquired_at || "")
+        })).filter((gift) => gift.type && gift.id);
+        state.accountGiftsLoaded = true;
+    } catch (error) {
+        const code = String(error?.code || "");
+        if (!["42883", "PGRST202"].includes(code)) console.warn("Could not load cosmetic gifts", error);
+        state.accountGifts = [];
+        state.accountGiftsLoaded = true;
+    }
 }
 
 async function fetchPublicCosmeticInventory() {
@@ -2685,12 +2822,34 @@ function renderAccountSidePanel() {
                         <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
                     ` : ""}
                 </div>
+                ${renderAccountGifts()}
                 ${renderWeeklyMissions(profile)}
             </aside>
         </div>
     `;
     const drawer = host.querySelector(".profile-drawer");
     if (drawer) drawer.scrollTop = previousScrollTop;
+}
+
+function renderAccountGifts() {
+    if (!state.accountGiftsLoaded || !state.accountGifts.length) return "";
+    return `
+        <section class="profile-drawer-gifts">
+            <header><p class="panel-kicker">Gifts</p><strong>${escapeHtml(state.accountGifts.length)}</strong></header>
+            <div>
+                ${state.accountGifts.map((gift) => {
+                    const cosmetic = progressionCatalogItem(`${gift.type}:${gift.id}`);
+                    return `
+                        <article>
+                            <strong>${escapeHtml(cosmetic?.name || cosmetic?.label || gift.id)}</strong>
+                            ${gift.note ? `<span>${escapeHtml(gift.note)}</span>` : ""}
+                            <small>${escapeHtml(gift.acquiredAt ? formatFullLocalDate(gift.acquiredAt) : gift.source === "friend" ? "Friend gift" : "Admin gift")}</small>
+                        </article>
+                    `;
+                }).join("")}
+            </div>
+        </section>
+    `;
 }
 
 function renderAccountPage() {
@@ -2817,6 +2976,15 @@ function resetProgressionAdminState() {
     progression.rules = [];
     progression.grants = [];
     progression.profiles = [];
+    progression.players = [];
+    progression.playersReady = false;
+    progression.playerSelectedId = "";
+    progression.playerSearch = "";
+    progression.playerCollectionFilter = "all";
+    progression.playerGrantKey = "";
+    progression.playerBanOpen = false;
+    progression.playerMessage = "";
+    progression.playerError = "";
     progression.editorKey = "";
     progression.creating = false;
     progression.filterSearch = "";
@@ -2888,6 +3056,11 @@ async function submitFeedbackTicket(form) {
     const status = form.querySelector("[data-feedback-form-status]");
     const submit = form.querySelector("button[type='submit']");
     clearFeedbackFieldErrors(form);
+
+    if (isCurrentAccountCommunityBanned()) {
+        if (status) status.textContent = "This account is community banned and cannot submit tickets.";
+        return;
+    }
 
     if (Date.now() < feedback.cooldownUntil) {
         const seconds = Math.max(1, Math.ceil((feedback.cooldownUntil - Date.now()) / 1000));
@@ -3110,6 +3283,10 @@ async function submitTicketReply(form) {
     const errorHost = form.querySelector("[data-ticket-reply-error]");
     const status = form.querySelector("[data-ticket-reply-status]");
     const submit = form.querySelector("button[type='submit']");
+    if (isCurrentAccountCommunityBanned()) {
+        if (status) status.textContent = "This account is community banned and cannot send replies.";
+        return;
+    }
     const validation = validateReplyInput(textarea?.value);
     if (errorHost) errorHost.textContent = validation.error;
     if (!validation.valid) {
@@ -3479,6 +3656,23 @@ function renderProgressionAdminPage() {
             error: state.progression.weeklyError,
             saving: state.progression.saving
         },
+        player: {
+            ready: state.progression.ready && state.progression.playersReady,
+            players: state.progression.players,
+            catalog: progressionAdminCatalogItems(),
+            grants: state.progression.grants,
+            selectedId: state.progression.playerSelectedId,
+            currentUserId: state.authSession?.user?.id || "",
+            filters: {
+                search: state.progression.playerSearch,
+                collection: state.progression.playerCollectionFilter
+            },
+            grantKey: state.progression.playerGrantKey,
+            banOpen: state.progression.playerBanOpen,
+            message: state.progression.playerMessage,
+            error: state.progression.playerError || (!state.progression.ready ? state.progression.error : ""),
+            saving: state.progression.saving
+        },
         message: state.progression.message,
         error: state.progression.error,
         saving: state.progression.saving
@@ -3491,15 +3685,17 @@ async function loadProgressionAdminData({ force = false } = {}) {
     progression.loading = true;
     progression.error = "";
     progression.weeklyError = "";
+    progression.playerError = "";
     if (state.view === "adminProgression") renderProgressionAdminPage();
 
     try {
         await loadCosmeticCatalog({ force });
-        const [rulesResult, grantsResult, profilesResult, weeklyResult] = await Promise.all([
+        const [rulesResult, grantsResult, profilesResult, weeklyResult, playersResult] = await Promise.all([
             progression.api.listRules(),
             progression.api.listInventory(),
             progression.api.listProfiles(),
-            progression.api.listWeeklyMissionTemplates()
+            progression.api.listWeeklyMissionTemplates(),
+            progression.api.listManagedPlayers()
         ]);
         if (weeklyResult.error) {
             progression.weeklyTemplates = [];
@@ -3514,6 +3710,20 @@ async function loadProgressionAdminData({ force = false } = {}) {
             progression.weeklyReady = true;
             progression.weeklyError = "";
             setWeeklyMissionTemplateCache(templates, true);
+        }
+        if (playersResult.error) {
+            progression.players = [];
+            progression.playersReady = false;
+            progression.playerError = playerManagerErrorMessage(playersResult.error);
+        } else {
+            progression.players = (Array.isArray(playersResult.data) ? playersResult.data : [])
+                .map(normalizeManagedPlayer)
+                .filter(Boolean);
+            progression.playersReady = true;
+            progression.playerError = "";
+            if (!progression.players.some((profile) => profile.id === progression.playerSelectedId)) {
+                progression.playerSelectedId = progression.players[0]?.id || "";
+            }
         }
         if (!state.store.catalogProgressionReady) {
             throw new Error("The current cosmetic progression schema has not been installed yet.");
@@ -3601,8 +3811,27 @@ function normalizeWeeklyMissionTemplate(row) {
     };
 }
 
+function normalizeManagedPlayer(row) {
+    const id = String(row?.id || "").trim();
+    if (!id) return null;
+    return {
+        id,
+        username: String(row?.username || "").trim().slice(0, 80),
+        display_name: String(row?.display_name || "").trim().slice(0, 80),
+        avatar_url: String(row?.avatar_url || "").trim().slice(0, 1000),
+        minecraft_player_name: String(row?.minecraft_player_name || "").trim().slice(0, 80),
+        is_admin: Boolean(row?.is_admin),
+        is_owner: Boolean(row?.is_owner),
+        banned_from_voting: Boolean(row?.banned_from_voting),
+        ban_reason: String(row?.ban_reason || "").trim().slice(0, 300),
+        banned_at: String(row?.banned_at || ""),
+        banned_by_username: String(row?.banned_by_username || "").trim().slice(0, 80),
+        created_at: String(row?.created_at || "")
+    };
+}
+
 function focusProgressionEditor() {
-    window.requestAnimationFrame(() => document.querySelector("[data-progression-cosmetic-close], [data-weekly-template-close]")?.focus());
+    window.requestAnimationFrame(() => document.querySelector("[data-progression-cosmetic-close], [data-weekly-template-close], [data-player-grant-close], [data-player-ban-close]")?.focus());
 }
 
 function progressionEditorOpen() {
@@ -3611,6 +3840,8 @@ function progressionEditorOpen() {
         || state.progression.creating
         || state.progression.weeklyEditorId
         || state.progression.creatingWeekly
+        || state.progression.playerGrantKey
+        || state.progression.playerBanOpen
     );
 }
 
@@ -3744,29 +3975,34 @@ async function submitProgressionCosmetic(form) {
             ruleConfig = { mode, metric, target, active: values.get("ruleActive") === "on" };
         }
 
-        const availableFrom = catalogOptionalIsoDate(values.get("availableFrom"));
-        const availableUntil = catalogOptionalIsoDate(values.get("availableUntil"));
+        const shopEnabled = acquisitionType === "store";
+        const timeLimited = shopEnabled && values.get("timeLimited") === "on";
+        const countLimited = shopEnabled && values.get("countLimited") === "on";
+        const availableFrom = timeLimited ? catalogOptionalIsoDate(values.get("availableFrom")) : null;
+        const availableUntil = timeLimited ? catalogOptionalIsoDate(values.get("availableUntil")) : null;
+        if (timeLimited && (!availableFrom || !availableUntil)) {
+            throw new Error("Choose both the start and end of the limited sale.");
+        }
         if (availableFrom && availableUntil && Date.parse(availableUntil) <= Date.parse(availableFrom)) {
             throw new Error("Available until must be later than available from.");
         }
-        const supplyText = String(values.get("supplyLimit") || "").trim();
+        const supplyText = countLimited ? String(values.get("supplyLimit") || "").trim() : "";
         const supplyLimit = supplyText ? Number(supplyText) : null;
-        if (supplyLimit !== null && (!Number.isInteger(supplyLimit) || supplyLimit < 1 || supplyLimit > 100_000_000)) {
-            throw new Error("Supply limit must be a positive whole number or empty.");
+        if (countLimited && (supplyLimit === null || !Number.isInteger(supplyLimit) || supplyLimit < 1 || supplyLimit > 100_000_000)) {
+            throw new Error("Available copies must be a positive whole number.");
         }
 
-        const shopEnabled = acquisitionType === "store";
         const price = Number(values.get("shopPrice"));
         const unitAmount = shopEnabled ? Math.round(price * 100) : null;
         if (shopEnabled && (!Number.isFinite(unitAmount) || unitAmount < 1)) throw new Error("Enter a shop preview price above zero.");
 
-        let imageUrl = String(values.get("imageUrl") || existing?.image || "").trim().slice(0, 1000);
+        let imageUrl = type === "title" ? "" : String(values.get("imageUrl") || existing?.image || "").trim().slice(0, 1000);
         const asset = values.get("asset");
         progression.saving = true;
         progression.error = "";
         progression.message = "";
         if (status) status.textContent = "Saving cosmetic...";
-        if (asset instanceof File && asset.size > 0) imageUrl = await uploadCatalogAsset(asset, type, id);
+        if (type !== "title" && asset instanceof File && asset.size > 0) imageUrl = await uploadCatalogAsset(asset, type, id);
         const dynamicIcon = type === "icon" && ["discord", "minecraft"].includes(id);
         if (type !== "title" && !dynamicIcon && !imageUrl) throw new Error("Add a PNG, WebP or GIF asset URL or upload a file.");
 
@@ -3777,7 +4013,7 @@ async function submitProgressionCosmetic(form) {
             description: String(values.get("description") || "").trim().slice(0, 300),
             category: String(values.get("category") || "Default").trim().replace(/\s+/g, " ").slice(0, 40) || "Default",
             rarity: cleanRarity(values.get("rarity")),
-            image_url: imageUrl || null,
+            image_url: type === "title" ? null : imageUrl || null,
             title_text: type === "title" ? String(values.get("titleText") || name).trim().replace(/\s+/g, " ").slice(0, 48) || name : null,
             border_inset: type === "border" ? Math.min(30, Math.max(0, number(values.get("borderInset")))) : 0,
             active: values.get("active") === "on",
@@ -4077,6 +4313,54 @@ function formatReconciliationResult(value) {
     return `${eligible} eligible, ${added} added, ${removed} removed.`;
 }
 
+function syncProgressionCosmeticEditor(form) {
+    if (!form) return;
+    const type = String(form.elements.namedItem("cosmeticType")?.value || "background");
+    const acquisition = String(form.elements.namedItem("acquisitionType")?.value || "exclusive");
+    const storeEnabled = acquisition === "store";
+    const timeLimited = storeEnabled && Boolean(form.elements.namedItem("timeLimited")?.checked);
+    const countLimited = storeEnabled && Boolean(form.elements.namedItem("countLimited")?.checked);
+
+    form.querySelector("[data-progression-asset-fields]")?.toggleAttribute("hidden", type === "title");
+    form.querySelector("[data-progression-title-fields]")?.toggleAttribute("hidden", type !== "title");
+    form.querySelector("[data-progression-border-fields]")?.toggleAttribute("hidden", type !== "border");
+    form.querySelector("[data-progression-mission-fields]")?.toggleAttribute("hidden", acquisition !== "progression");
+    form.querySelector("[data-progression-store-fields]")?.toggleAttribute("hidden", !storeEnabled);
+    form.querySelector("[data-progression-time-fields]")?.toggleAttribute("hidden", !timeLimited);
+    form.querySelector("[data-progression-count-fields]")?.toggleAttribute("hidden", !countLimited);
+
+    for (const name of ["availableFrom", "availableUntil"]) {
+        const input = form.elements.namedItem(name);
+        if (input instanceof HTMLInputElement) input.required = timeLimited;
+    }
+    const supplyLimit = form.elements.namedItem("supplyLimit");
+    if (supplyLimit instanceof HTMLInputElement) supplyLimit.required = countLimited;
+}
+
+function updateProgressionDraftPreview(form) {
+    const dialog = form?.closest(".progression-cosmetic-dialog");
+    const preview = dialog?.querySelector(".progression-dialog-preview");
+    if (!form || !preview) return;
+    const type = String(form.elements.namedItem("cosmeticType")?.value || "background");
+    if (type === "title") {
+        const title = String(form.elements.namedItem("titleText")?.value || form.elements.namedItem("name")?.value || "Title").trim();
+        preview.innerHTML = `<span class="profile-title-cosmetic">${escapeHtml(title || "Title")}</span>`;
+        return;
+    }
+
+    const assetInput = form.elements.namedItem("asset");
+    if (assetInput instanceof HTMLInputElement && assetInput.files?.[0]) {
+        previewProgressionAsset(assetInput);
+        return;
+    }
+    const imageUrl = String(form.elements.namedItem("imageUrl")?.value || "").trim();
+    if (/^https:\/\//i.test(imageUrl) || /^\.\.?(?:\/|\\)/.test(imageUrl) || /^\/(?!\/)/.test(imageUrl)) {
+        preview.innerHTML = `<img src="${escapeHtml(imageUrl)}" alt="">`;
+        return;
+    }
+    preview.innerHTML = `<span class="progression-preview-placeholder">${escapeHtml(STORE_CATEGORY_LABELS[type] || "Cosmetic")}</span>`;
+}
+
 function previewProgressionAsset(input) {
     const file = input?.files?.[0];
     const dialog = input?.closest(".progression-cosmetic-dialog");
@@ -4101,19 +4385,20 @@ async function submitProgressionGrant(form) {
 
     try {
         const profileId = String(values.get("profileId") || "").trim();
-        const profile = progression.profiles.find((entry) => entry.id === profileId);
+        const profile = progression.players.find((entry) => entry.id === profileId)
+            || progression.profiles.find((entry) => entry.id === profileId);
         const cosmetic = progressionCatalogItem(values.get("cosmeticKey"));
         const source = String(values.get("source") || "").trim();
         if (!profile) throw new Error("Choose a player account.");
         if (!cosmetic) throw new Error("Choose a cosmetic.");
-        if (!COSMETIC_GRANT_SOURCE_VALUES.has(source)) throw new Error("Choose a valid grant type.");
-        if ((cosmetic.acquisitionType === "owner" || source === "owner") && !profile.is_owner) {
+        if (!PLAYER_GRANT_SOURCE_VALUES.has(source)) throw new Error("Choose a valid gift type.");
+        if (cosmetic.acquisitionType === "owner" && !profile.is_owner) {
             throw new Error("Owner-only cosmetics can only be granted to the owner account.");
         }
 
         progression.saving = true;
-        progression.error = "";
-        progression.message = "";
+        progression.playerError = "";
+        progression.playerMessage = "";
         renderProgressionAdminPage();
         if (!cosmetic.remoteCatalog) {
             await ensureProgressionCatalogOverride(cosmetic);
@@ -4121,22 +4406,23 @@ async function submitProgressionGrant(form) {
             if (reconciliation.error) throw reconciliation.error;
             state.store.catalogLoaded = false;
         }
-        const result = await progression.api.grantCosmetic({
+        const result = await progression.api.grantPlayerCosmetic({
             profileId,
             cosmeticType: cosmetic.type,
             cosmeticId: cosmetic.id,
-            source: cosmetic.acquisitionType === "owner" ? "owner" : source,
-            note: String(values.get("note") || "").trim().replace(/\s+/g, " ").slice(0, 200),
-            grantedBy: state.authSession.user.id
+            source,
+            note: String(values.get("note") || "").trim().replace(/\s+/g, " ").slice(0, 200)
         });
         if (result.error) throw result.error;
-        progression.message = `${cosmetic.name} granted to ${profile.display_name || profile.username || "the selected player"}.`;
+        progression.playerGrantKey = "";
+        progression.playerMessage = `${cosmetic.name} sent to ${profile.display_name || profile.username || "the selected player"}.`;
         progression.loaded = false;
         await loadProgressionAdminData({ force: true });
         await loadAccountProfiles();
+        if (profileId === state.authSession?.user?.id) await loadOwnCosmeticGifts({ force: true });
     } catch (error) {
         console.error("Could not grant cosmetic", error);
-        progression.error = progressionAdminErrorMessage(error, "Could not grant this cosmetic.");
+        progression.playerError = playerManagerErrorMessage(error, "Could not send this cosmetic.");
     } finally {
         progression.saving = false;
         if (state.view === "adminProgression") renderProgressionAdminPage();
@@ -4148,21 +4434,59 @@ async function revokeProgressionGrant(profileId, cosmeticType, cosmeticId) {
     const grant = progression.grants.find((entry) =>
         entry.profile_id === profileId && entry.cosmetic_type === cosmeticType && entry.cosmetic_id === cosmeticId
     );
-    if (!grant || !progression.api || progression.saving || !isPlaytestAdmin()) return;
+    if (!grant || !["friend", "admin", "legacy"].includes(grant.source)
+        || !progression.api || progression.saving || !isPlaytestAdmin()) return;
     if (!window.confirm("Revoke this cosmetic from the player account?")) return;
 
     progression.saving = true;
-    progression.error = "";
+    progression.playerError = "";
+    progression.playerMessage = "";
     try {
-        const result = await progression.api.revokeCosmetic(profileId, cosmeticType, cosmeticId);
+        const result = await progression.api.revokePlayerCosmetic(profileId, cosmeticType, cosmeticId);
         if (result.error) throw result.error;
-        progression.message = "Cosmetic grant revoked.";
+        progression.playerMessage = "Cosmetic removed from the player collection.";
         progression.loaded = false;
         await loadProgressionAdminData({ force: true });
         await loadAccountProfiles();
+        if (profileId === state.authSession?.user?.id) await loadOwnCosmeticGifts({ force: true });
     } catch (error) {
         console.error("Could not revoke cosmetic", error);
-        progression.error = progressionAdminErrorMessage(error, "Could not revoke this cosmetic.");
+        progression.playerError = playerManagerErrorMessage(error, "Could not revoke this cosmetic.");
+    } finally {
+        progression.saving = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+async function submitPlayerCommunityBan(form) {
+    const progression = state.progression;
+    if (!progression.api || !isPlaytestAdmin() || progression.saving) return;
+    const values = new FormData(form);
+    const profileId = String(values.get("profileId") || "").trim();
+    const profile = progression.players.find((entry) => entry.id === profileId);
+    const banned = String(values.get("banned") || "") === "true";
+
+    try {
+        if (!profile) throw new Error("Choose a valid player account.");
+        if (profile.is_owner || profile.id === state.authSession?.user?.id) {
+            throw new Error("The owner account and your own account cannot be banned here.");
+        }
+        const reason = String(values.get("reason") || "").trim().replace(/\s+/g, " ").slice(0, 300);
+        progression.saving = true;
+        progression.playerError = "";
+        progression.playerMessage = "";
+        renderProgressionAdminPage();
+        const result = await progression.api.setPlayerBan(profile.id, banned, reason);
+        if (result.error) throw result.error;
+        progression.playerBanOpen = false;
+        progression.playerMessage = banned
+            ? `${profile.display_name || profile.username || "Player"} is now community banned.`
+            : `${profile.display_name || profile.username || "Player"} has been unbanned.`;
+        progression.loaded = false;
+        await loadProgressionAdminData({ force: true });
+    } catch (error) {
+        console.error("Could not update player ban", error);
+        progression.playerError = playerManagerErrorMessage(error, "Could not update this player's community access.");
     } finally {
         progression.saving = false;
         if (state.view === "adminProgression") renderProgressionAdminPage();
@@ -4197,6 +4521,20 @@ function weeklyMissionAdminErrorMessage(error, fallback = "Weekly mission admini
     if (/at least 4 active easy|at least 3 active hard|rotation pool/i.test(message)) {
         return "Keep at least 4 active easy groups and 3 active hard groups in the weekly rotation.";
     }
+    if (/row-level security|permission|administrator access required|unauthorized|forbidden/i.test(message)) {
+        return "Supabase did not verify this account as an administrator.";
+    }
+    return message || fallback;
+}
+
+function playerManagerErrorMessage(error, fallback = "Player Manager is unavailable.") {
+    const code = String(error?.code || "");
+    const message = String(error?.message || error || "");
+    if (["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code)
+        || /admin_list_managed_players|admin_set_player_community_ban|admin_(grant|revoke)_player_cosmetic|schema cache/i.test(message)) {
+        return "Run the newest Supabase Player Manager script, then retry.";
+    }
+    if (/owner account|your own account|automatically earned|purchased cosmetic/i.test(message)) return message;
     if (/row-level security|permission|administrator access required|unauthorized|forbidden/i.test(message)) {
         return "Supabase did not verify this account as an administrator.";
     }
@@ -5764,11 +6102,12 @@ function renderWeeklyMissionRow(profile, mission, claimedIds) {
     const claimed = claimedIds.has(mission.id);
     const claiming = state.weeklyMissions.claimingId === mission.id;
     const animating = state.weeklyMissions.animatingId === mission.id;
-    const canSwap = Boolean(mission.carried) && !mission.swapUsed && !claimed;
+    const communityBanned = isCurrentAccountCommunityBanned();
+    const canSwap = Boolean(mission.carried) && !mission.swapUsed && !claimed && !communityBanned;
     const action = claimed
         ? `<span class="mission-xp claimed">Claimed</span>`
         : progress.complete
-            ? `<button class="mission-claim-button" type="button" data-weekly-claim="${escapeHtml(mission.id)}" ${claiming || state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>${claiming ? "Claiming..." : `Claim ${formatNumber(mission.xp)} XP`}</button>`
+            ? `<button class="mission-claim-button" type="button" data-weekly-claim="${escapeHtml(mission.id)}" ${claiming || communityBanned || state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>${claiming ? "Claiming..." : `Claim ${formatNumber(mission.xp)} XP`}</button>`
             : canSwap
                 ? `<button class="mission-swap-button" type="button" data-weekly-swap="${escapeHtml(mission.id)}" ${state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>Swap</button>`
                 : `<span class="mission-xp">+${formatNumber(mission.xp)} XP</span>`;
@@ -5815,6 +6154,12 @@ async function syncWeeklyMissions() {
     const account = state.authProfile;
     const profile = linkedStatsProfile();
     if (missionState.syncing || !state.authClient || !state.authSession?.user || !account?.id || !state.data) return;
+    if (isCurrentAccountCommunityBanned()) {
+        missionState.loading = false;
+        missionState.message = "Community access is blocked for this account.";
+        renderAccountMissionViews();
+        return;
+    }
 
     await loadWeeklyMissionTemplates();
     if (missionState.syncing) return;
@@ -5992,7 +6337,8 @@ function renewWeeklyMissions(previousRow, freshMissions, profile, cycle) {
 async function claimWeeklyMission(missionId) {
     const missionState = state.weeklyMissions;
     const profile = linkedStatsProfile();
-    if (!missionId || missionState.claimingId || missionState.source !== "supabase" || !missionState.row || !profile) return;
+    if (!missionId || isCurrentAccountCommunityBanned() || missionState.claimingId
+        || missionState.source !== "supabase" || !missionState.row || !profile) return;
     const claimedIds = new Set(arrayField(missionState.row.claimed_ids));
     const mission = missionState.row.missions.find((entry) => entry.id === missionId);
     if (!mission || claimedIds.has(mission.id) || !weeklyMissionProgress(profile, mission).complete) return;
@@ -6084,7 +6430,8 @@ async function submitWeeklyMissionSwap() {
     const missionState = state.weeklyMissions;
     const profile = linkedStatsProfile();
     const mission = missionState.row?.missions?.find((entry) => entry.id === missionState.swapMissionId);
-    if (missionState.swapping || missionState.source !== "supabase" || !mission?.carried || mission.swapUsed || !profile) return;
+    if (isCurrentAccountCommunityBanned() || missionState.swapping || missionState.source !== "supabase"
+        || !mission?.carried || mission.swapUsed || !profile) return;
 
     const replacement = generateWeeklyMissionReplacement(mission, profile);
     if (!replacement) {
@@ -8014,6 +8361,11 @@ async function duplicateRemotePlaytest(playtest) {
 
 async function setPlaytestVote(playtestId, slotId, status, timeRange = null) {
     if (!PLAYTEST_STATUS_OPTIONS.some((option) => option.id === status)) return;
+    if (isCurrentAccountCommunityBanned()) {
+        state.authMessage = "This account is community banned and cannot vote.";
+        render();
+        return;
+    }
     if (isRemotePlaytest(playtestId) && (!state.authClient || !isDiscordLoggedIn())) {
         state.authMessage = "Login with Discord required to vote.";
         render();
@@ -8322,6 +8674,10 @@ function isDiscordLoggedIn() {
     return Boolean(state.authSession?.user && PLAYTEST_VIEWER.discordId);
 }
 
+function isCurrentAccountCommunityBanned() {
+    return Boolean(state.authProfile?.banned_from_voting);
+}
+
 function isRemotePlaytest(playtestOrId) {
     const id = typeof playtestOrId === "string" ? playtestOrId : playtestOrId?.id;
     if (!id) return false;
@@ -8505,6 +8861,11 @@ async function createRemoteCommunitySlot(playtestId, selectedKey, timeRange = no
         render();
         return null;
     }
+    if (isCurrentAccountCommunityBanned()) {
+        state.authMessage = "This account is community banned and cannot create community dates.";
+        render();
+        return null;
+    }
 
     const existing = activePlaytests()
         .find((playtest) => playtest.id === playtestId)
@@ -8654,6 +9015,11 @@ function isNotificationSubscribed(playtestId, key) {
 
 async function toggleNotificationSubscription(playtestId, key) {
     if (!key || !isDiscordLoggedIn()) return;
+    if (isCurrentAccountCommunityBanned()) {
+        state.authMessage = "This account is community banned and cannot change notifications.";
+        render();
+        return;
+    }
     if (isRemotePlaytest(playtestId)) {
         try {
             const existing = state.playtests.notificationSubscriptions?.[playtestId]?.[key];

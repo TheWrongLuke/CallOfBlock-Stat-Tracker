@@ -30,6 +30,40 @@ export function createProgressionAdminApi(client) {
             return client.from("profiles").select(PROFILE_COLUMNS).order("username", { ascending: true }).limit(1000);
         },
 
+        async listManagedPlayers() {
+            return client.rpc("admin_list_managed_players");
+        },
+
+        async listOwnCosmeticGifts() {
+            return client.rpc("list_my_cosmetic_gifts");
+        },
+
+        async setPlayerBan(profileId, banned, reason) {
+            return client.rpc("admin_set_player_community_ban", {
+                p_profile_id: profileId,
+                p_banned: banned,
+                p_reason: reason || null
+            });
+        },
+
+        async grantPlayerCosmetic(grant) {
+            return client.rpc("admin_grant_player_cosmetic", {
+                p_profile_id: grant.profileId,
+                p_cosmetic_type: grant.cosmeticType,
+                p_cosmetic_id: grant.cosmeticId,
+                p_source: grant.source,
+                p_note: grant.note || null
+            });
+        },
+
+        async revokePlayerCosmetic(profileId, cosmeticType, cosmeticId) {
+            return client.rpc("admin_revoke_player_cosmetic", {
+                p_profile_id: profileId,
+                p_cosmetic_type: cosmeticType,
+                p_cosmetic_id: cosmeticId
+            });
+        },
+
         async listWeeklyMissionTemplates() {
             return client
                 .from("weekly_mission_templates")

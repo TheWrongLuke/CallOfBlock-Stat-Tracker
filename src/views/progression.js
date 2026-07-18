@@ -1,12 +1,11 @@
 import {
     COSMETIC_ACQUISITION_TYPES,
-    COSMETIC_GRANT_SOURCES,
     PROGRESSION_METRICS,
     PROGRESSION_MODES,
     progressionOptionLabel
 } from "../config/progression.js";
-import { formatDateTime } from "../utils/dates.js";
 import { escapeHtml } from "../utils/sanitization.js";
+import { renderPlayerManagerContent } from "./player-manager.js";
 import { renderWeeklyMissionAdminContent } from "./weekly-mission-admin.js";
 
 const COSMETIC_TYPES = Object.freeze([
@@ -16,20 +15,18 @@ const COSMETIC_TYPES = Object.freeze([
     { value: "title", label: "Title" }
 ]);
 const RARITIES = Object.freeze(["common", "rare", "epic", "legendary", "mythic"]);
-const REVOCABLE_SOURCES = new Set(["friend", "admin", "legacy"]);
-
 export function renderProgressionAdminContent({
     loading,
     ready,
     catalog,
     rules,
     grants,
-    profiles,
     editorKey = "",
     creating = false,
     filters = {},
     section = "cosmetics",
     weekly = {},
+    player = {},
     message,
     error,
     saving
@@ -38,6 +35,9 @@ export function renderProgressionAdminContent({
     const sectionTabs = renderManagerTabs(section);
     if (section === "weekly") {
         return `${sectionTabs}${renderWeeklyMissionAdminContent(weekly)}`;
+    }
+    if (section === "players") {
+        return `${sectionTabs}${renderPlayerManagerContent(player)}`;
     }
     if (!ready) {
         return `
@@ -77,14 +77,6 @@ export function renderProgressionAdminContent({
         <section class="progression-catalog-grid" aria-live="polite">
             ${visibleCatalog.length ? visibleCatalog.map((item) => renderCosmeticCard(item, rules, grants)).join("") : `<p class="progression-empty">No cosmetics match these filters.</p>`}
         </section>
-        <section class="progression-grant-workspace">
-            ${renderGrantEditor(
-                profiles,
-                catalog.filter((item) => item.active),
-                saving
-            )}
-            ${renderGrants(grants, profiles, catalog)}
-        </section>
         ${editorItem ? renderCosmeticEditorModal(editorItem, editorRule, grants, saving, creating) : ""}
     `;
 }
@@ -94,6 +86,7 @@ function renderManagerTabs(section) {
         <nav class="progression-manager-tabs" aria-label="Progression manager sections">
             <button type="button" data-progression-section="cosmetics" aria-current="${section === "cosmetics" ? "page" : "false"}">Cosmetics</button>
             <button type="button" data-progression-section="weekly" aria-current="${section === "weekly" ? "page" : "false"}">Weekly missions</button>
+            <button type="button" data-progression-section="players" aria-current="${section === "players" ? "page" : "false"}">Player Manager</button>
         </nav>
     `;
 }
@@ -122,6 +115,11 @@ function renderCosmeticEditorModal(item, rule, grants, saving, creating) {
     const owners = new Set(grants.filter((grant) => ruleKey(grant) === key).map((grant) => grant.profile_id)).size;
     const acquisition = item.acquisitionType || "exclusive";
     const price = (Math.max(0, Number(item.unitAmount) || 0) / 100).toFixed(2);
+    const usesAsset = item.type !== "title";
+    const usesTitleText = item.type === "title";
+    const usesBorderInset = item.type === "border";
+    const timeLimited = Boolean(item.availableFrom || item.availableUntil);
+    const countLimited = Number(item.supplyLimit) > 0;
     return `
         <div class="progression-modal-backdrop" data-progression-editor-backdrop>
             <section class="progression-cosmetic-dialog" role="dialog" aria-modal="true" aria-labelledby="progression-editor-title">
@@ -140,7 +138,7 @@ function renderCosmeticEditorModal(item, rule, grants, saving, creating) {
                     <fieldset>
                         <legend>Catalog identity</legend>
                         <div class="progression-editor-fields">
-                            <label><span>Type</span><select name="cosmeticType" ${creating ? "" : "disabled"}>${renderOptions(COSMETIC_TYPES, item.type)}</select>${creating ? "" : `<input type="hidden" name="cosmeticType" value="${escapeHtml(item.type)}">`}</label>
+                            <label><span>Type</span><select name="cosmeticType" data-progression-cosmetic-type ${creating ? "" : "disabled"}>${renderOptions(COSMETIC_TYPES, item.type)}</select>${creating ? "" : `<input type="hidden" name="cosmeticType" value="${escapeHtml(item.type)}">`}</label>
                             <label><span>Cosmetic ID</span><input name="cosmeticId" value="${escapeHtml(item.id)}" maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" ${creating ? "" : "readonly"} required></label>
                             <label class="wide"><span>Name</span><input name="name" value="${escapeHtml(item.name || item.label || "")}" maxlength="80" required></label>
                             <label><span>Category</span><input name="category" value="${escapeHtml(item.category || "Default")}" maxlength="40" required></label>
@@ -149,16 +147,22 @@ function renderCosmeticEditorModal(item, rule, grants, saving, creating) {
                                 item.rarity || "common"
                             )}</select></label>
                             <label class="wide"><span>Description</span><textarea name="description" rows="3" maxlength="300">${escapeHtml(item.description || "")}</textarea></label>
-                            <label class="wide"><span>Asset URL</span><input name="imageUrl" value="${escapeHtml(item.image || "")}" maxlength="1000" placeholder="PNG, WebP or GIF URL"></label>
-                            <label class="wide"><span>Replace asset</span><input type="file" name="asset" accept="image/png,image/webp,image/gif" data-progression-asset-input><small>PNG, WebP or GIF, maximum 8 MB.</small></label>
-                            <label><span>Title text</span><input name="titleText" value="${escapeHtml(item.text || item.name || "")}" maxlength="48"></label>
-                            <label><span>Border inset %</span><input name="borderInset" type="number" min="0" max="30" step="0.5" value="${escapeHtml(item.inset || 0)}"></label>
+                            <div class="progression-editor-fields progression-type-fields" data-progression-asset-fields ${usesAsset ? "" : "hidden"}>
+                                <label class="wide"><span>Asset URL</span><input name="imageUrl" value="${escapeHtml(item.image || "")}" maxlength="1000" placeholder="PNG, WebP or GIF URL"></label>
+                                <label class="wide"><span>Replace asset</span><input type="file" name="asset" accept="image/png,image/webp,image/gif" data-progression-asset-input><small>PNG, WebP or GIF, maximum 8 MB.</small></label>
+                            </div>
+                            <div class="progression-editor-fields progression-type-fields" data-progression-title-fields ${usesTitleText ? "" : "hidden"}>
+                                <label class="wide"><span>Title text</span><input name="titleText" value="${escapeHtml(item.text || item.name || "")}" maxlength="48"></label>
+                            </div>
+                            <div class="progression-editor-fields progression-type-fields" data-progression-border-fields ${usesBorderInset ? "" : "hidden"}>
+                                <label class="wide"><span>Border inset %</span><input name="borderInset" type="number" min="0" max="30" step="0.5" value="${escapeHtml(item.inset || 0)}"></label>
+                            </div>
                             <label><span>Sort order</span><input name="sortOrder" type="number" min="0" max="100000" step="1" value="${escapeHtml(item.sortOrder || 0)}"></label>
                             <label class="progression-check"><input type="checkbox" name="active" ${item.active !== false ? "checked" : ""}><span>Active and visible</span></label>
                         </div>
                     </fieldset>
                     <fieldset>
-                        <legend>How it is earned</legend>
+                        <legend>How players get it</legend>
                         <div class="progression-editor-fields">
                             <label class="wide"><span>Ownership method</span><select name="acquisitionType" data-progression-acquisition>${renderOptions(COSMETIC_ACQUISITION_TYPES, acquisition)}</select></label>
                         </div>
@@ -175,9 +179,15 @@ function renderCosmeticEditorModal(item, rule, grants, saving, creating) {
                                 ["eur", "usd", "gbp"].map((value) => ({ value, label: value.toUpperCase() })),
                                 item.currency || "eur"
                             )}</select></label>
-                            <label><span>Available from</span><input name="availableFrom" type="datetime-local" value="${escapeHtml(dateTimeInputValue(item.availableFrom))}"></label>
-                            <label><span>Available until</span><input name="availableUntil" type="datetime-local" value="${escapeHtml(dateTimeInputValue(item.availableUntil))}"></label>
-                            <label><span>Supply limit</span><input name="supplyLimit" type="number" min="1" max="100000000" step="1" value="${escapeHtml(item.supplyLimit || "")}" placeholder="Unlimited"></label>
+                            <label class="progression-check wide"><input type="checkbox" name="timeLimited" data-progression-time-limit ${timeLimited ? "checked" : ""}><span>Time-limited sale</span></label>
+                            <div class="progression-store-limit-fields wide" data-progression-time-fields ${timeLimited ? "" : "hidden"}>
+                                <label><span>Available from</span><input name="availableFrom" type="datetime-local" value="${escapeHtml(dateTimeInputValue(item.availableFrom))}" ${acquisition === "store" && timeLimited ? "required" : ""}></label>
+                                <label><span>Available until</span><input name="availableUntil" type="datetime-local" value="${escapeHtml(dateTimeInputValue(item.availableUntil))}" ${acquisition === "store" && timeLimited ? "required" : ""}></label>
+                            </div>
+                            <label class="progression-check wide"><input type="checkbox" name="countLimited" data-progression-count-limit ${countLimited ? "checked" : ""}><span>Limited quantity</span></label>
+                            <div class="progression-store-limit-fields wide" data-progression-count-fields ${countLimited ? "" : "hidden"}>
+                                <label class="wide"><span>Available copies</span><input name="supplyLimit" type="number" min="1" max="100000000" step="1" value="${escapeHtml(item.supplyLimit || "")}" ${acquisition === "store" && countLimited ? "required" : ""}></label>
+                            </div>
                             <label class="progression-check"><input type="checkbox" name="shopFeatured" ${item.featured ? "checked" : ""}><span>Featured listing</span></label>
                         </div>
                     </fieldset>
@@ -190,53 +200,6 @@ function renderCosmeticEditorModal(item, rule, grants, saving, creating) {
                 </form>
             </section>
         </div>
-    `;
-}
-
-function renderGrantEditor(profiles, catalog, saving) {
-    return `
-        <form class="progression-editor progression-grant-editor" data-progression-grant-form>
-            <header><div><p class="panel-kicker">Manual Ownership</p><h3>Grant an exclusive cosmetic</h3></div></header>
-            <label><span>Player account</span><select name="profileId" required>${renderProfileOptions(profiles)}</select></label>
-            <label><span>Cosmetic</span><select name="cosmeticKey" required>${renderCatalogOptions(catalog, "", "Choose a cosmetic")}</select></label>
-            <label><span>Grant type</span><select name="source">${renderOptions(COSMETIC_GRANT_SOURCES, "friend")}</select></label>
-            <label><span>Private note</span><input name="note" maxlength="200" placeholder="Why this account received it"></label>
-            <button type="submit" ${saving ? "disabled" : ""}>${saving ? "Saving..." : "Grant cosmetic"}</button>
-        </form>
-    `;
-}
-
-function renderGrants(grants, profiles, catalog) {
-    const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
-    const catalogMap = new Map(catalog.map((item) => [cosmeticKey(item), item]));
-    const recent = grants.slice(0, 100);
-    return `
-        <section class="progression-list-panel">
-            <header><p class="panel-kicker">Ownership</p><h3>${escapeHtml(grants.length)} records</h3></header>
-            <div class="progression-list">
-                ${
-                    recent.length
-                        ? recent
-                              .map((grant) => {
-                                  const profile = profilesById.get(grant.profile_id);
-                                  const cosmetic = catalogMap.get(ruleKey(grant));
-                                  const canRevoke = REVOCABLE_SOURCES.has(grant.source);
-                                  return `
-                        <article class="progression-list-item">
-                            <div>
-                                <span>${escapeHtml(`${grant.source || "admin"} / ${formatDateTime(grant.acquired_at)}`)}</span>
-                                <strong>${escapeHtml(cosmetic?.name || grant.cosmetic_id)}</strong>
-                                <small>${escapeHtml(profileCommunicationLabel(profile))}${grant.grant_note ? ` / ${escapeHtml(grant.grant_note)}` : ""}</small>
-                            </div>
-                            ${canRevoke ? `<div class="progression-row-actions"><button type="button" data-progression-grant-revoke data-profile-id="${escapeHtml(grant.profile_id)}" data-cosmetic-type="${escapeHtml(grant.cosmetic_type)}" data-cosmetic-id="${escapeHtml(grant.cosmetic_id)}">Revoke</button></div>` : ""}
-                        </article>
-                    `;
-                              })
-                              .join("")
-                        : `<p class="progression-empty">No cosmetic ownership records yet.</p>`
-                }
-            </div>
-        </section>
     `;
 }
 
@@ -316,20 +279,6 @@ function newCosmeticDraft() {
     };
 }
 
-function renderCatalogOptions(catalog, selected, placeholder) {
-    const items = [...catalog].sort((a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name));
-    return `<option value="">${escapeHtml(placeholder)}</option>${items
-        .map((item) => {
-            const key = cosmeticKey(item);
-            return `<option value="${escapeHtml(key)}" ${key === selected ? "selected" : ""}>${escapeHtml(`${typeLabel(item.type)} / ${item.name}`)}</option>`;
-        })
-        .join("")}`;
-}
-
-function renderProfileOptions(profiles) {
-    return `<option value="">Choose a player</option>${profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profileCommunicationLabel(profile))}</option>`).join("")}`;
-}
-
 function renderOptions(options, selected) {
     return options
         .map(
@@ -337,17 +286,6 @@ function renderOptions(options, selected) {
                 `<option value="${escapeHtml(option.value)}" ${option.value === selected ? "selected" : ""}>${escapeHtml(option.label)}</option>`
         )
         .join("");
-}
-
-function profileCommunicationLabel(profile) {
-    if (!profile) return "Unknown profile";
-    const displayName = String(profile.display_name || "").trim();
-    const username = String(profile.username || "").trim();
-    const minecraft = String(profile.minecraft_player_name || "").trim();
-    const discord = username ? `@${username.replace(/^@/, "")}` : "Discord unavailable";
-    return [displayName && displayName.toLowerCase() !== username.toLowerCase() ? displayName : "", discord, minecraft]
-        .filter(Boolean)
-        .join(" / ");
 }
 
 function cosmeticKey(item) {
