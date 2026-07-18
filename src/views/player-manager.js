@@ -1,13 +1,14 @@
 import { formatDateTime } from "../utils/dates.js";
 import { escapeHtml } from "../utils/sanitization.js";
 
-const MANUAL_GRANT_SOURCES = new Set(["friend", "admin", "legacy"]);
+const REQUIRED_FALLBACKS = new Set(["icon:minecraft", "background:default", "border:none", "title:none"]);
 
 export function renderPlayerManagerContent({
     ready,
     players = [],
     catalog = [],
     grants = [],
+    revocations = [],
     selectedId = "",
     currentUserId = "",
     filters = {},
@@ -31,6 +32,7 @@ export function renderPlayerManagerContent({
     const selected = players.find((profile) => profile.id === selectedId) || null;
     const bannedCount = players.filter((profile) => profile.banned_from_voting).length;
     const selectedGrants = selected ? grants.filter((grant) => grant.profile_id === selected.id) : [];
+    const selectedRevocations = selected ? revocations.filter((entry) => entry.profile_id === selected.id) : [];
 
     return `
         ${message ? `<p class="progression-notice">${escapeHtml(message)}</p>` : ""}
@@ -52,10 +54,10 @@ export function renderPlayerManagerContent({
                 </div>
             </div>
             <div class="player-manager-detail">
-                ${selected ? renderPlayerDetail(selected, catalog, selectedGrants, filters.collection, currentUserId) : renderNoPlayerSelected(players.length)}
+                ${selected ? renderPlayerDetail(selected, catalog, selectedGrants, selectedRevocations, filters.collection, currentUserId) : renderNoPlayerSelected(players.length)}
             </div>
         </section>
-        ${selected && grantKey ? renderGiftDialog(selected, catalog, grantKey, saving) : ""}
+        ${selected && grantKey ? renderGiftDialog(selected, catalog, selectedRevocations, grantKey, saving) : ""}
         ${selected && banOpen ? renderBanDialog(selected, currentUserId, saving) : ""}
     `;
 }
@@ -75,8 +77,9 @@ function renderPlayerRow(profile, selectedId) {
     `;
 }
 
-function renderPlayerDetail(profile, catalog, grants, collectionFilter, currentUserId) {
+function renderPlayerDetail(profile, catalog, grants, revocations, collectionFilter, currentUserId) {
     const inventory = new Map(grants.map((grant) => [cosmeticKey(grant), grant]));
+    const revoked = new Map(revocations.map((entry) => [cosmeticKey(entry), entry]));
     const collection = filterCollection(catalog, inventory, collectionFilter);
     const canBan = profile.id !== currentUserId && !profile.is_owner;
     return `
@@ -118,14 +121,15 @@ function renderPlayerDetail(profile, catalog, grants, collectionFilter, currentU
             </div>
         </div>
         <div class="player-collection-grid">
-            ${collection.length ? collection.map((item) => renderCollectionItem(profile, item, inventory.get(cosmeticKey(item)))).join("") : `<p class="progression-empty">No cosmetics match this collection filter.</p>`}
+            ${collection.length ? collection.map((item) => renderCollectionItem(profile, item, inventory.get(cosmeticKey(item)), revoked.get(cosmeticKey(item)))).join("") : `<p class="progression-empty">No cosmetics match this collection filter.</p>`}
         </div>
     `;
 }
 
-function renderCollectionItem(profile, item, grant) {
+function renderCollectionItem(profile, item, grant, revocation) {
     const owned = Boolean(grant);
-    const revocable = owned && MANUAL_GRANT_SOURCES.has(grant.source);
+    const requiredFallback = REQUIRED_FALLBACKS.has(cosmeticKey(item));
+    const revocable = owned && !requiredFallback;
     const ownerRestricted = item.acquisitionType === "owner" && !profile.is_owner;
     const grantDisabled = item.active === false || ownerRestricted;
     const key = cosmeticKey(item);
@@ -135,8 +139,9 @@ function renderCollectionItem(profile, item, grant) {
             <div class="player-collection-copy">
                 <small>${escapeHtml(`${cosmeticTypeLabel(item.type)} / ${item.rarity || "common"}`)}</small>
                 <strong>${escapeHtml(item.name || item.label || item.id)}</strong>
-                <span>${escapeHtml(owned ? ownershipLabel(grant) : item.active === false ? "Archived" : "Not owned")}</span>
+                <span>${escapeHtml(owned ? ownershipLabel(grant) : revocation ? "Revoked by admin" : item.active === false ? "Archived" : "Not owned")}</span>
                 ${owned && grant.grant_note ? `<p>${escapeHtml(grant.grant_note)}</p>` : ""}
+                ${!owned && revocation?.reason ? `<p>${escapeHtml(revocation.reason)}</p>` : ""}
             </div>
             <div class="player-collection-action">
                 ${
@@ -145,9 +150,9 @@ function renderCollectionItem(profile, item, grant) {
                     <button type="button" data-progression-grant-revoke data-profile-id="${escapeHtml(profile.id)}" data-cosmetic-type="${escapeHtml(item.type)}" data-cosmetic-id="${escapeHtml(item.id)}">Revoke</button>
                 `
                         : owned
-                          ? `<span>${escapeHtml(protectedOwnershipLabel(grant.source))}</span>`
+                          ? `<span>${requiredFallback ? "Required fallback" : escapeHtml(protectedOwnershipLabel(grant.source))}</span>`
                           : `
-                    <button type="button" data-player-grant-open="${escapeHtml(key)}" ${grantDisabled ? "disabled" : ""}>${ownerRestricted ? "Owner only" : item.active === false ? "Archived" : "Give"}</button>
+                    <button type="button" data-player-grant-open="${escapeHtml(key)}" ${grantDisabled ? "disabled" : ""}>${ownerRestricted ? "Owner only" : item.active === false ? "Archived" : revocation ? "Restore" : "Give"}</button>
                 `
                 }
             </div>
@@ -155,17 +160,18 @@ function renderCollectionItem(profile, item, grant) {
     `;
 }
 
-function renderGiftDialog(profile, catalog, grantKey, saving) {
+function renderGiftDialog(profile, catalog, revocations, grantKey, saving) {
     const item = catalog.find((entry) => cosmeticKey(entry) === grantKey);
     if (!item) return "";
+    const restoring = revocations.some((entry) => cosmeticKey(entry) === grantKey);
     return `
         <div class="progression-modal-backdrop" data-player-grant-backdrop>
             <section class="progression-cosmetic-dialog player-action-dialog" role="dialog" aria-modal="true" aria-labelledby="player-gift-title">
                 <header class="progression-dialog-header player-action-dialog-header">
                     <div class="player-action-dialog-preview">${renderCosmeticPreview(item)}</div>
                     <div>
-                        <p class="panel-kicker">Cosmetic Gift</p>
-                        <h3 id="player-gift-title">Give ${escapeHtml(item.name || item.id)}</h3>
+                        <p class="panel-kicker">${restoring ? "Restore Cosmetic" : "Cosmetic Gift"}</p>
+                        <h3 id="player-gift-title">${restoring ? "Restore" : "Give"} ${escapeHtml(item.name || item.id)}</h3>
                         <span>${escapeHtml(`Recipient: ${playerName(profile)}`)}</span>
                     </div>
                     <button class="progression-dialog-close" type="button" data-player-grant-close aria-label="Close gift dialog">X</button>
@@ -180,9 +186,9 @@ function renderGiftDialog(profile, catalog, grantKey, saving) {
                             <label class="wide"><span>Gift note</span><textarea name="note" rows="4" maxlength="200" placeholder="Optional message stored with this gift"></textarea></label>
                         </div>
                     </fieldset>
-                    <p class="progression-editor-status" role="status">The cosmetic is added immediately after confirmation.</p>
+                    <p class="progression-editor-status" role="status">${restoring ? "The revocation is removed and the cosmetic is returned immediately." : "The cosmetic is added immediately after confirmation."}</p>
                     <footer class="progression-dialog-actions">
-                        <button class="primary" type="submit" ${saving ? "disabled" : ""}>${saving ? "Sending..." : "Send gift"}</button>
+                        <button class="primary" type="submit" ${saving ? "disabled" : ""}>${saving ? "Saving..." : restoring ? "Restore cosmetic" : "Send gift"}</button>
                     </footer>
                 </form>
             </section>

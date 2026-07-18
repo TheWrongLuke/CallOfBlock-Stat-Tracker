@@ -1,7 +1,6 @@
 const RULE_COLUMNS =
     "id, cosmetic_type, cosmetic_id, mode, metric, target, active, sort_order, created_by, created_at, updated_at";
 const INVENTORY_COLUMNS = "profile_id, cosmetic_type, cosmetic_id, source, grant_note, granted_by, acquired_at";
-const PROFILE_COLUMNS = "id, username, display_name, minecraft_player_name, is_owner";
 const WEEKLY_TEMPLATE_COLUMNS =
     "id, family, difficulty, label, description, metric, target, xp, mode, weapon_scope, weapon_id, weapon_category, active, sort_order, created_at, updated_at";
 
@@ -26,16 +25,20 @@ export function createProgressionAdminApi(client) {
                 .limit(10000);
         },
 
-        async listProfiles() {
-            return client.from("profiles").select(PROFILE_COLUMNS).order("username", { ascending: true }).limit(1000);
-        },
-
         async listManagedPlayers() {
             return client.rpc("admin_list_managed_players");
         },
 
+        async listCosmeticRevocations() {
+            return client.rpc("admin_list_cosmetic_revocations");
+        },
+
         async listOwnCosmeticGifts() {
             return client.rpc("list_my_cosmetic_gifts");
+        },
+
+        async listOwnCosmeticRevocations() {
+            return client.rpc("list_my_cosmetic_revocations");
         },
 
         async setPlayerBan(profileId, banned, reason) {

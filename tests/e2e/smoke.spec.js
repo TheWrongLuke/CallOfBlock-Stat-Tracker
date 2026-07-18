@@ -390,6 +390,7 @@ test("an administrator can search players, inspect collections, and open protect
     await member.click();
 
     await expect(page.getByText("Complete Collection", { exact: true })).toBeVisible();
+    expect(await page.locator("[data-progression-grant-revoke]").count()).toBeGreaterThan(0);
     const give = page.locator("[data-player-grant-open]:not([disabled])").first();
     await expect(give).toBeVisible();
     await give.click();

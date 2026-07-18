@@ -96,4 +96,15 @@ describe("progression admin API", () => {
         });
         expect(rpc).toHaveBeenNthCalledWith(4, "list_my_cosmetic_gifts");
     });
+
+    it("loads admin and account cosmetic revocations through protected RPCs", async () => {
+        const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+        const api = createProgressionAdminApi({ rpc });
+
+        await api.listCosmeticRevocations();
+        await api.listOwnCosmeticRevocations();
+
+        expect(rpc).toHaveBeenNthCalledWith(1, "admin_list_cosmetic_revocations");
+        expect(rpc).toHaveBeenNthCalledWith(2, "list_my_cosmetic_revocations");
+    });
 });

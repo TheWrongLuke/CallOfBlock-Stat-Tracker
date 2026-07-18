@@ -76,6 +76,7 @@ const baseProps = {
     players,
     catalog,
     grants,
+    revocations: [],
     selectedId: "player-1",
     currentUserId: "owner-id",
     filters: { search: "", collection: "all" },
@@ -98,15 +99,36 @@ describe("Player Manager view", () => {
         expect(html).not.toContain("<script>");
     });
 
-    it("shows the complete collection and protects automatic ownership", () => {
+    it("shows the complete collection and allows automatic ownership to be revoked", () => {
         const html = renderPlayerManagerContent(baseProps);
 
         expect(html).toContain("1 owned / 2 catalog items");
         expect(html).toContain("Founder Night");
         expect(html).toContain("Earned Title");
-        expect(html).toContain("Earned item");
-        expect(html).not.toContain('data-cosmetic-id="earned"');
+        expect(html).toContain("Progression reward");
+        expect(html).toContain('data-cosmetic-id="earned"');
         expect(html).toContain('data-player-grant-open="background:founder"');
+    });
+
+    it("shows revoked cosmetics as restorable", () => {
+        const html = renderPlayerManagerContent({
+            ...baseProps,
+            revocations: [
+                {
+                    profile_id: "player-1",
+                    cosmetic_type: "background",
+                    cosmetic_id: "founder",
+                    reason: "Revoked by administrator"
+                }
+            ],
+            grantKey: "background:founder"
+        });
+
+        expect(html).toContain("Revoked by admin");
+        expect(html).toContain("Revoked by administrator");
+        expect(html).toContain(">Restore<");
+        expect(html).toContain("Restore Cosmetic");
+        expect(html).toContain("Restore cosmetic");
     });
 
     it("renders a gift dialog with a note and only one X close control", () => {
