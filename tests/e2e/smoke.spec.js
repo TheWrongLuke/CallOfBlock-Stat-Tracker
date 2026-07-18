@@ -40,6 +40,101 @@ window.COB_STATS_API_URL = "";
 window.COB_STATS_POLL_MS = 10000;
 `;
 
+const adminSupabaseStub = `
+(() => {
+    const profile = {
+        id: "123e4567-e89b-42d3-a456-426614174000",
+        discord_id: "discord-test-user",
+        username: "test-admin",
+        display_name: "Test Admin",
+        avatar_url: null,
+        is_admin: true,
+        is_owner: true,
+        selected_badges: [],
+        unlocked_badges: [],
+        unlocked_backgrounds: [],
+        unlocked_pfp_borders: [],
+        unlocked_icons: [],
+        unlocked_titles: []
+    };
+
+    function resultFor(table, calls) {
+        const single = calls.some(([method]) => method === "single" || method === "maybeSingle");
+        if (table === "profiles") return { data: single ? profile : [profile], error: null };
+        if (table === "public_profiles") return { data: [profile], error: null };
+        if (table === "weekly_mission_templates") return {
+            data: [{
+                id: "easy_kills",
+                family: "kills_any",
+                difficulty: "easy",
+                label: "On the Board",
+                description: "Get 5 kills in any mode.",
+                metric: "kills",
+                target: 5,
+                xp: 350,
+                mode: "overall",
+                weapon_scope: "none",
+                weapon_id: null,
+                weapon_category: null,
+                active: true,
+                sort_order: 10,
+                created_at: "2026-07-17T12:00:00Z",
+                updated_at: "2026-07-17T12:00:00Z"
+            }],
+            error: null
+        };
+        return { data: [], error: null };
+    }
+
+    function builder(table) {
+        const calls = [];
+        let proxy;
+        proxy = new Proxy({}, {
+            get(_target, property) {
+                if (property === "then") {
+                    return (resolve) => resolve(resultFor(table, calls));
+                }
+                return (...args) => {
+                    calls.push([String(property), args]);
+                    return proxy;
+                };
+            }
+        });
+        return proxy;
+    }
+
+    window.supabase = {
+        createClient() {
+            return {
+                auth: {
+                    getSession: async () => ({
+                        data: {
+                            session: {
+                                user: {
+                                    id: profile.id,
+                                    user_metadata: {
+                                        sub: profile.discord_id,
+                                        username: profile.username,
+                                        global_name: profile.display_name
+                                    }
+                                }
+                            }
+                        },
+                        error: null
+                    }),
+                    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
+                    signInWithOAuth: async () => ({ error: null }),
+                    signOut: async () => ({ error: null })
+                },
+                from: (table) => builder(table),
+                rpc: async (name) => ({ data: name === "reconcile_cosmetic_ownership" ? { eligible: 0, added: 0, removed: 0 } : [], error: null }),
+                storage: { from: () => ({}) }
+            };
+        }
+    };
+})();
+`;
+
 async function openApp(page, hash = "") {
     await page.route("https://cdn.jsdelivr.net/**", (route) =>
         route.fulfill({ contentType: "text/javascript", body: supabaseStub })
@@ -63,6 +158,17 @@ async function openAuthenticatedApp(page, hash = "") {
     );
     await page.route("https://cdn.jsdelivr.net/**", (route) =>
         route.fulfill({ contentType: "text/javascript", body: authenticatedStub })
+    );
+    await page.route("**/api-config.js*", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: configStub })
+    );
+    await page.goto(`/${hash}`);
+    await page.waitForLoadState("domcontentloaded");
+}
+
+async function openAdminApp(page, hash = "#admin-progression") {
+    await page.route("https://cdn.jsdelivr.net/**", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: adminSupabaseStub })
     );
     await page.route("**/api-config.js*", (route) =>
         route.fulfill({ contentType: "text/javascript", body: configStub })
@@ -162,4 +268,43 @@ test("admin routes reject a logged-out visitor", async ({ page }) => {
     await page.goto("/#admin-progression");
     await expect(page).not.toHaveURL(/#admin-progression$/);
     await expect(page.locator("#admin-progression-view")).toBeHidden();
+});
+
+test("the cosmetic editor stays open until its X button is used", async ({ page }) => {
+    await openAdminApp(page);
+    const firstCosmetic = page.locator("[data-progression-cosmetic-open]").first();
+    await expect(firstCosmetic).toBeVisible();
+    await firstCosmetic.click();
+
+    const dialog = page.locator(".progression-cosmetic-dialog");
+    await expect(dialog).toBeVisible();
+    await page.locator("[data-progression-editor-backdrop]").evaluate((backdrop) => {
+        backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+
+    await page.locator("[data-progression-cosmetic-close]").click();
+    await expect(dialog).toBeHidden();
+});
+
+test("an administrator can open the weekly mission editor and only close it with X", async ({ page }) => {
+    await openAdminApp(page);
+    await page.locator('[data-progression-section="weekly"]').click();
+    await expect(page.locator("[data-weekly-template-new]")).toBeVisible();
+    await expect(page.locator('[data-weekly-template-open="easy_kills"]')).toBeVisible();
+    await page.locator("[data-weekly-template-new]").click();
+
+    const dialog = page.locator(".weekly-template-dialog");
+    await expect(dialog).toBeVisible();
+    await page.locator("[data-weekly-template-backdrop]").evaluate((backdrop) => {
+        backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+
+    await page.locator("[data-weekly-template-close]").click();
+    await expect(dialog).toBeHidden();
 });

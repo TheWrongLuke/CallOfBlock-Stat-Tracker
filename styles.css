@@ -1051,6 +1051,472 @@
     color: var(--muted);
 }
 
+.progression-manager-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+}
+
+.progression-manager-tabs button {
+    flex: 0 0 auto;
+    min-height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 8px 14px;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--muted);
+    cursor: pointer;
+    font: 700 0.74rem "Chakra Petch", sans-serif;
+}
+
+.progression-manager-tabs button[aria-current="page"] {
+    border-color: rgba(244, 188, 74, 0.55);
+    background: rgba(244, 188, 74, 0.09);
+    color: var(--gold);
+}
+
+.progression-catalog-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) minmax(150px, 220px) auto auto;
+    align-items: end;
+    gap: 10px;
+}
+
+.progression-catalog-toolbar label,
+.progression-cosmetic-form label,
+.progression-mission-fields label,
+.progression-store-fields label {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+}
+
+.progression-catalog-toolbar label > span,
+.progression-cosmetic-form label > span {
+    color: var(--muted);
+    font: 700 0.68rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.progression-catalog-toolbar input,
+.progression-catalog-toolbar select,
+.progression-cosmetic-form input,
+.progression-cosmetic-form select,
+.progression-cosmetic-form textarea {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 8px 10px;
+    background: #0a1018;
+    color: var(--text);
+    font: inherit;
+}
+
+.progression-catalog-toolbar button {
+    min-height: 40px;
+    border: 1px solid rgba(133, 232, 157, 0.4);
+    border-radius: 5px;
+    padding: 8px 14px;
+    background: rgba(133, 232, 157, 0.08);
+    color: var(--green);
+    cursor: pointer;
+    font: 700 0.74rem "Chakra Petch", sans-serif;
+}
+
+.progression-catalog-toolbar .progression-check {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+}
+
+.progression-catalog-toolbar .progression-check input,
+.progression-cosmetic-form .progression-check input {
+    width: 16px;
+    min-height: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--green);
+}
+
+.progression-catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+}
+
+.weekly-template-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+}
+
+.weekly-template-card {
+    min-width: 0;
+    min-height: 164px;
+    display: grid;
+    align-content: start;
+    justify-items: start;
+    gap: 7px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 13px;
+    background: rgba(13, 20, 30, 0.78);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease, opacity 150ms ease;
+}
+
+.weekly-template-card:hover,
+.weekly-template-card:focus-visible {
+    border-color: rgba(244, 188, 74, 0.65);
+    background: rgba(20, 29, 41, 0.92);
+    outline: none;
+}
+
+.weekly-template-card.archived {
+    opacity: 0.55;
+}
+
+.weekly-template-card strong,
+.weekly-template-card span,
+.weekly-template-card small {
+    overflow-wrap: anywhere;
+}
+
+.weekly-template-card > span:not(.mission-difficulty),
+.weekly-template-card small {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.progression-cosmetic-card {
+    min-width: 0;
+    display: grid;
+    grid-template-rows: 112px 1fr;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 0;
+    background: rgba(13, 20, 30, 0.78);
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 150ms ease, background 150ms ease;
+}
+
+.progression-cosmetic-card:hover,
+.progression-cosmetic-card:focus-visible {
+    border-color: rgba(244, 188, 74, 0.65);
+    background: rgba(20, 29, 41, 0.92);
+    outline: none;
+}
+
+.progression-cosmetic-card.archived {
+    opacity: 0.55;
+}
+
+.progression-cosmetic-preview,
+.progression-dialog-preview {
+    min-width: 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: #080d14;
+}
+
+.progression-cosmetic-preview img,
+.progression-dialog-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.progression-cosmetic-copy {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    padding: 11px;
+}
+
+.progression-cosmetic-copy strong,
+.progression-cosmetic-copy span,
+.progression-cosmetic-copy small {
+    overflow-wrap: anywhere;
+}
+
+.progression-cosmetic-copy span,
+.progression-cosmetic-copy small,
+.progression-preview-placeholder {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.progression-grant-workspace {
+    display: grid;
+    grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.25fr);
+    align-items: start;
+    gap: 14px;
+}
+
+.progression-modal-open {
+    overflow: hidden;
+}
+
+.progression-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10030;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(3, 7, 12, 0.86);
+    backdrop-filter: blur(5px);
+}
+
+.progression-cosmetic-dialog {
+    width: min(940px, 100%);
+    max-height: calc(100dvh - 40px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid rgba(244, 188, 74, 0.38);
+    border-radius: 8px;
+    background: #0d1520;
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.progression-dialog-header {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 116px minmax(0, 1fr) 40px;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid var(--line);
+    padding: 14px;
+    background: #101a26;
+}
+
+.progression-dialog-preview {
+    width: 116px;
+    height: 76px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+}
+
+.progression-dialog-header h3,
+.progression-dialog-header p,
+.progression-dialog-header span {
+    margin: 0;
+}
+
+.progression-dialog-header h3 {
+    font-size: 1.2rem;
+}
+
+.progression-dialog-header span {
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.weekly-template-dialog-header {
+    grid-template-columns: 58px minmax(0, 1fr) 40px;
+}
+
+.weekly-template-dialog-mark {
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(133, 232, 157, 0.38);
+    border-radius: 6px;
+    background: rgba(133, 232, 157, 0.08);
+    color: var(--green);
+    font: 700 1rem "Chakra Petch", sans-serif;
+}
+
+.weekly-template-dialog-mark.hard {
+    border-color: rgba(244, 188, 74, 0.45);
+    background: rgba(244, 188, 74, 0.09);
+    color: var(--gold);
+}
+
+.progression-dialog-close {
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.8rem "Chakra Petch", sans-serif;
+}
+
+.progression-cosmetic-form {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 16px;
+}
+
+.progression-cosmetic-form fieldset {
+    min-width: 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 0 0 18px;
+}
+
+.progression-cosmetic-form fieldset + fieldset {
+    padding-top: 18px;
+}
+
+.progression-cosmetic-form legend {
+    margin-bottom: 12px;
+    color: var(--gold);
+    font: 700 0.78rem "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.progression-editor-fields,
+.progression-mission-fields,
+.progression-store-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px;
+}
+
+.progression-editor-fields .wide,
+.progression-mission-fields .wide,
+.progression-store-fields .wide {
+    grid-column: 1 / -1;
+}
+
+.progression-cosmetic-form textarea {
+    resize: vertical;
+}
+
+.progression-cosmetic-form label small,
+.progression-mission-fields p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.progression-editor-status {
+    min-height: 20px;
+    margin: 12px 0 0;
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.progression-dialog-actions {
+    position: sticky;
+    bottom: -16px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin: 12px -16px -16px;
+    border-top: 1px solid var(--line);
+    padding: 12px 16px;
+    background: #101a26;
+}
+
+.progression-dialog-actions button {
+    min-height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 8px 13px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.72rem "Chakra Petch", sans-serif;
+}
+
+.progression-dialog-actions .primary {
+    border-color: rgba(133, 232, 157, 0.42);
+    color: var(--green);
+}
+
+.progression-dialog-actions .danger {
+    border-color: rgba(242, 105, 105, 0.42);
+    color: #ff9b9b;
+}
+
+@media (max-width: 760px) {
+    .progression-catalog-toolbar,
+    .progression-grant-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .progression-catalog-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .weekly-template-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .progression-modal-backdrop {
+        padding: 0;
+    }
+
+    .progression-cosmetic-dialog {
+        width: 100%;
+        max-height: 100dvh;
+        height: 100dvh;
+        border-radius: 0;
+    }
+
+    .progression-dialog-header {
+        grid-template-columns: 72px minmax(0, 1fr) 38px;
+        gap: 10px;
+        padding: 10px;
+    }
+
+    .progression-dialog-preview {
+        width: 72px;
+        height: 56px;
+    }
+
+    .weekly-template-dialog-header {
+        grid-template-columns: 48px minmax(0, 1fr) 38px;
+    }
+
+    .weekly-template-dialog-mark {
+        width: 44px;
+        height: 44px;
+    }
+
+    .progression-editor-fields,
+    .progression-mission-fields,
+    .progression-store-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .progression-editor-fields .wide,
+    .progression-mission-fields .wide,
+    .progression-store-fields .wide {
+        grid-column: auto;
+    }
+
+    .progression-dialog-actions {
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 430px) {
+    .progression-catalog-grid,
+    .weekly-template-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .admin-help-actions {
     display: flex;
     gap: 8px;

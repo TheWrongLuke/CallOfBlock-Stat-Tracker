@@ -6,6 +6,11 @@ import {
     COSMETIC_GRANT_SOURCES,
     PROGRESSION_METRICS,
     PROGRESSION_MODES,
+    WEEKLY_MISSION_DIFFICULTIES,
+    WEEKLY_MISSION_METRICS,
+    WEEKLY_MISSION_MODES,
+    WEEKLY_MISSION_WEAPON_CATEGORIES,
+    WEEKLY_MISSION_WEAPON_SCOPES,
     cosmeticCanAppearInShop,
     progressionOptionLabel
 } from "./src/config/progression.js";
@@ -241,6 +246,11 @@ const COSMETIC_ACQUISITION_VALUES = new Set(COSMETIC_ACQUISITION_TYPES.map((opti
 const PROGRESSION_MODE_VALUES = new Set(PROGRESSION_MODES.map((option) => option.value));
 const PROGRESSION_METRIC_VALUES = new Set(PROGRESSION_METRICS.map((option) => option.value));
 const COSMETIC_GRANT_SOURCE_VALUES = new Set(COSMETIC_GRANT_SOURCES.map((option) => option.value));
+const WEEKLY_DIFFICULTY_VALUES = new Set(WEEKLY_MISSION_DIFFICULTIES.map((option) => option.value));
+const WEEKLY_MODE_VALUES = new Set(WEEKLY_MISSION_MODES.map((option) => option.value));
+const WEEKLY_METRIC_VALUES = new Set(WEEKLY_MISSION_METRICS.map((option) => option.value));
+const WEEKLY_WEAPON_SCOPE_VALUES = new Set(WEEKLY_MISSION_WEAPON_SCOPES.map((option) => option.value));
+const WEEKLY_WEAPON_CATEGORY_VALUES = new Set(WEEKLY_MISSION_WEAPON_CATEGORIES.map((option) => option.value));
 // Products are intentionally empty until a store-only catalog entry and its
 // matching Stripe Price are registered. Achievement cosmetics are never used
 // as store fallbacks.
@@ -387,13 +397,27 @@ const state = {
     },
     progression: {
         api: null,
+        section: "cosmetics",
         loaded: false,
         loading: false,
         ready: false,
         rules: [],
         grants: [],
         profiles: [],
-        editingRuleId: "",
+        editorKey: "",
+        creating: false,
+        filterSearch: "",
+        filterType: "all",
+        showArchived: true,
+        weeklyTemplates: [],
+        weeklyReady: false,
+        weeklyEditorId: "",
+        creatingWeekly: false,
+        weeklyFilterSearch: "",
+        weeklyFilterDifficulty: "all",
+        weeklyShowArchived: true,
+        weeklyMessage: "",
+        weeklyError: "",
         saving: false,
         message: "",
         error: ""
@@ -401,6 +425,10 @@ const state = {
     weeklyMissions: {
         loading: false,
         syncing: false,
+        templates: [],
+        templatesLoaded: false,
+        templatesLoading: false,
+        templatesReady: false,
         row: null,
         source: "",
         message: "",
@@ -440,6 +468,9 @@ const feedbackDraftSession = createFeedbackDraftSession({
 let activeBadgeProgressHost = null;
 let badgeTooltipFrame = 0;
 let adminTicketSearchTimer = 0;
+let progressionSearchTimer = 0;
+let weeklyTemplateSearchTimer = 0;
+let weeklyTemplateLoadPromise = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
@@ -522,7 +553,7 @@ async function initAuth() {
 
 async function applyAuthSession(session, shouldRender = false) {
     state.authSession = session || null;
-    state.authReady = true;
+    state.authReady = !session?.user;
 
     if (!session?.user) {
         state.authProfile = null;
@@ -552,6 +583,7 @@ async function applyAuthSession(session, shouldRender = false) {
     resetProgressionAdminState();
     consumeAuthReturn();
     resetStoreSessionState();
+    state.authReady = true;
     enforceProtectedAdminRoute();
     if (state.view === "store" && isPlaytestAdmin()) await loadStoreData();
     if (shouldRender) render();
@@ -710,27 +742,110 @@ function bindStaticEvents() {
             return;
         }
 
-        const progressionRuleNew = event.target.closest("[data-progression-rule-new]");
-        if (progressionRuleNew) {
+        const progressionSection = event.target.closest("[data-progression-section]");
+        if (progressionSection) {
             event.preventDefault();
-            state.progression.editingRuleId = "";
+            const section = progressionSection.dataset.progressionSection;
+            if (!["cosmetics", "weekly"].includes(section)) return;
+            state.progression.section = section;
+            state.progression.editorKey = "";
+            state.progression.creating = false;
+            state.progression.weeklyEditorId = "";
+            state.progression.creatingWeekly = false;
             renderProgressionAdminPage();
             return;
         }
 
-        const progressionRuleEdit = event.target.closest("[data-progression-rule-edit]");
-        if (progressionRuleEdit) {
+        const weeklyRetry = event.target.closest("[data-progression-weekly-retry]");
+        if (weeklyRetry) {
             event.preventDefault();
-            state.progression.editingRuleId = progressionRuleEdit.dataset.progressionRuleEdit || "";
-            renderProgressionAdminPage();
-            window.requestAnimationFrame(() => document.querySelector("[data-progression-rule-form]")?.scrollIntoView({ block: "start" }));
+            void loadProgressionAdminData({ force: true });
             return;
         }
 
-        const progressionRuleDelete = event.target.closest("[data-progression-rule-delete]");
-        if (progressionRuleDelete) {
+        const progressionCosmeticNew = event.target.closest("[data-progression-cosmetic-new]");
+        if (progressionCosmeticNew) {
             event.preventDefault();
-            void deleteProgressionRule(progressionRuleDelete.dataset.progressionRuleDelete || "");
+            state.progression.editorKey = "";
+            state.progression.creating = true;
+            renderProgressionAdminPage();
+            focusProgressionEditor();
+            return;
+        }
+
+        const progressionCosmeticOpen = event.target.closest("[data-progression-cosmetic-open]");
+        if (progressionCosmeticOpen) {
+            event.preventDefault();
+            state.progression.editorKey = progressionCosmeticOpen.dataset.progressionCosmeticOpen || "";
+            state.progression.creating = false;
+            renderProgressionAdminPage();
+            focusProgressionEditor();
+            return;
+        }
+
+        const progressionCosmeticClose = event.target.closest("[data-progression-cosmetic-close]");
+        if (progressionCosmeticClose) {
+            event.preventDefault();
+            state.progression.editorKey = "";
+            state.progression.creating = false;
+            renderProgressionAdminPage();
+            return;
+        }
+
+        const progressionCosmeticArchive = event.target.closest("[data-progression-cosmetic-archive]");
+        if (progressionCosmeticArchive) {
+            event.preventDefault();
+            void toggleProgressionCosmeticArchive(progressionCosmeticArchive.dataset.progressionCosmeticArchive || "");
+            return;
+        }
+
+        const progressionCosmeticDelete = event.target.closest("[data-progression-cosmetic-delete]");
+        if (progressionCosmeticDelete) {
+            event.preventDefault();
+            void deleteProgressionCosmetic(progressionCosmeticDelete.dataset.progressionCosmeticDelete || "");
+            return;
+        }
+
+        const weeklyTemplateNew = event.target.closest("[data-weekly-template-new]");
+        if (weeklyTemplateNew) {
+            event.preventDefault();
+            state.progression.weeklyEditorId = "";
+            state.progression.creatingWeekly = true;
+            renderProgressionAdminPage();
+            focusProgressionEditor();
+            return;
+        }
+
+        const weeklyTemplateOpen = event.target.closest("[data-weekly-template-open]");
+        if (weeklyTemplateOpen) {
+            event.preventDefault();
+            state.progression.weeklyEditorId = weeklyTemplateOpen.dataset.weeklyTemplateOpen || "";
+            state.progression.creatingWeekly = false;
+            renderProgressionAdminPage();
+            focusProgressionEditor();
+            return;
+        }
+
+        const weeklyTemplateClose = event.target.closest("[data-weekly-template-close]");
+        if (weeklyTemplateClose) {
+            event.preventDefault();
+            state.progression.weeklyEditorId = "";
+            state.progression.creatingWeekly = false;
+            renderProgressionAdminPage();
+            return;
+        }
+
+        const weeklyTemplateArchive = event.target.closest("[data-weekly-template-archive]");
+        if (weeklyTemplateArchive) {
+            event.preventDefault();
+            void toggleWeeklyMissionTemplateArchive(weeklyTemplateArchive.dataset.weeklyTemplateArchive || "");
+            return;
+        }
+
+        const weeklyTemplateDelete = event.target.closest("[data-weekly-template-delete]");
+        if (weeklyTemplateDelete) {
+            event.preventDefault();
+            void deleteWeeklyMissionTemplate(weeklyTemplateDelete.dataset.weeklyTemplateDelete || "");
             return;
         }
 
@@ -984,9 +1099,15 @@ function bindStaticEvents() {
             return;
         }
 
-        if (event.target.matches("[data-progression-rule-form]")) {
+        if (event.target.matches("[data-progression-cosmetic-form]")) {
             event.preventDefault();
-            void submitProgressionRule(event.target);
+            void submitProgressionCosmetic(event.target);
+            return;
+        }
+
+        if (event.target.matches("[data-weekly-template-form]")) {
+            event.preventDefault();
+            void submitWeeklyMissionTemplate(event.target);
             return;
         }
 
@@ -1032,6 +1153,49 @@ function bindStaticEvents() {
             state.feedback.hideClosed = Boolean(event.target.checked);
             saveAdminTicketPreferences({ hideClosed: state.feedback.hideClosed });
             renderAdminTicketsPage();
+            return;
+        }
+
+        if (event.target.matches("[data-progression-filter='type']")) {
+            state.progression.filterType = event.target.value;
+            renderProgressionAdminPage();
+            return;
+        }
+
+        if (event.target.matches("[data-progression-show-archived]")) {
+            state.progression.showArchived = Boolean(event.target.checked);
+            renderProgressionAdminPage();
+            return;
+        }
+
+        if (event.target.matches("[data-weekly-template-filter='difficulty']")) {
+            state.progression.weeklyFilterDifficulty = event.target.value;
+            renderProgressionAdminPage();
+            return;
+        }
+
+        if (event.target.matches("[data-weekly-template-show-archived]")) {
+            state.progression.weeklyShowArchived = Boolean(event.target.checked);
+            renderProgressionAdminPage();
+            return;
+        }
+
+        if (event.target.matches("[data-weekly-template-weapon-scope]")) {
+            const form = event.target.closest("[data-weekly-template-form]");
+            form?.querySelector("[data-weekly-template-exact-weapon]")?.toggleAttribute("hidden", event.target.value !== "exact_weapon");
+            form?.querySelector("[data-weekly-template-category]")?.toggleAttribute("hidden", event.target.value !== "weapon_category");
+            return;
+        }
+
+        if (event.target.matches("[data-progression-acquisition]")) {
+            const form = event.target.closest("[data-progression-cosmetic-form]");
+            form?.querySelector("[data-progression-mission-fields]")?.toggleAttribute("hidden", event.target.value !== "progression");
+            form?.querySelector("[data-progression-store-fields]")?.toggleAttribute("hidden", event.target.value !== "store");
+            return;
+        }
+
+        if (event.target.matches("[data-progression-asset-input]")) {
+            previewProgressionAsset(event.target);
             return;
         }
 
@@ -1084,6 +1248,36 @@ function bindStaticEvents() {
                     if (Number.isInteger(caret)) input?.setSelectionRange(caret, caret);
                 });
             }, 160);
+            return;
+        }
+
+        if (event.target.matches("[data-progression-filter='search']")) {
+            state.progression.filterSearch = event.target.value.slice(0, 200);
+            window.clearTimeout(progressionSearchTimer);
+            const caret = event.target.selectionStart;
+            progressionSearchTimer = window.setTimeout(() => {
+                renderProgressionAdminPage();
+                window.requestAnimationFrame(() => {
+                    const input = document.querySelector("[data-progression-filter='search']");
+                    input?.focus();
+                    if (Number.isInteger(caret)) input?.setSelectionRange(caret, caret);
+                });
+            }, 120);
+            return;
+        }
+
+        if (event.target.matches("[data-weekly-template-filter='search']")) {
+            state.progression.weeklyFilterSearch = event.target.value.slice(0, 200);
+            window.clearTimeout(weeklyTemplateSearchTimer);
+            const caret = event.target.selectionStart;
+            weeklyTemplateSearchTimer = window.setTimeout(() => {
+                renderProgressionAdminPage();
+                window.requestAnimationFrame(() => {
+                    const input = document.querySelector("[data-weekly-template-filter='search']");
+                    input?.focus();
+                    if (Number.isInteger(caret)) input?.setSelectionRange(caret, caret);
+                });
+            }, 120);
             return;
         }
 
@@ -2334,6 +2528,10 @@ function renderLeaderboardView() {
 function renderRoute() {
     document.body.classList.toggle("home-route", state.view === "home");
     document.body.classList.toggle("store-route", state.view === "store");
+    document.body.classList.toggle(
+        "progression-modal-open",
+        state.view === "adminProgression" && progressionEditorOpen()
+    );
     document.getElementById("home-view").classList.toggle("hidden", state.view !== "home");
     document.getElementById("admin-help-view").classList.toggle("hidden", state.view !== "adminHelp");
     document.getElementById("playtests-view").classList.toggle("hidden", state.view !== "playtests");
@@ -2482,7 +2680,7 @@ function renderAccountSidePanel() {
                     <button class="profile-drawer-support" type="button" data-route="feedback">Feedback &amp; support</button>
                     ${isPlaytestAdmin() ? `
                         <button class="profile-drawer-tickets" type="button" data-route="admin-tickets">Ticket dashboard</button>
-                        <button class="profile-drawer-progression" type="button" data-route="admin-progression">Progression &amp; grants</button>
+                        <button class="profile-drawer-progression" type="button" data-route="admin-progression">Progression &amp; missions</button>
                         <button class="profile-drawer-docs" type="button" data-route="admin-help">Admin documentation</button>
                         <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
                     ` : ""}
@@ -2615,10 +2813,24 @@ function resetProgressionAdminState() {
     progression.loaded = false;
     progression.loading = false;
     progression.ready = false;
+    progression.section = "cosmetics";
     progression.rules = [];
     progression.grants = [];
     progression.profiles = [];
-    progression.editingRuleId = "";
+    progression.editorKey = "";
+    progression.creating = false;
+    progression.filterSearch = "";
+    progression.filterType = "all";
+    progression.showArchived = true;
+    progression.weeklyTemplates = [];
+    progression.weeklyReady = false;
+    progression.weeklyEditorId = "";
+    progression.creatingWeekly = false;
+    progression.weeklyFilterSearch = "";
+    progression.weeklyFilterDifficulty = "all";
+    progression.weeklyShowArchived = true;
+    progression.weeklyMessage = "";
+    progression.weeklyError = "";
     progression.saving = false;
     progression.message = "";
     progression.error = "";
@@ -3212,6 +3424,10 @@ async function loadAdminDocumentation({ force = false } = {}) {
 function renderProgressionAdminPage() {
     const body = document.getElementById("admin-progression-body");
     if (!body) return;
+    document.body.classList.toggle(
+        "progression-modal-open",
+        state.view === "adminProgression" && progressionEditorOpen()
+    );
     if (!state.authReady) {
         body.innerHTML = renderProgressionAdminContent({
             loading: true,
@@ -3220,7 +3436,9 @@ function renderProgressionAdminPage() {
             rules: [],
             grants: [],
             profiles: [],
-            editingRuleId: "",
+            editorKey: "",
+            creating: false,
+            filters: { search: "", type: "all", showArchived: true },
             message: "",
             error: "",
             saving: false
@@ -3235,11 +3453,32 @@ function renderProgressionAdminPage() {
     body.innerHTML = renderProgressionAdminContent({
         loading: state.progression.loading,
         ready: state.progression.ready,
-        catalog: state.store.catalogItems,
+        section: state.progression.section,
+        catalog: progressionAdminCatalogItems(),
         rules: state.progression.rules,
         grants: state.progression.grants,
         profiles: state.progression.profiles,
-        editingRuleId: state.progression.editingRuleId,
+        editorKey: state.progression.editorKey,
+        creating: state.progression.creating,
+        filters: {
+            search: state.progression.filterSearch,
+            type: state.progression.filterType,
+            showArchived: state.progression.showArchived
+        },
+        weekly: {
+            ready: state.progression.weeklyReady,
+            templates: state.progression.weeklyTemplates,
+            editorId: state.progression.weeklyEditorId,
+            creating: state.progression.creatingWeekly,
+            filters: {
+                search: state.progression.weeklyFilterSearch,
+                difficulty: state.progression.weeklyFilterDifficulty,
+                showArchived: state.progression.weeklyShowArchived
+            },
+            message: state.progression.weeklyMessage,
+            error: state.progression.weeklyError,
+            saving: state.progression.saving
+        },
         message: state.progression.message,
         error: state.progression.error,
         saving: state.progression.saving
@@ -3251,18 +3490,34 @@ async function loadProgressionAdminData({ force = false } = {}) {
     if (!progression.api || !isPlaytestAdmin() || progression.loading || (progression.loaded && !force)) return;
     progression.loading = true;
     progression.error = "";
+    progression.weeklyError = "";
     if (state.view === "adminProgression") renderProgressionAdminPage();
 
     try {
         await loadCosmeticCatalog({ force });
+        const [rulesResult, grantsResult, profilesResult, weeklyResult] = await Promise.all([
+            progression.api.listRules(),
+            progression.api.listInventory(),
+            progression.api.listProfiles(),
+            progression.api.listWeeklyMissionTemplates()
+        ]);
+        if (weeklyResult.error) {
+            progression.weeklyTemplates = [];
+            progression.weeklyReady = false;
+            progression.weeklyError = weeklyMissionAdminErrorMessage(weeklyResult.error);
+            setWeeklyMissionTemplateCache([], false);
+        } else {
+            const templates = (Array.isArray(weeklyResult.data) ? weeklyResult.data : [])
+                .map(normalizeWeeklyMissionTemplate)
+                .filter(Boolean);
+            progression.weeklyTemplates = templates;
+            progression.weeklyReady = true;
+            progression.weeklyError = "";
+            setWeeklyMissionTemplateCache(templates, true);
+        }
         if (!state.store.catalogProgressionReady) {
             throw new Error("The current cosmetic progression schema has not been installed yet.");
         }
-        const [rulesResult, grantsResult, profilesResult] = await Promise.all([
-            progression.api.listRules(),
-            progression.api.listInventory(),
-            progression.api.listProfiles()
-        ]);
         if (rulesResult.error) throw rulesResult.error;
         if (grantsResult.error) throw grantsResult.error;
         if (profilesResult.error) throw profilesResult.error;
@@ -3284,82 +3539,559 @@ async function loadProgressionAdminData({ force = false } = {}) {
     }
 }
 
-async function submitProgressionRule(form) {
+function setWeeklyMissionTemplateCache(templates, ready) {
+    state.weeklyMissions.templates = Array.isArray(templates) ? templates : [];
+    state.weeklyMissions.templatesLoaded = true;
+    state.weeklyMissions.templatesReady = Boolean(ready);
+}
+
+async function loadWeeklyMissionTemplates({ force = false } = {}) {
+    const missionState = state.weeklyMissions;
+    if (!state.progression.api || !state.authSession?.user) return;
+    if (missionState.templatesLoaded && !force) return;
+    if (weeklyTemplateLoadPromise) return weeklyTemplateLoadPromise;
+
+    missionState.templatesLoading = true;
+    weeklyTemplateLoadPromise = (async () => {
+        try {
+            const result = await state.progression.api.listWeeklyMissionTemplates();
+            if (result.error) throw result.error;
+            const templates = (Array.isArray(result.data) ? result.data : [])
+                .map(normalizeWeeklyMissionTemplate)
+                .filter(Boolean);
+            setWeeklyMissionTemplateCache(templates, true);
+        } catch (error) {
+            console.warn("Weekly mission templates are not available", error);
+            setWeeklyMissionTemplateCache([], false);
+        } finally {
+            missionState.templatesLoading = false;
+            weeklyTemplateLoadPromise = null;
+        }
+    })();
+    return weeklyTemplateLoadPromise;
+}
+
+function normalizeWeeklyMissionTemplate(row) {
+    const id = String(row?.id || "").trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) return null;
+    const familyValue = String(row?.family || id).trim().toLowerCase();
+    const family = /^[a-z0-9][a-z0-9_-]{0,63}$/.test(familyValue) ? familyValue : id;
+    const difficulty = WEEKLY_DIFFICULTY_VALUES.has(row?.difficulty) ? row.difficulty : "easy";
+    const mode = WEEKLY_MODE_VALUES.has(row?.mode) ? row.mode : "overall";
+    const metric = WEEKLY_METRIC_VALUES.has(row?.metric) ? row.metric : "games";
+    const weaponScope = WEEKLY_WEAPON_SCOPE_VALUES.has(row?.weapon_scope) ? row.weapon_scope : "none";
+    const weaponCategory = WEEKLY_WEAPON_CATEGORY_VALUES.has(row?.weapon_category) ? row.weapon_category : "";
+    return {
+        id,
+        family,
+        difficulty,
+        label: String(row?.label || id).trim().slice(0, 80) || id,
+        description: String(row?.description || "").trim().slice(0, 240),
+        metric,
+        target: Math.min(1_000_000_000, Math.max(1, Math.floor(number(row?.target)))),
+        xp: Math.min(20_000, Math.max(1, Math.floor(number(row?.xp)))),
+        mode,
+        weaponScope,
+        weaponId: String(row?.weapon_id || "").trim().slice(0, 80),
+        weaponCategory,
+        active: row?.active !== false,
+        sortOrder: Math.min(100_000, Math.max(0, Math.floor(number(row?.sort_order)))),
+        createdAt: String(row?.created_at || ""),
+        updatedAt: String(row?.updated_at || "")
+    };
+}
+
+function focusProgressionEditor() {
+    window.requestAnimationFrame(() => document.querySelector("[data-progression-cosmetic-close], [data-weekly-template-close]")?.focus());
+}
+
+function progressionEditorOpen() {
+    return Boolean(
+        state.progression.editorKey
+        || state.progression.creating
+        || state.progression.weeklyEditorId
+        || state.progression.creatingWeekly
+    );
+}
+
+function progressionAdminCatalogItems() {
+    const builtInGroups = [
+        ["icon", PROFILE_ICONS],
+        ["background", PROFILE_BACKGROUNDS],
+        ["border", PFP_BORDERS],
+        ["title", PROFILE_TITLES]
+    ];
+    const merged = new Map();
+
+    for (const [type, entries] of builtInGroups) {
+        entries.forEach((entry, index) => {
+            const item = normalizeBuiltInAdminCosmetic(type, entry, index);
+            merged.set(cosmeticCatalogKey(type, item.id), item);
+        });
+    }
+
+    for (const remote of state.store.catalogItems) {
+        const key = cosmeticCatalogKey(remote.type, remote.id);
+        const builtIn = merged.get(key);
+        merged.set(key, {
+            ...(builtIn || {}),
+            ...remote,
+            builtIn: Boolean(builtIn),
+            inferredRule: builtIn?.inferredRule || null
+        });
+    }
+
+    return [...merged.values()];
+}
+
+function normalizeBuiltInAdminCosmetic(type, item, index) {
+    const inferredRule = inferredCosmeticRule(item.unlock);
+    const acquisitionType = item.id === "owner" && type === "title"
+        ? "owner"
+        : item.unlock === "default"
+            ? "default"
+            : item.unlock === "store"
+                ? "store"
+                : inferredRule
+                    ? "progression"
+                    : "exclusive";
+    return {
+        ...item,
+        type,
+        name: String(item.label || item.id),
+        description: String(item.description || ""),
+        image: String(item.image || ""),
+        text: String(item.text ?? item.label ?? item.id),
+        inset: number(item.inset),
+        active: true,
+        shopEnabled: acquisitionType === "store",
+        acquisitionType,
+        availableFrom: "",
+        availableUntil: "",
+        supplyLimit: null,
+        unitAmount: Math.max(0, Math.floor(number(item.unitAmount))),
+        currency: String(item.currency || "eur"),
+        featured: Boolean(item.featured),
+        sortOrder: index,
+        remoteCatalog: false,
+        builtIn: true,
+        inferredRule
+    };
+}
+
+function inferredCosmeticRule(unlockId) {
+    const badge = BADGE_CATALOG.find((entry) => entry.id === unlockId);
+    if (!badge?.progress) return null;
+    if (badge.progress.type === "linked") {
+        return { mode: "overall", metric: "account_linked", target: 1, active: true, sort_order: 0 };
+    }
+    if (badge.progress.type === "sharpshooter") {
+        return { mode: "overall", metric: "headshot_rate", target: badge.progress.rateTarget || 35, active: true, sort_order: 0 };
+    }
+    if (!badge.progress.stat || !badge.progress.target) return null;
+    const mode = badge.progress.scope === "battleRoyale"
+        ? "battle_royale"
+        : badge.progress.scope === "deathmatch"
+            ? "deathmatch"
+            : "overall";
+    return {
+        mode,
+        metric: badge.progress.stat,
+        target: badge.progress.target,
+        active: true,
+        sort_order: 0
+    };
+}
+
+function progressionCosmeticByKey(key) {
+    return progressionAdminCatalogItems().find((item) => cosmeticCatalogKey(item.type, item.id) === key) || null;
+}
+
+async function submitProgressionCosmetic(form) {
     const progression = state.progression;
-    if (!progression.api || !isPlaytestAdmin() || progression.saving) return;
+    if (!progression.api || !isPlaytestAdmin() || !state.authSession?.user || progression.saving) return;
     const values = new FormData(form);
+    const status = form.querySelector("[data-progression-editor-status]");
 
     try {
-        const ruleId = String(values.get("ruleId") || "").trim();
-        const cosmetic = progressionCatalogItem(values.get("cosmeticKey"));
-        if (!cosmetic) throw new Error("Choose a database catalog cosmetic.");
-        const mode = String(values.get("mode") || "");
-        const metric = String(values.get("metric") || "");
-        const target = Number(values.get("target"));
-        if (!PROGRESSION_MODE_VALUES.has(mode)) throw new Error("Choose a valid game mode.");
-        if (!PROGRESSION_METRIC_VALUES.has(metric)) throw new Error("Choose a valid tracked stat.");
-        if (!Number.isFinite(target) || target <= 0 || target > 1_000_000_000) {
-            throw new Error("Required amount must be above zero.");
+        const originalKey = String(values.get("originalKey") || "").trim();
+        const existing = originalKey ? progressionCosmeticByKey(originalKey) : null;
+        const type = String(values.get("cosmeticType") || "").trim().toLowerCase();
+        const id = String(values.get("cosmeticId") || "").trim().toLowerCase();
+        const key = cosmeticCatalogKey(type, id);
+        if (!STORE_CATEGORY_LABELS[type] || type === "all") throw new Error("Choose a valid cosmetic type.");
+        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) throw new Error("The cosmetic ID can only use lowercase letters, numbers, _ and -.");
+        if (!existing && progressionAdminCatalogItems().some((item) => cosmeticCatalogKey(item.type, item.id) === key)) {
+            throw new Error("That cosmetic ID already exists.");
         }
 
+        const name = String(values.get("name") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+        if (!name) throw new Error("Enter a cosmetic name.");
+        const acquisitionType = String(values.get("acquisitionType") || "exclusive").trim();
+        if (!COSMETIC_ACQUISITION_VALUES.has(acquisitionType)) throw new Error("Choose how the cosmetic is earned.");
+        if (type === "title" && id === "owner" && acquisitionType !== "owner") {
+            throw new Error("The Owner title must remain owner-only.");
+        }
+
+        let ruleConfig = null;
+        if (acquisitionType === "progression") {
+            const mode = String(values.get("mode") || "overall");
+            const metric = String(values.get("metric") || "games");
+            const target = Number(values.get("target"));
+            if (!PROGRESSION_MODE_VALUES.has(mode)) throw new Error("Choose a valid game mode.");
+            if (!PROGRESSION_METRIC_VALUES.has(metric)) throw new Error("Choose a valid tracked requirement.");
+            if (!Number.isFinite(target) || target <= 0 || target > 1_000_000_000) throw new Error("Required amount must be above zero.");
+            ruleConfig = { mode, metric, target, active: values.get("ruleActive") === "on" };
+        }
+
+        const availableFrom = catalogOptionalIsoDate(values.get("availableFrom"));
+        const availableUntil = catalogOptionalIsoDate(values.get("availableUntil"));
+        if (availableFrom && availableUntil && Date.parse(availableUntil) <= Date.parse(availableFrom)) {
+            throw new Error("Available until must be later than available from.");
+        }
+        const supplyText = String(values.get("supplyLimit") || "").trim();
+        const supplyLimit = supplyText ? Number(supplyText) : null;
+        if (supplyLimit !== null && (!Number.isInteger(supplyLimit) || supplyLimit < 1 || supplyLimit > 100_000_000)) {
+            throw new Error("Supply limit must be a positive whole number or empty.");
+        }
+
+        const shopEnabled = acquisitionType === "store";
+        const price = Number(values.get("shopPrice"));
+        const unitAmount = shopEnabled ? Math.round(price * 100) : null;
+        if (shopEnabled && (!Number.isFinite(unitAmount) || unitAmount < 1)) throw new Error("Enter a shop preview price above zero.");
+
+        let imageUrl = String(values.get("imageUrl") || existing?.image || "").trim().slice(0, 1000);
+        const asset = values.get("asset");
         progression.saving = true;
         progression.error = "";
         progression.message = "";
-        renderProgressionAdminPage();
-        const result = await progression.api.saveRule({
-            id: ruleId,
-            cosmeticType: cosmetic.type,
-            cosmeticId: cosmetic.id,
-            mode,
-            metric,
-            target,
+        if (status) status.textContent = "Saving cosmetic...";
+        if (asset instanceof File && asset.size > 0) imageUrl = await uploadCatalogAsset(asset, type, id);
+        const dynamicIcon = type === "icon" && ["discord", "minecraft"].includes(id);
+        if (type !== "title" && !dynamicIcon && !imageUrl) throw new Error("Add a PNG, WebP or GIF asset URL or upload a file.");
+
+        const payload = {
+            cosmetic_type: type,
+            cosmetic_id: id,
+            name,
+            description: String(values.get("description") || "").trim().slice(0, 300),
+            category: String(values.get("category") || "Default").trim().replace(/\s+/g, " ").slice(0, 40) || "Default",
+            rarity: cleanRarity(values.get("rarity")),
+            image_url: imageUrl || null,
+            title_text: type === "title" ? String(values.get("titleText") || name).trim().replace(/\s+/g, " ").slice(0, 48) || name : null,
+            border_inset: type === "border" ? Math.min(30, Math.max(0, number(values.get("borderInset")))) : 0,
             active: values.get("active") === "on",
-            sortOrder: Math.min(100000, Math.max(0, Math.floor(number(values.get("sortOrder"))))),
-            createdBy: state.authSession.user.id
-        });
-        if (result.error) throw result.error;
-        const acquisitionResult = await progression.api.setCatalogAcquisition(cosmetic.type, cosmetic.id, "progression");
-        if (acquisitionResult.error) throw acquisitionResult.error;
-        progression.editingRuleId = result.data?.id || ruleId;
-        progression.message = `${cosmetic.name} progression rule saved.`;
-        progression.loaded = false;
-        state.store.catalogLoaded = false;
-        await loadProgressionAdminData({ force: true });
-        await claimProgressionCosmetics();
-        progression.loaded = false;
-        await loadProgressionAdminData({ force: true });
-        await loadAccountProfiles();
+            acquisition_type: acquisitionType,
+            available_from: shopEnabled ? availableFrom : null,
+            available_until: shopEnabled ? availableUntil : null,
+            supply_limit: shopEnabled ? supplyLimit : null,
+            shop_enabled: shopEnabled,
+            shop_unit_amount: unitAmount,
+            shop_currency: String(values.get("shopCurrency") || "eur").trim().toLowerCase(),
+            shop_featured: shopEnabled && values.get("shopFeatured") === "on",
+            sort_order: Math.min(100000, Math.max(0, Math.floor(number(values.get("sortOrder"))))),
+            created_by: state.authSession.user.id,
+            updated_at: new Date().toISOString()
+        };
+        const catalogResult = await progression.api.saveCatalogItem(payload);
+        if (catalogResult.error) throw catalogResult.error;
+
+        const currentRule = progression.rules.find((rule) => cosmeticCatalogKey(rule.cosmetic_type, rule.cosmetic_id) === key);
+        if (ruleConfig) {
+            const ruleResult = await progression.api.saveRule({
+                id: currentRule?.id || "",
+                cosmeticType: type,
+                cosmeticId: id,
+                mode: ruleConfig.mode,
+                metric: ruleConfig.metric,
+                target: ruleConfig.target,
+                active: ruleConfig.active,
+                sortOrder: payload.sort_order,
+                createdBy: state.authSession.user.id
+            });
+            if (ruleResult.error) throw ruleResult.error;
+        } else if (currentRule) {
+            const ruleResult = await progression.api.deleteRuleForCosmetic(type, id);
+            if (ruleResult.error) throw ruleResult.error;
+        }
+
+        if (status) status.textContent = "Checking every account against the new ownership settings...";
+        const reconciliation = await progression.api.reconcileCosmetic(type, id);
+        if (reconciliation.error) throw reconciliation.error;
+        progression.editorKey = key;
+        progression.creating = false;
+        progression.message = `${name} saved. ${formatReconciliationResult(reconciliation.data)}`;
+        await reloadProgressionAdminData();
     } catch (error) {
-        console.error("Could not save progression rule", error);
-        progression.error = progressionAdminErrorMessage(error, "Could not save this progression rule.");
+        console.error("Could not save cosmetic progression", error);
+        progression.error = progressionAdminErrorMessage(error, "Could not save this cosmetic and its mission.");
     } finally {
         progression.saving = false;
         if (state.view === "adminProgression") renderProgressionAdminPage();
     }
 }
 
-async function deleteProgressionRule(ruleId) {
+async function toggleProgressionCosmeticArchive(key) {
+    const item = progressionCosmeticByKey(key);
     const progression = state.progression;
-    const rule = progression.rules.find((entry) => entry.id === ruleId);
-    if (!rule || !progression.api || progression.saving || !isPlaytestAdmin()) return;
-    if (!window.confirm("Delete this progression rule? The cosmetic and existing grants will remain.")) return;
-
+    if (!item || !progression.api || progression.saving || !isPlaytestAdmin()) return;
     progression.saving = true;
     progression.error = "";
     try {
-        const result = await progression.api.deleteRule(ruleId);
-        if (result.error) throw result.error;
-        progression.editingRuleId = progression.editingRuleId === ruleId ? "" : progression.editingRuleId;
-        progression.message = "Progression rule deleted.";
-        progression.loaded = false;
-        await loadProgressionAdminData({ force: true });
+        await ensureProgressionCatalogOverride(item, { active: !item.active });
+        const reconciliation = await progression.api.reconcileCosmetic(item.type, item.id);
+        if (reconciliation.error) throw reconciliation.error;
+        progression.message = `${item.name} ${item.active ? "archived" : "restored"}. ${formatReconciliationResult(reconciliation.data)}`;
+        await reloadProgressionAdminData();
     } catch (error) {
-        console.error("Could not delete progression rule", error);
-        progression.error = progressionAdminErrorMessage(error, "Could not delete this progression rule.");
+        console.error("Could not change cosmetic archive state", error);
+        progression.error = progressionAdminErrorMessage(error, "Could not change this cosmetic's archive state.");
     } finally {
         progression.saving = false;
         if (state.view === "adminProgression") renderProgressionAdminPage();
     }
+}
+
+async function deleteProgressionCosmetic(key) {
+    const item = progressionCosmeticByKey(key);
+    const progression = state.progression;
+    if (!item || item.builtIn || !item.remoteCatalog || !progression.api || progression.saving || !isPlaytestAdmin()) return;
+    if (!window.confirm(`Permanently delete ${item.name}? Its mission and every ownership record will also be deleted.`)) return;
+    progression.saving = true;
+    progression.error = "";
+    try {
+        const result = await progression.api.deleteCatalogItem(item.type, item.id);
+        if (result.error) throw result.error;
+        progression.editorKey = "";
+        progression.creating = false;
+        progression.message = `${item.name} permanently deleted.`;
+        await reloadProgressionAdminData();
+    } catch (error) {
+        console.error("Could not delete cosmetic", error);
+        progression.error = progressionAdminErrorMessage(error, "Could not permanently delete this cosmetic.");
+    } finally {
+        progression.saving = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+function weeklyMissionTemplateById(templateId) {
+    return state.progression.weeklyTemplates.find((template) => template.id === templateId) || null;
+}
+
+async function submitWeeklyMissionTemplate(form) {
+    const progression = state.progression;
+    if (!progression.api || !isPlaytestAdmin() || !state.authSession?.user || progression.saving) return;
+    const values = new FormData(form);
+    const status = form.querySelector("[data-weekly-template-status]");
+
+    try {
+        const originalId = String(values.get("originalId") || "").trim().toLowerCase();
+        const templateId = String(values.get("templateId") || "").trim().toLowerCase();
+        const family = String(values.get("family") || "").trim().toLowerCase();
+        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(templateId)) {
+            throw new Error("The template ID can only use lowercase letters, numbers, _ and -.");
+        }
+        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(family)) {
+            throw new Error("The rotation group can only use lowercase letters, numbers, _ and -.");
+        }
+        if (originalId && originalId !== templateId) throw new Error("An existing template ID cannot be changed.");
+        if (!originalId && weeklyMissionTemplateById(templateId)) throw new Error("That weekly mission ID already exists.");
+
+        const difficulty = String(values.get("difficulty") || "");
+        const mode = String(values.get("mode") || "");
+        const metric = String(values.get("metric") || "");
+        const weaponScope = String(values.get("weaponScope") || "none");
+        const weaponCategory = String(values.get("weaponCategory") || "");
+        if (!WEEKLY_DIFFICULTY_VALUES.has(difficulty)) throw new Error("Choose a valid mission difficulty.");
+        if (!WEEKLY_MODE_VALUES.has(mode)) throw new Error("Choose a valid game mode.");
+        if (!WEEKLY_METRIC_VALUES.has(metric)) throw new Error("Choose a valid tracked statistic.");
+        if (!WEEKLY_WEAPON_SCOPE_VALUES.has(weaponScope)) throw new Error("Choose a valid weapon requirement.");
+        if (weaponScope === "weapon_category" && !WEEKLY_WEAPON_CATEGORY_VALUES.has(weaponCategory)) {
+            throw new Error("Choose a valid weapon category.");
+        }
+
+        const weaponId = String(values.get("weaponId") || "").trim().slice(0, 80);
+        if (weaponScope === "exact_weapon" && !weaponId) throw new Error("Enter the tracked weapon ID.");
+        const label = String(values.get("label") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+        if (!label) throw new Error("Enter a mission name.");
+        const target = Number(values.get("target"));
+        const xp = Number(values.get("xp"));
+        const sortOrder = Number(values.get("sortOrder") || 0);
+        if (!Number.isInteger(target) || target < 1 || target > 1_000_000_000) {
+            throw new Error("Required amount must be a positive whole number.");
+        }
+        if (!Number.isInteger(xp) || xp < 1 || xp > 20_000) {
+            throw new Error("XP must be a whole number between 1 and 20,000.");
+        }
+        if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 100_000) {
+            throw new Error("Sort order must be a whole number between 0 and 100,000.");
+        }
+
+        progression.saving = true;
+        progression.weeklyError = "";
+        progression.weeklyMessage = "";
+        if (status) status.textContent = "Saving weekly mission...";
+        const payload = {
+            id: templateId,
+            family,
+            difficulty,
+            label,
+            description: String(values.get("description") || "").trim().slice(0, 240),
+            metric,
+            target,
+            xp,
+            mode,
+            weapon_scope: weaponScope,
+            weapon_id: weaponScope === "exact_weapon" ? weaponId : null,
+            weapon_category: weaponScope === "weapon_category" ? weaponCategory : null,
+            active: values.get("active") === "on",
+            sort_order: sortOrder
+        };
+        const result = await progression.api.saveWeeklyMissionTemplate(payload);
+        if (result.error) throw result.error;
+        progression.weeklyEditorId = templateId;
+        progression.creatingWeekly = false;
+        progression.weeklyMessage = `${label} saved. New settings apply to future rotations and swaps.`;
+        await reloadWeeklyMissionAdminData();
+    } catch (error) {
+        console.error("Could not save weekly mission template", error);
+        progression.weeklyError = weeklyMissionAdminErrorMessage(error, "Could not save this weekly mission.");
+    } finally {
+        progression.saving = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+async function toggleWeeklyMissionTemplateArchive(templateId) {
+    const template = weeklyMissionTemplateById(templateId);
+    const progression = state.progression;
+    if (!template || !progression.api || progression.saving || !isPlaytestAdmin()) return;
+    progression.saving = true;
+    progression.weeklyError = "";
+    progression.weeklyMessage = "";
+    try {
+        const result = await progression.api.setWeeklyMissionTemplateActive(template.id, !template.active);
+        if (result.error) throw result.error;
+        progression.weeklyMessage = `${template.label} ${template.active ? "archived" : "restored"}. Existing player missions were not changed.`;
+        await reloadWeeklyMissionAdminData();
+    } catch (error) {
+        console.error("Could not change weekly mission archive state", error);
+        progression.weeklyError = weeklyMissionAdminErrorMessage(error, "Could not change this mission's archive state.");
+    } finally {
+        progression.saving = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+async function deleteWeeklyMissionTemplate(templateId) {
+    const template = weeklyMissionTemplateById(templateId);
+    const progression = state.progression;
+    if (!template || !progression.api || progression.saving || !isPlaytestAdmin()) return;
+    if (!window.confirm(`Permanently delete ${template.label}? Existing assigned copies will remain until they rotate out.`)) return;
+    progression.saving = true;
+    progression.weeklyError = "";
+    progression.weeklyMessage = "";
+    try {
+        const result = await progression.api.deleteWeeklyMissionTemplate(template.id);
+        if (result.error) throw result.error;
+        progression.weeklyEditorId = "";
+        progression.creatingWeekly = false;
+        progression.weeklyMessage = `${template.label} permanently deleted. Existing assigned copies were preserved.`;
+        await reloadWeeklyMissionAdminData();
+    } catch (error) {
+        console.error("Could not delete weekly mission template", error);
+        progression.weeklyError = weeklyMissionAdminErrorMessage(error, "Could not permanently delete this mission.");
+    } finally {
+        progression.saving = false;
+        if (state.view === "adminProgression") renderProgressionAdminPage();
+    }
+}
+
+async function reloadWeeklyMissionAdminData() {
+    state.progression.loaded = false;
+    state.weeklyMissions.templatesLoaded = false;
+    await loadProgressionAdminData({ force: true });
+}
+
+async function ensureProgressionCatalogOverride(item, overrides = {}) {
+    const acquisitionType = overrides.acquisitionType || item.acquisitionType || "exclusive";
+    const shopEnabled = acquisitionType === "store";
+    const result = await state.progression.api.saveCatalogItem({
+        cosmetic_type: item.type,
+        cosmetic_id: item.id,
+        name: item.name || item.label || item.id,
+        description: item.description || "",
+        category: item.category || "Default",
+        rarity: cleanRarity(item.rarity),
+        image_url: item.image || null,
+        title_text: item.type === "title" ? item.text || item.name || item.id : null,
+        border_inset: item.type === "border" ? number(item.inset) : 0,
+        active: Object.hasOwn(overrides, "active") ? Boolean(overrides.active) : item.active !== false,
+        acquisition_type: acquisitionType,
+        available_from: shopEnabled ? item.availableFrom || null : null,
+        available_until: shopEnabled ? item.availableUntil || null : null,
+        supply_limit: shopEnabled ? item.supplyLimit || null : null,
+        shop_enabled: shopEnabled,
+        shop_unit_amount: shopEnabled ? item.unitAmount || null : null,
+        shop_currency: item.currency || "eur",
+        shop_featured: shopEnabled && Boolean(item.featured),
+        sort_order: Math.max(0, Math.floor(number(item.sortOrder))),
+        created_by: state.authSession.user.id,
+        updated_at: new Date().toISOString()
+    });
+    if (result.error) throw result.error;
+    const existingRule = state.progression.rules.find((rule) =>
+        cosmeticCatalogKey(rule.cosmetic_type, rule.cosmetic_id) === cosmeticCatalogKey(item.type, item.id)
+    );
+    if (acquisitionType === "progression" && !existingRule && item.inferredRule) {
+        const ruleResult = await state.progression.api.saveRule({
+            id: "",
+            cosmeticType: item.type,
+            cosmeticId: item.id,
+            mode: item.inferredRule.mode,
+            metric: item.inferredRule.metric,
+            target: item.inferredRule.target,
+            active: item.inferredRule.active !== false,
+            sortOrder: Math.max(0, Math.floor(number(item.sortOrder))),
+            createdBy: state.authSession.user.id
+        });
+        if (ruleResult.error) throw ruleResult.error;
+    }
+    return result.data;
+}
+
+async function reloadProgressionAdminData() {
+    state.progression.loaded = false;
+    state.store.catalogLoaded = false;
+    state.store.loaded = false;
+    await loadProgressionAdminData({ force: true });
+    await loadAccountProfiles();
+}
+
+function formatReconciliationResult(value) {
+    const result = value && typeof value === "object" ? value : {};
+    const added = Math.max(0, Math.floor(number(result.added)));
+    const removed = Math.max(0, Math.floor(number(result.removed)));
+    const eligible = Math.max(0, Math.floor(number(result.eligible)));
+    return `${eligible} eligible, ${added} added, ${removed} removed.`;
+}
+
+function previewProgressionAsset(input) {
+    const file = input?.files?.[0];
+    const dialog = input?.closest(".progression-cosmetic-dialog");
+    const preview = dialog?.querySelector(".progression-dialog-preview");
+    const status = dialog?.querySelector("[data-progression-editor-status]");
+    if (!file || !preview) return;
+    if (!new Set(["image/png", "image/webp", "image/gif"]).has(file.type) || file.size > 8 * 1024 * 1024) {
+        input.value = "";
+        if (status) status.textContent = file.size > 8 * 1024 * 1024 ? "The asset is larger than 8 MB." : "Only PNG, WebP and GIF assets are accepted.";
+        return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    preview.innerHTML = `<img src="${escapeHtml(objectUrl)}" alt="">`;
+    preview.querySelector("img")?.addEventListener("load", () => URL.revokeObjectURL(objectUrl), { once: true });
+    if (status) status.textContent = "Preview updated. Save to upload the asset.";
 }
 
 async function submitProgressionGrant(form) {
@@ -3373,7 +4105,7 @@ async function submitProgressionGrant(form) {
         const cosmetic = progressionCatalogItem(values.get("cosmeticKey"));
         const source = String(values.get("source") || "").trim();
         if (!profile) throw new Error("Choose a player account.");
-        if (!cosmetic) throw new Error("Choose a database catalog cosmetic.");
+        if (!cosmetic) throw new Error("Choose a cosmetic.");
         if (!COSMETIC_GRANT_SOURCE_VALUES.has(source)) throw new Error("Choose a valid grant type.");
         if ((cosmetic.acquisitionType === "owner" || source === "owner") && !profile.is_owner) {
             throw new Error("Owner-only cosmetics can only be granted to the owner account.");
@@ -3383,6 +4115,12 @@ async function submitProgressionGrant(form) {
         progression.error = "";
         progression.message = "";
         renderProgressionAdminPage();
+        if (!cosmetic.remoteCatalog) {
+            await ensureProgressionCatalogOverride(cosmetic);
+            const reconciliation = await progression.api.reconcileCosmetic(cosmetic.type, cosmetic.id);
+            if (reconciliation.error) throw reconciliation.error;
+            state.store.catalogLoaded = false;
+        }
         const result = await progression.api.grantCosmetic({
             profileId,
             cosmeticType: cosmetic.type,
@@ -3434,16 +4172,32 @@ async function revokeProgressionGrant(profileId, cosmeticType, cosmeticId) {
 function progressionCatalogItem(value) {
     const [type, id, extra] = String(value || "").split(":");
     if (extra || !type || !id) return null;
-    return state.store.catalogItems.find((item) => item.remoteCatalog && item.type === type && item.id === id) || null;
+    return progressionAdminCatalogItems().find((item) => item.type === type && item.id === id) || null;
 }
 
 function progressionAdminErrorMessage(error, fallback = "Progression administration is unavailable.") {
     const code = String(error?.code || "");
     const message = String(error?.message || error || "");
-    if (["42P01", "42703", "PGRST204", "PGRST205"].includes(code) || /schema|relation|column|progression/i.test(message)) {
-        return "Run the current Supabase security and progression setup script, then retry.";
+    if (["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code) || /schema|relation|column|progression|reconcile_cosmetic_ownership/i.test(message)) {
+        return "Run the newest Supabase cosmetic manager script, then retry.";
     }
     if (/row-level security|permission|unauthorized|forbidden/i.test(message)) {
+        return "Supabase did not verify this account as an administrator.";
+    }
+    return message || fallback;
+}
+
+function weeklyMissionAdminErrorMessage(error, fallback = "Weekly mission administration is unavailable.") {
+    const code = String(error?.code || "");
+    const message = String(error?.message || error || "");
+    if (["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code)
+        || /weekly_mission_templates|admin_.*weekly_mission_template|schema cache/i.test(message)) {
+        return "Run the newest Supabase weekly mission manager script, then retry.";
+    }
+    if (/at least 4 active easy|at least 3 active hard|rotation pool/i.test(message)) {
+        return "Keep at least 4 active easy groups and 3 active hard groups in the weekly rotation.";
+    }
+    if (/row-level security|permission|administrator access required|unauthorized|forbidden/i.test(message)) {
         return "Supabase did not verify this account as an administrator.";
     }
     return message || fallback;
@@ -3517,7 +4271,7 @@ function normalizeCosmeticCatalogRow(value) {
         image: imageUrl,
         text: String(value?.title_text || value?.text || name).trim().slice(0, 48),
         inset: Math.min(30, Math.max(0, number(value?.border_inset ?? value?.inset))),
-        unlock: acquisitionType === "store" ? "store" : "inventory",
+        unlock: acquisitionType === "default" ? "default" : acquisitionType === "store" ? "store" : "inventory",
         active: value?.active !== false,
         shopEnabled,
         acquisitionType,
@@ -3544,7 +4298,11 @@ function cosmeticCatalogCollection(type, { includeInactive = false } = {}) {
 
     const merged = new Map(builtIn.map((item) => [item.id, item]));
     for (const item of state.store.catalogItems) {
-        if (item.type !== type || (!includeInactive && !item.active)) continue;
+        if (item.type !== type) continue;
+        if (!includeInactive && !item.active) {
+            merged.delete(item.id);
+            continue;
+        }
         merged.set(item.id, item);
     }
     return [...merged.values()];
@@ -4000,10 +4758,22 @@ async function submitCatalogForm(form) {
             .single();
         if (result.error) throw result.error;
 
+        let reconciliation = null;
+        if (state.store.catalogProgressionReady && state.progression.api) {
+            if (acquisitionType !== "progression") {
+                const ruleResult = await state.progression.api.deleteRuleForCosmetic(type, id);
+                if (ruleResult.error) throw ruleResult.error;
+            }
+            reconciliation = await state.progression.api.reconcileCosmetic(type, id);
+            if (reconciliation.error) throw reconciliation.error;
+            state.progression.loaded = false;
+        }
+
         state.store.editingKey = key;
         state.store.loaded = false;
         await loadStoreData({ force: true });
-        state.store.message = `${name} ${editing ? "updated" : "created"}.`;
+        if (reconciliation) await loadAccountProfiles();
+        state.store.message = `${name} ${editing ? "updated" : "created"}.${reconciliation ? ` ${formatReconciliationResult(reconciliation.data)}` : ""}`;
     } catch (error) {
         console.error("Could not save cosmetic catalog item", error);
         if (status) {
@@ -4084,9 +4854,16 @@ async function toggleCatalogItemActive(key) {
             .select("cosmetic_id")
             .single();
         if (result.error) throw result.error;
+        let reconciliation = null;
+        if (state.store.catalogProgressionReady && state.progression.api) {
+            reconciliation = await state.progression.api.reconcileCosmetic(item.type, item.id);
+            if (reconciliation.error) throw reconciliation.error;
+            state.progression.loaded = false;
+        }
         state.store.loaded = false;
         await loadStoreData({ force: true });
-        state.store.message = `${item.name} ${item.active ? "archived" : "restored"}.`;
+        if (reconciliation) await loadAccountProfiles();
+        state.store.message = `${item.name} ${item.active ? "archived" : "restored"}.${reconciliation ? ` ${formatReconciliationResult(reconciliation.data)}` : ""}`;
     } catch (error) {
         console.error("Could not change cosmetic visibility", error);
         state.store.message = error?.message || "Could not update the cosmetic.";
@@ -5019,6 +5796,10 @@ function resetWeeklyMissionState() {
     state.weeklyMissions = {
         loading: false,
         syncing: false,
+        templates: [],
+        templatesLoaded: false,
+        templatesLoading: false,
+        templatesReady: false,
         row: null,
         source: "",
         message: "",
@@ -5034,6 +5815,9 @@ async function syncWeeklyMissions() {
     const account = state.authProfile;
     const profile = linkedStatsProfile();
     if (missionState.syncing || !state.authClient || !state.authSession?.user || !account?.id || !state.data) return;
+
+    await loadWeeklyMissionTemplates();
+    if (missionState.syncing) return;
 
     const cycle = weeklyMissionCycle();
     if (missionState.source === "local"
@@ -5399,6 +6183,92 @@ function pickWeeklyMissions(candidates, count, rng) {
 }
 
 function weeklyMissionCandidates(profile, difficulty, rng) {
+    const requiredCount = difficulty === "easy" ? WEEKLY_EASY_MISSION_COUNT : WEEKLY_MISSION_COUNT - WEEKLY_EASY_MISSION_COUNT;
+    const managed = state.weeklyMissions.templates
+        .filter((template) => template.active && template.difficulty === difficulty)
+        .map((template) => expandWeeklyMissionTemplate(template, profile, rng))
+        .filter(Boolean);
+    const managedFamilies = new Set(managed.map((mission) => mission.family));
+    if (state.weeklyMissions.templatesReady && managedFamilies.size >= requiredCount) return managed;
+
+    const fallback = fallbackWeeklyMissionCandidates(profile, difficulty, rng)
+        .filter((mission) => !managedFamilies.has(mission.family));
+    return [...managed, ...fallback];
+}
+
+function expandWeeklyMissionTemplate(template, profile, rng) {
+    const randomMode = randomChoice(MISSION_MODES, rng);
+    const selectedMode = template.mode === "random"
+        ? randomMode
+        : MISSION_MODES.find((entry) => entry.id === template.mode) || {
+            id: "overall",
+            label: "any mode",
+            short: "All"
+        };
+    let mode = selectedMode.id;
+    let weaponId = "";
+    let weaponLabel = "weapon";
+    let category = "";
+
+    if (template.weaponScope === "exact_weapon") {
+        weaponId = template.weaponId;
+        const weapon = weeklyWeaponEntries(profile, mode).find((entry) => entry.id === weaponId)
+            || weeklyWeaponEntries(profile, "overall").find((entry) => entry.id === weaponId);
+        weaponLabel = weapon?.label || labelFromIdentifier(weaponId);
+    } else if (template.weaponScope === "random_weapon") {
+        let weapons = weeklyEligibleWeapons(profile, mode);
+        if (!weapons.length && mode !== "overall") {
+            weapons = weeklyEligibleWeapons(profile, "overall");
+            mode = "overall";
+        }
+        const weapon = randomChoice(weapons, rng);
+        if (!weapon) return null;
+        weaponId = weapon.id;
+        weaponLabel = weapon.label;
+    } else if (template.weaponScope === "weapon_category") {
+        category = template.weaponCategory;
+    } else if (template.weaponScope === "random_category") {
+        let categories = weeklyAvailableCategories(profile, mode);
+        if (!categories.length && mode !== "overall") {
+            categories = weeklyAvailableCategories(profile, "overall");
+            mode = "overall";
+        }
+        category = randomChoice(categories, rng);
+        if (!category) return null;
+    }
+
+    const resolvedMode = mode === "overall"
+        ? { id: "overall", label: "any mode", short: "All" }
+        : MISSION_MODES.find((entry) => entry.id === mode) || selectedMode;
+    const tokens = {
+        "{mode}": resolvedMode.label,
+        "{mode_short}": resolvedMode.short,
+        "{weapon}": weaponLabel,
+        "{category}": weeklyCategoryLabel(category)
+    };
+    return {
+        ...weeklyMission(
+            template.family,
+            template.difficulty,
+            weeklyTemplateText(template.label, tokens),
+            weeklyTemplateText(template.description, tokens),
+            template.metric,
+            template.target,
+            template.xp,
+            { mode, weaponId, category }
+        ),
+        templateId: template.id
+    };
+}
+
+function weeklyTemplateText(value, tokens) {
+    return Object.entries(tokens).reduce(
+        (text, [token, replacement]) => text.split(token).join(replacement),
+        String(value || "")
+    );
+}
+
+function fallbackWeeklyMissionCandidates(profile, difficulty, rng) {
     const mode = randomChoice(MISSION_MODES, rng);
     const otherMode = MISSION_MODES.find((entry) => entry.id !== mode.id);
     const modeWeapons = weeklyEligibleWeapons(profile, mode.id);
@@ -9667,6 +10537,8 @@ function cleanProfileIcon(value, account = null, badgeState = null) {
 
 function profileIconUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
     if (id === "custom") return Boolean(account?.custom_avatar_url);
+    const managedOwnership = managedCosmeticOwnership("icon", id, account);
+    if (managedOwnership !== null) return managedOwnership;
     if (profileCosmeticInventoryHas(account, "icon", id)) return true;
     if (arrayField(account?.unlocked_icons).includes(id)) return true;
     const option = cosmeticCatalogItem("icon", id);
@@ -9676,8 +10548,10 @@ function profileIconUnlocked(id, account, badgeState = accountBadgeState(account
 }
 
 function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
-    if (id === "default") return true;
     if (id === "custom") return Boolean(account?.custom_background_url);
+    const managedOwnership = managedCosmeticOwnership("background", id, account);
+    if (managedOwnership !== null) return managedOwnership;
+    if (id === "default") return true;
     if (profileCosmeticInventoryHas(account, "background", id)) return true;
     if (arrayField(account?.unlocked_backgrounds).includes(id)) return true;
     const option = cosmeticCatalogItem("background", id);
@@ -9687,6 +10561,8 @@ function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(a
 }
 
 function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
+    const managedOwnership = managedCosmeticOwnership("border", id, account);
+    if (managedOwnership !== null) return managedOwnership;
     if (id === "none") return true;
     if (profileCosmeticInventoryHas(account, "border", id)) return true;
     if (arrayField(account?.unlocked_pfp_borders).includes(id)) return true;
@@ -9697,6 +10573,8 @@ function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, 
 }
 
 function profileTitleUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
+    const managedOwnership = managedCosmeticOwnership("title", id, account);
+    if (managedOwnership !== null) return managedOwnership;
     if (id === "none") return true;
     if (profileCosmeticInventoryHas(account, "title", id)) return true;
     if (arrayField(account?.unlocked_titles).includes(id)) return true;
@@ -9709,6 +10587,14 @@ function profileTitleUnlocked(id, account, badgeState = accountBadgeState(accoun
 function profileCosmeticInventoryHas(account, type, id) {
     return Array.isArray(account?.cosmetic_inventory)
         && account.cosmetic_inventory.some((item) => item?.type === type && item?.id === id);
+}
+
+function managedCosmeticOwnership(type, id, account) {
+    const managed = state.store.catalogItems.find((item) => item.type === type && item.id === id);
+    if (!managed) return null;
+    if (!managed.active) return false;
+    if (managed.acquisitionType === "default") return true;
+    return profileCosmeticInventoryHas(account, type, id);
 }
 
 function cleanProfileBackground(value, account = null, badgeState = null) {
