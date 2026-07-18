@@ -1711,8 +1711,23 @@
     background: rgba(13, 20, 30, 0.72);
 }
 
+.player-collection-item.owned {
+    border-color: color-mix(in srgb, var(--rarity-color) 58%, var(--line));
+    background: color-mix(in srgb, var(--rarity-color) 9%, rgba(13, 20, 30, 0.92));
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--rarity-color) 82%, transparent);
+}
+
+.player-collection-item.owned .player-collection-preview {
+    border-color: color-mix(in srgb, var(--rarity-color) 48%, var(--line));
+}
+
+.player-collection-item.owned .player-collection-copy > span {
+    color: var(--green);
+    font-weight: 700;
+}
+
 .player-collection-item.unowned {
-    opacity: 0.72;
+    opacity: 0.5;
 }
 
 .player-collection-item.archived {
@@ -7743,6 +7758,17 @@ body.cosmetic-picker-open {
 .cosmetic-option:focus-visible {
     border-color: var(--rarity-color);
     outline: none;
+}
+
+.cosmetic-option.owned {
+    border-color: color-mix(in srgb, var(--rarity-color) 56%, var(--line));
+    background: color-mix(in srgb, var(--rarity-color) 8%, rgba(16, 24, 36, 0.9));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 22%, transparent);
+}
+
+.cosmetic-option.owned .cosmetic-option-copy > small span:last-child {
+    color: var(--green);
+    font-weight: 700;
 }
 
 .cosmetic-option.selected {

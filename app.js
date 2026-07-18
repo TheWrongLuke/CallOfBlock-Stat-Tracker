@@ -38,6 +38,10 @@ import {
     saveAdminTicketPreferences
 } from "./src/services/admin-ticket-preferences.js";
 import {
+    loadCosmeticPickerPreferences,
+    saveCosmeticPickerPreferences
+} from "./src/services/cosmetic-picker-preferences.js";
+import {
     renderAdminDocumentationContent,
     renderAdminTicketsContent,
     renderFeedbackContent,
@@ -304,6 +308,7 @@ const PLAYTEST_SEED_USERS = [];
 const DEFAULT_PLAYTESTS = [];
 
 const adminTicketPreferences = loadAdminTicketPreferences();
+const cosmeticPickerPreferences = loadCosmeticPickerPreferences();
 
 const state = {
     data: null,
@@ -328,13 +333,12 @@ const state = {
     cosmeticOwnershipCache: new Map(),
     accountGifts: [],
     accountGiftsLoaded: false,
-    accountCosmeticRevocations: new Set(),
     accountMessage: "",
     accountSaving: false,
     accountPanelOpen: false,
     cosmeticPicker: {
         type: "",
-        showUnowned: false,
+        showUnowned: cosmeticPickerPreferences.showUnowned,
         rarityDirection: "asc"
     },
     store: {
@@ -1337,6 +1341,7 @@ function bindStaticEvents() {
 
         if (event.target.matches("[data-cosmetic-show-unowned]")) {
             state.cosmeticPicker.showUnowned = Boolean(event.target.checked);
+            saveCosmeticPickerPreferences({ showUnowned: state.cosmeticPicker.showUnowned });
             renderCosmeticPicker(true);
             return;
         }
@@ -2094,16 +2099,12 @@ async function loadAccountProfiles() {
 function resetAccountGiftState() {
     state.accountGifts = [];
     state.accountGiftsLoaded = false;
-    state.accountCosmeticRevocations = new Set();
 }
 
 async function loadOwnCosmeticGifts({ force = false } = {}) {
     if (!state.progression.api || !state.authSession?.user || (state.accountGiftsLoaded && !force)) return;
     try {
-        const [giftResult, revocationResult] = await Promise.all([
-            state.progression.api.listOwnCosmeticGifts(),
-            state.progression.api.listOwnCosmeticRevocations()
-        ]);
+        const giftResult = await state.progression.api.listOwnCosmeticGifts();
         if (giftResult.error) throw giftResult.error;
         state.accountGifts = (Array.isArray(giftResult.data) ? giftResult.data : []).map((gift) => ({
             type: String(gift?.cosmetic_type || ""),
@@ -2112,20 +2113,11 @@ async function loadOwnCosmeticGifts({ force = false } = {}) {
             note: String(gift?.gift_note || "").trim().slice(0, 200),
             acquiredAt: String(gift?.acquired_at || "")
         })).filter((gift) => gift.type && gift.id);
-        state.accountCosmeticRevocations = new Set(
-            (Array.isArray(revocationResult.data) ? revocationResult.data : [])
-                .map((entry) => cosmeticCatalogKey(entry?.cosmetic_type, entry?.cosmetic_id))
-                .filter((key) => key !== ":")
-        );
-        if (revocationResult.error && !["42883", "PGRST202"].includes(String(revocationResult.error.code || ""))) {
-            console.warn("Could not load cosmetic revocations", revocationResult.error);
-        }
         state.accountGiftsLoaded = true;
     } catch (error) {
         const code = String(error?.code || "");
         if (!["42883", "PGRST202"].includes(code)) console.warn("Could not load cosmetic gifts", error);
         state.accountGifts = [];
-        state.accountCosmeticRevocations = new Set();
         state.accountGiftsLoaded = true;
     }
 }
@@ -3717,7 +3709,7 @@ function renderProgressionAdminPage() {
             ready: state.progression.ready && state.progression.playersReady,
             players: state.progression.players,
             catalog: adminCatalog,
-            grants: playerManagerEffectiveGrants(adminCatalog),
+            grants: state.progression.grants,
             revocations: state.progression.revocations,
             selectedId: state.progression.playerSelectedId,
             currentUserId: state.authSession?.user?.id || "",
@@ -3959,106 +3951,6 @@ function progressionAdminCatalogItems() {
     }
 
     return [...merged.values()];
-}
-
-function playerManagerEffectiveGrants(catalog) {
-    const revoked = new Set(state.progression.revocations.map((entry) => playerCosmeticKey(
-        entry.profile_id,
-        entry.cosmetic_type,
-        entry.cosmetic_id
-    )));
-    const grants = state.progression.grants.filter((entry) => !revoked.has(playerCosmeticKey(
-        entry.profile_id,
-        entry.cosmetic_type,
-        entry.cosmetic_id
-    )));
-    const owned = new Set(grants.map((entry) => playerCosmeticKey(
-        entry.profile_id,
-        entry.cosmetic_type,
-        entry.cosmetic_id
-    )));
-    const accounts = new Map(state.accountProfiles.map((account) => [account.id, account]));
-    if (state.authProfile?.id) accounts.set(state.authProfile.id, state.authProfile);
-
-    for (const profile of state.progression.players) {
-        const account = accounts.get(profile.id) || profile;
-        for (const item of catalog) {
-            const key = playerCosmeticKey(profile.id, item.type, item.id);
-            if (owned.has(key) || revoked.has(key)) continue;
-            const source = automaticPlayerCosmeticSource(item, profile, account);
-            if (!source) continue;
-            grants.push({
-                profile_id: profile.id,
-                cosmetic_type: item.type,
-                cosmetic_id: item.id,
-                source,
-                grant_note: "",
-                granted_by: null,
-                acquired_at: "",
-                synthetic: true
-            });
-            owned.add(key);
-        }
-    }
-    return grants;
-}
-
-function automaticPlayerCosmeticSource(item, profile, account) {
-    if (item.acquisitionType === "default") return "default";
-    if (item.acquisitionType === "owner") return profile.is_owner ? "owner" : "";
-    const legacyField = {
-        icon: "unlocked_icons",
-        background: "unlocked_backgrounds",
-        border: "unlocked_pfp_borders",
-        title: "unlocked_titles"
-    }[item.type];
-    if (legacyField && arrayField(account?.[legacyField]).includes(item.id)) return "legacy";
-    if (item.id === "custom" && item.type === "icon" && account?.custom_avatar_url) return "legacy";
-    if (item.id === "custom" && item.type === "background" && account?.custom_background_url) return "legacy";
-    if (item.acquisitionType !== "progression") return "";
-    const key = cosmeticCatalogKey(item.type, item.id);
-    const rule = state.progression.rules.find((entry) => cosmeticCatalogKey(
-        entry.cosmetic_type,
-        entry.cosmetic_id
-    ) === key) || item.inferredRule;
-    return progressionRuleSatisfiedForAccount(rule, account) ? "progression" : "";
-}
-
-function progressionRuleSatisfiedForAccount(rule, account) {
-    if (!rule || rule.active === false) return false;
-    if (rule.metric === "account_linked") {
-        return Boolean(account?.minecraft_player_name || account?.minecraft_player_id || accountLinkedStatsProfile(account));
-    }
-    const linkedProfile = accountLinkedStatsProfile(account);
-    if (!linkedProfile) return false;
-    const mode = rule.mode === "battle_royale"
-        ? normalizePlayer(linkedProfile.battleRoyale)
-        : rule.mode === "deathmatch"
-            ? normalizePlayer(linkedProfile.deathmatch)
-            : buildProfileOverall(linkedProfile);
-    const stats = normalizeStats(mode?.stats);
-    const derived = normalizeDerived(mode?.derived, stats);
-    const metric = {
-        games: stats.games,
-        wins: stats.wins,
-        kills: stats.kills,
-        deaths: stats.deaths,
-        mvp: stats.mvp,
-        hits: stats.hits,
-        headshots: stats.headshots,
-        headshot_kills: stats.headshotKills,
-        best_kill_streak: stats.bestKillStreak,
-        top_match_kills: stats.topMatchKills,
-        utility_kills: stats.utilityKills,
-        vehicle_kills: stats.vehicleKills,
-        playtime_seconds: stats.playtimeSeconds,
-        headshot_rate: stats.hits > 0 ? (stats.headshots / stats.hits) * 100 : derived.headshotRate
-    }[rule.metric];
-    return Number.isFinite(Number(metric)) && Number(metric) >= Number(rule.target);
-}
-
-function playerCosmeticKey(profileId, type, id) {
-    return `${String(profileId || "")}|${cosmeticCatalogKey(type, id)}`;
 }
 
 function requiredFallbackCosmetic(type, id) {
@@ -4629,7 +4521,7 @@ async function submitProgressionRevoke(form) {
     const profileId = String(values.get("profileId") || "").trim();
     const cosmetic = progressionCatalogItem(values.get("cosmeticKey"));
     const note = String(values.get("note") || "").trim().replace(/\s+/g, " ").slice(0, 300);
-    const grant = playerManagerEffectiveGrants(progressionAdminCatalogItems()).find((entry) =>
+    const grant = progression.grants.find((entry) =>
         entry.profile_id === profileId && entry.cosmetic_type === cosmetic?.type && entry.cosmetic_id === cosmetic?.id
     );
     try {
@@ -4645,12 +4537,27 @@ async function submitProgressionRevoke(form) {
         renderProgressionAdminPage();
         const result = await progression.api.revokePlayerCosmetic(profileId, cosmetic.type, cosmetic.id, note);
         if (result.error) throw result.error;
+        if (cosmetic.acquisitionType === "progression") {
+            const reconciliation = await progression.api.reconcileCosmetic(cosmetic.type, cosmetic.id);
+            if (reconciliation.error) {
+                console.warn("Could not immediately reconcile revoked progression cosmetic", reconciliation.error);
+            }
+        }
         progression.playerRevokeKey = "";
-        progression.playerMessage = `${cosmetic.name || "Cosmetic"} revoked. The note was saved with the revocation.`;
         progression.loaded = false;
         await loadProgressionAdminData({ force: true });
         await loadAccountProfiles();
         if (profileId === state.authSession?.user?.id) await loadOwnCosmeticGifts({ force: true });
+        const reearned = progression.grants.some((entry) =>
+            entry.profile_id === profileId
+            && entry.cosmetic_type === cosmetic.type
+            && entry.cosmetic_id === cosmetic.id
+        );
+        progression.playerMessage = reearned
+            ? `${cosmetic.name || "Cosmetic"} was revoked and immediately re-earned because its progression requirement is already met. The note was saved.`
+            : cosmetic.acquisitionType === "progression"
+                ? `${cosmetic.name || "Cosmetic"} revoked. The note was saved, and the cosmetic can be earned through progression again.`
+                : `${cosmetic.name || "Cosmetic"} revoked. The note was saved with the revocation.`;
     } catch (error) {
         console.error("Could not revoke cosmetic", error);
         progression.playerError = playerManagerErrorMessage(error, "Could not revoke this cosmetic.");
@@ -4732,12 +4639,12 @@ function weeklyMissionAdminErrorMessage(error, fallback = "Weekly mission admini
 function playerManagerErrorMessage(error, fallback = "Player Manager is unavailable.") {
     const code = String(error?.code || "");
     const message = String(error?.message || error || "");
-    if (/admin_revoke_player_cosmetic_with_note/i.test(message)) {
-        return "Run the newest incremental Supabase cosmetic revoke notes script, then retry.";
+    if (/admin_revoke_player_cosmetic_reearnable|admin_list_cosmetic_revocation_history/i.test(message)) {
+        return "Run the newest incremental Supabase inventory and revocation sync script, then retry.";
     }
     if (["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code)
         || /admin_list_managed_players|cosmetic_revocations|admin_set_player_community_ban|admin_(grant|revoke)_player_cosmetic|schema cache/i.test(message)) {
-        return "Run the newest incremental Supabase cosmetic ownership repair script, then retry.";
+        return "Run the newest incremental Supabase inventory and revocation sync script, then retry.";
     }
     if (/owner account|your own account|required fallback/i.test(message)) return message;
     if (/row-level security|permission|administrator access required|unauthorized|forbidden/i.test(message)) {
@@ -11117,7 +11024,6 @@ function cleanProfileIcon(value, account = null, badgeState = null) {
 }
 
 function profileIconUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
-    if (cosmeticRevokedForAccount("icon", id, account)) return false;
     if (id === "custom") return Boolean(account?.custom_avatar_url);
     const managedOwnership = managedCosmeticOwnership("icon", id, account);
     if (managedOwnership !== null) return managedOwnership;
@@ -11130,7 +11036,6 @@ function profileIconUnlocked(id, account, badgeState = accountBadgeState(account
 }
 
 function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
-    if (cosmeticRevokedForAccount("background", id, account)) return false;
     if (id === "custom") return Boolean(account?.custom_background_url);
     const managedOwnership = managedCosmeticOwnership("background", id, account);
     if (managedOwnership !== null) return managedOwnership;
@@ -11144,7 +11049,6 @@ function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(a
 }
 
 function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
-    if (cosmeticRevokedForAccount("border", id, account)) return false;
     const managedOwnership = managedCosmeticOwnership("border", id, account);
     if (managedOwnership !== null) return managedOwnership;
     if (id === "none") return true;
@@ -11157,7 +11061,6 @@ function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, 
 }
 
 function profileTitleUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
-    if (cosmeticRevokedForAccount("title", id, account)) return false;
     const managedOwnership = managedCosmeticOwnership("title", id, account);
     if (managedOwnership !== null) return managedOwnership;
     if (id === "none") return true;
@@ -11172,14 +11075,6 @@ function profileTitleUnlocked(id, account, badgeState = accountBadgeState(accoun
 function profileCosmeticInventoryHas(account, type, id) {
     return Array.isArray(account?.cosmetic_inventory)
         && account.cosmetic_inventory.some((item) => item?.type === type && item?.id === id);
-}
-
-function cosmeticRevokedForAccount(type, id, account) {
-    return Boolean(
-        account?.id
-        && account.id === state.authSession?.user?.id
-        && state.accountCosmeticRevocations.has(cosmeticCatalogKey(type, id))
-    );
 }
 
 function managedCosmeticOwnership(type, id, account) {

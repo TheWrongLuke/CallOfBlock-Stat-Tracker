@@ -111,9 +111,38 @@ describe("Player Manager view", () => {
         expect(html).toContain("Founder Night");
         expect(html).toContain("Earned Title");
         expect(html).toContain("Progression reward");
+        expect(html).toMatch(/player-collection-item[^"]* owned(?:\s|")[^"]*" data-player-cosmetic-key="title:earned"/);
         expect(html).toContain('data-cosmetic-id="earned"');
         expect(html).toContain('data-player-grant-open="background:founder"');
         expect(html).toContain("data-player-collection-sort");
+    });
+
+    it("never marks progression eligibility as ownership without an inventory grant", () => {
+        const html = renderPlayerManagerContent({ ...baseProps, grants: [] });
+
+        expect(html).toMatch(
+            /player-collection-item[^"]* unowned(?:\s|")[^"]*" data-player-cosmetic-key="title:earned"/
+        );
+        expect(html).not.toContain('data-cosmetic-id="earned"');
+        expect(html).toContain('data-player-grant-open="title:earned"');
+    });
+
+    it("keeps current inventory ownership authoritative over revocation history", () => {
+        const html = renderPlayerManagerContent({
+            ...baseProps,
+            revocations: [
+                {
+                    profile_id: "player-1",
+                    cosmetic_type: "title",
+                    cosmetic_id: "earned",
+                    reason: "Earlier removal"
+                }
+            ]
+        });
+
+        expect(html).toMatch(/player-collection-item[^"]* owned(?:\s|")[^"]*" data-player-cosmetic-key="title:earned"/);
+        expect(html).toContain('data-cosmetic-id="earned"');
+        expect(html).not.toContain("Earlier removal");
     });
 
     it("applies one ownership or alphabetical sort to every collection section", () => {
@@ -186,6 +215,7 @@ describe("Player Manager view", () => {
         expect(html).toContain('minlength="3"');
         expect(html).toContain('maxlength="300"');
         expect(html).toContain("Confirm revocation");
+        expect(html).toContain("Progression rewards remain earnable");
         expect(html.match(/data-player-revoke-close/g)).toHaveLength(1);
         expect(html).not.toMatch(/data-player-revoke-backdrop[^>]*data-player-revoke-close/);
     });

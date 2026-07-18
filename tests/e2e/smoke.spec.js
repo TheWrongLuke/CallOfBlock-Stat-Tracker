@@ -79,6 +79,18 @@ const adminSupabaseStub = `
         const single = calls.some(([method]) => method === "single" || method === "maybeSingle");
         if (table === "profiles") return { data: single ? profile : [profile], error: null };
         if (table === "public_profiles") return { data: [profile], error: null };
+        if (table === "profile_cosmetic_inventory") return {
+            data: [{
+                profile_id: member.id,
+                cosmetic_type: "title",
+                cosmetic_id: "br_survivor",
+                source: "progression",
+                grant_note: null,
+                granted_by: null,
+                acquired_at: "2026-07-12T12:00:00Z"
+            }],
+            error: null
+        };
         if (table === "weekly_mission_templates") return {
             data: [{
                 id: "easy_kills",
@@ -396,8 +408,14 @@ test("an administrator can search players, inspect collections, and open protect
     await expect(page.getByRole("heading", { name: "Titles", exact: true })).toBeVisible();
     await page.locator("[data-player-collection-sort]").selectOption("alphabetical");
     await expect(page.locator("[data-player-collection-sort]")).toHaveValue("alphabetical");
-    expect(await page.locator("[data-progression-grant-revoke]").count()).toBeGreaterThan(0);
-    await page.locator("[data-progression-grant-revoke]").first().click();
+    await expect(page.locator('[data-player-cosmetic-key="title:br_survivor"]')).toHaveClass(/(^|\s)owned(\s|$)/);
+    await expect(page.locator('[data-player-cosmetic-key="title:sharpshooter"]')).toHaveClass(/(^|\s)unowned(\s|$)/);
+    await expect(
+        page.locator('[data-player-cosmetic-key="title:sharpshooter"] [data-progression-grant-revoke]')
+    ).toHaveCount(0);
+    const revoke = page.locator('[data-player-cosmetic-key="title:br_survivor"] [data-progression-grant-revoke]');
+    await expect(revoke).toHaveCount(1);
+    await revoke.click();
     const revokeDialog = page.locator("[data-player-revoke-form]");
     await expect(revokeDialog).toBeVisible();
     await expect(revokeDialog.locator('textarea[name="note"]')).toHaveAttribute("required", "");
@@ -428,4 +446,23 @@ test("an administrator can search players, inspect collections, and open protect
     await expect(page.locator('[data-player-ban-form] textarea[name="reason"]')).toBeVisible();
     await page.locator("[data-player-ban-close]").click();
     await expect(page.locator("[data-player-ban-form]")).toBeHidden();
+});
+
+test("personal cosmetics remember the Show unowned preference after reload", async ({ page }) => {
+    await openAdminApp(page, "#account");
+    await expect(page.locator("[data-account-form]")).toBeVisible();
+    const openBackgrounds = page.locator('[data-cosmetic-picker-open="background"]');
+    await expect(openBackgrounds).toHaveCount(1);
+    await openBackgrounds.click();
+
+    const showUnowned = page.locator("[data-cosmetic-show-unowned]");
+    await expect(showUnowned).toHaveCount(1);
+    await showUnowned.check();
+    await expect(showUnowned).toBeChecked();
+    await page.locator("[data-cosmetic-picker-close]").click();
+
+    await page.reload();
+    await expect(page.locator("[data-account-form]")).toBeVisible();
+    await page.locator('[data-cosmetic-picker-open="background"]').click();
+    await expect(page.locator("[data-cosmetic-show-unowned]")).toBeChecked();
 });

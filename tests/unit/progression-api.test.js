@@ -89,7 +89,7 @@ describe("progression admin API", () => {
             p_source: "friend",
             p_note: "Thanks for helping"
         });
-        expect(rpc).toHaveBeenNthCalledWith(3, "admin_revoke_player_cosmetic_with_note", {
+        expect(rpc).toHaveBeenNthCalledWith(3, "admin_revoke_player_cosmetic_reearnable", {
             p_profile_id: "player-1",
             p_cosmetic_type: "title",
             p_cosmetic_id: "founder",
@@ -98,14 +98,12 @@ describe("progression admin API", () => {
         expect(rpc).toHaveBeenNthCalledWith(4, "list_my_cosmetic_gifts");
     });
 
-    it("loads admin and account cosmetic revocations through protected RPCs", async () => {
+    it("loads private revocation history through the protected admin RPC", async () => {
         const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
         const api = createProgressionAdminApi({ rpc });
 
         await api.listCosmeticRevocations();
-        await api.listOwnCosmeticRevocations();
 
-        expect(rpc).toHaveBeenNthCalledWith(1, "admin_list_cosmetic_revocations");
-        expect(rpc).toHaveBeenNthCalledWith(2, "list_my_cosmetic_revocations");
+        expect(rpc).toHaveBeenCalledWith("admin_list_cosmetic_revocation_history");
     });
 });
