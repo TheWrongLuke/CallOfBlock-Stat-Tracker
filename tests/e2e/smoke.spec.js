@@ -233,6 +233,44 @@ const memberSupabaseStub = adminSupabaseStub
     .replace("is_admin: true", "is_admin: false")
     .replace("is_owner: true", "is_owner: false");
 
+const giftSupabaseStub = adminSupabaseStub.replace(
+    'rpc: async (name) => {\n                    if (name === "sync_discord_profile_v2"',
+    `rpc: async (name, args) => {
+                    window.__giftNotification = window.__giftNotification || {
+                        id: "323e4567-e89b-42d3-a456-426614174222",
+                        notification_type: "cosmetic_gift",
+                        title: "You received Night Ops",
+                        message: "Thanks for helping with the server.",
+                        cosmetic_type: "background",
+                        cosmetic_id: "night",
+                        gift_source: "friend",
+                        read_at: null,
+                        claimed_at: null,
+                        created_at: "2026-07-19T12:00:00Z",
+                        sender_name: "TheWrongLuke",
+                        cosmetic_name: "Night Ops",
+                        deleted: false
+                    };
+                    const gift = window.__giftNotification;
+                    if (name === "list_my_notifications") {
+                        return { data: gift.deleted ? [] : [{ ...gift }], error: null };
+                    }
+                    if (name === "set_my_notification_read") {
+                        gift.read_at = args.p_read ? new Date().toISOString() : null;
+                        return { data: true, error: null };
+                    }
+                    if (name === "claim_my_cosmetic_gift") {
+                        gift.claimed_at = new Date().toISOString();
+                        gift.read_at = gift.read_at || gift.claimed_at;
+                        return { data: { claimed: true }, error: null };
+                    }
+                    if (name === "delete_my_notification") {
+                        gift.deleted = true;
+                        return { data: true, error: null };
+                    }
+                    if (name === "sync_discord_profile_v2"`
+);
+
 const delayedAdminSupabaseStub = `window.__profileSyncDelayMs = 1200;\n${adminSupabaseStub}`
     .replace(
         "function builder(table) {\n        const calls = [];",
@@ -299,6 +337,12 @@ async function openAdminApp(page, hash = "#admin-progression") {
 
 async function openMemberApp(page, hash = "") {
     await installPageStubs(page, memberSupabaseStub);
+    await page.goto(`/${hash}`);
+    await page.waitForLoadState("domcontentloaded");
+}
+
+async function openGiftApp(page, hash = "") {
+    await installPageStubs(page, giftSupabaseStub);
     await page.goto(`/${hash}`);
     await page.waitForLoadState("domcontentloaded");
 }
@@ -577,6 +621,35 @@ test("an administrator can search players, inspect collections, and open protect
     await expect(page.locator('[data-player-ban-form] textarea[name="reason"]')).toBeVisible();
     await page.locator("[data-player-ban-close]").click();
     await expect(page.locator("[data-player-ban-form]")).toBeHidden();
+});
+
+test("a cosmetic gift opens once and remains manageable in the private notification inbox", async ({ page }) => {
+    await openGiftApp(page);
+
+    const giftDialog = page.locator(".notification-gift-dialog");
+    await expect(giftDialog).toBeVisible();
+    await expect(giftDialog).toContainText("Night Ops");
+    await expect(giftDialog).toContainText("Thanks for helping with the server.");
+    await page.locator(".notification-gift-dialog [data-notification-gift-close]").last().click();
+    await expect(giftDialog).toBeHidden();
+
+    await page.locator("[data-notification-panel-open]").click();
+    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+    await page.locator('[data-notification-toggle="323e4567-e89b-42d3-a456-426614174222"]').click();
+    await expect(page.locator('[data-notification-claim="323e4567-e89b-42d3-a456-426614174222"]')).toBeVisible();
+
+    await page.locator('[data-notification-read="323e4567-e89b-42d3-a456-426614174222"]').click();
+    await expect(page.locator(".notification-bell-button > strong")).toHaveText("1");
+    await page.locator('[data-notification-toggle="323e4567-e89b-42d3-a456-426614174222"]').click();
+    await page.locator('[data-notification-toggle="323e4567-e89b-42d3-a456-426614174222"]').click();
+    await page.locator('[data-notification-claim="323e4567-e89b-42d3-a456-426614174222"]').click();
+    await expect(page.locator(".notification-item-meta")).toContainText("Claimed");
+    await expect(page.locator('[data-notification-claim="323e4567-e89b-42d3-a456-426614174222"]')).toHaveCount(0);
+
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator('[data-notification-delete="323e4567-e89b-42d3-a456-426614174222"]').click();
+    await expect(page.locator('[data-notification-toggle="323e4567-e89b-42d3-a456-426614174222"]')).toHaveCount(0);
+    await expect(page.getByText("Your inbox is empty")).toBeVisible();
 });
 
 test("the Minecraft avatar survives a failed primary skin service", async ({ page }) => {

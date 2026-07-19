@@ -14,6 +14,7 @@ export function renderPlayerManagerContent({
     players = [],
     catalog = [],
     grants = [],
+    pendingGifts = [],
     revocations = [],
     selectedId = "",
     currentUserId = "",
@@ -39,6 +40,7 @@ export function renderPlayerManagerContent({
     const selected = players.find((profile) => profile.id === selectedId) || null;
     const bannedCount = players.filter((profile) => profile.banned_from_voting).length;
     const selectedGrants = selected ? grants.filter((grant) => grant.profile_id === selected.id) : [];
+    const selectedPendingGifts = selected ? pendingGifts.filter((gift) => gift.profile_id === selected.id) : [];
     const selectedRevocations = selected ? revocations.filter((entry) => entry.profile_id === selected.id) : [];
 
     return `
@@ -61,7 +63,7 @@ export function renderPlayerManagerContent({
                 </div>
             </div>
             <div class="player-manager-detail">
-                ${selected ? renderPlayerDetail(selected, catalog, selectedGrants, selectedRevocations, filters.collection, filters.sort, currentUserId) : renderNoPlayerSelected(players.length)}
+                ${selected ? renderPlayerDetail(selected, catalog, selectedGrants, selectedPendingGifts, selectedRevocations, filters.collection, filters.sort, currentUserId) : renderNoPlayerSelected(players.length)}
             </div>
         </section>
         ${selected && grantKey ? renderGiftDialog(selected, catalog, selectedRevocations, grantKey, saving) : ""}
@@ -85,8 +87,18 @@ function renderPlayerRow(profile, selectedId) {
     `;
 }
 
-function renderPlayerDetail(profile, catalog, grants, revocations, collectionFilter, collectionSort, currentUserId) {
+function renderPlayerDetail(
+    profile,
+    catalog,
+    grants,
+    pendingGifts,
+    revocations,
+    collectionFilter,
+    collectionSort,
+    currentUserId
+) {
     const inventory = new Map(grants.map((grant) => [cosmeticKey(grant), grant]));
+    const pending = new Map(pendingGifts.map((gift) => [cosmeticKey(gift), gift]));
     const revocationHistory = new Map(revocations.map((entry) => [cosmeticKey(entry), entry]));
     const collectionGroups = groupCollection(catalog, inventory, collectionFilter, collectionSort);
     const canBan = profile.id !== currentUserId && !profile.is_owner;
@@ -138,12 +150,12 @@ function renderPlayerDetail(profile, catalog, grants, revocations, collectionFil
             </div>
         </div>
         <div class="player-collection-groups">
-            ${collectionGroups.map((group) => renderCollectionGroup(profile, group, inventory, revocationHistory, collectionFilter)).join("")}
+            ${collectionGroups.map((group) => renderCollectionGroup(profile, group, inventory, pending, revocationHistory, collectionFilter)).join("")}
         </div>
     `;
 }
 
-function renderCollectionGroup(profile, group, inventory, revocationHistory, collectionFilter) {
+function renderCollectionGroup(profile, group, inventory, pending, revocationHistory, collectionFilter) {
     const filterLabel =
         collectionFilter === "owned" ? "owned" : collectionFilter === "unowned" ? "unowned" : "matching";
     return `
@@ -153,29 +165,30 @@ function renderCollectionGroup(profile, group, inventory, revocationHistory, col
                 <span>${escapeHtml(`${group.ownedCount} owned / ${group.totalCount}`)}</span>
             </header>
             <div class="player-collection-grid">
-                ${group.items.length ? group.items.map((item) => renderCollectionItem(profile, item, inventory.get(cosmeticKey(item)), revocationHistory.get(cosmeticKey(item)))).join("") : `<p class="progression-empty">No ${escapeHtml(filterLabel)} ${escapeHtml(group.label.toLowerCase())}.</p>`}
+                ${group.items.length ? group.items.map((item) => renderCollectionItem(profile, item, inventory.get(cosmeticKey(item)), pending.get(cosmeticKey(item)), revocationHistory.get(cosmeticKey(item)))).join("") : `<p class="progression-empty">No ${escapeHtml(filterLabel)} ${escapeHtml(group.label.toLowerCase())}.</p>`}
             </div>
         </section>
     `;
 }
 
-function renderCollectionItem(profile, item, grant, revocation) {
+function renderCollectionItem(profile, item, grant, pendingGift, revocation) {
     const owned = Boolean(grant);
     const requiredFallback = REQUIRED_FALLBACKS.has(cosmeticKey(item));
     const automaticProtected = grant?.source === "default" || grant?.source === "owner";
     const revocable = owned && !requiredFallback && !automaticProtected;
     const ownerRestricted = item.acquisitionType === "owner" && !profile.is_owner;
-    const grantDisabled = item.active === false || ownerRestricted;
+    const grantDisabled = item.active === false || ownerRestricted || Boolean(pendingGift);
     const key = cosmeticKey(item);
     return `
-        <article class="player-collection-item rarity-${escapeHtml(item.rarity || "common")} ${owned ? "owned" : "unowned"} ${item.active === false ? "archived" : ""}" data-player-cosmetic-key="${escapeHtml(key)}">
+        <article class="player-collection-item rarity-${escapeHtml(item.rarity || "common")} ${owned ? "owned" : pendingGift ? "pending" : "unowned"} ${item.active === false ? "archived" : ""}" data-player-cosmetic-key="${escapeHtml(key)}">
             <div class="player-collection-preview">${renderCosmeticPreview(item)}</div>
             <div class="player-collection-copy">
                 <small>${escapeHtml(`${cosmeticTypeLabel(item.type)} / ${item.rarity || "common"}`)}</small>
                 <strong>${escapeHtml(item.name || item.label || item.id)}</strong>
-                <span>${escapeHtml(owned ? ownershipLabel(grant) : revocation ? "Revoked by admin" : item.active === false ? "Archived" : "Not owned")}</span>
+                <span>${escapeHtml(owned ? ownershipLabel(grant) : pendingGift ? "Gift awaiting claim" : revocation ? "Revoked by admin" : item.active === false ? "Archived" : "Not owned")}</span>
                 ${owned && grant.grant_note ? `<p>${escapeHtml(grant.grant_note)}</p>` : ""}
-                ${!owned && revocation?.reason ? `<p>${escapeHtml(revocation.reason)}</p>` : ""}
+                ${!owned && pendingGift?.message ? `<p>${escapeHtml(pendingGift.message)}</p>` : ""}
+                ${!owned && !pendingGift && revocation?.reason ? `<p>${escapeHtml(revocation.reason)}</p>` : ""}
             </div>
             <div class="player-collection-action">
                 ${
@@ -185,7 +198,9 @@ function renderCollectionItem(profile, item, grant, revocation) {
                 `
                         : owned
                           ? `<span>${requiredFallback ? "Required fallback" : escapeHtml(protectedOwnershipLabel(grant.source))}</span>`
-                          : `
+                          : pendingGift
+                            ? `<span>Awaiting claim</span>`
+                            : `
                     <button type="button" data-player-grant-open="${escapeHtml(key)}" ${grantDisabled ? "disabled" : ""}>${ownerRestricted ? "Owner only" : item.active === false ? "Archived" : revocation ? "Restore" : "Give"}</button>
                 `
                 }
@@ -220,9 +235,9 @@ function renderGiftDialog(profile, catalog, revocations, grantKey, saving) {
                             <label class="wide"><span>Gift note</span><textarea name="note" rows="4" maxlength="200" placeholder="Optional message stored with this gift"></textarea></label>
                         </div>
                     </fieldset>
-                    <p class="progression-editor-status" role="status">${restoring ? "The cosmetic is returned immediately. Its earlier revocation note remains in the private history." : "The cosmetic is added immediately after confirmation."}</p>
+                    <p class="progression-editor-status" role="status">The player receives a private notification. Ownership is added only when they claim the gift.${restoring ? " The earlier revocation note remains in private history." : ""}</p>
                     <footer class="progression-dialog-actions">
-                        <button class="primary" type="submit" ${saving ? "disabled" : ""}>${saving ? "Saving..." : restoring ? "Restore cosmetic" : "Send gift"}</button>
+                        <button class="primary" type="submit" ${saving ? "disabled" : ""}>${saving ? "Sending..." : "Send gift"}</button>
                     </footer>
                 </form>
             </section>
@@ -379,7 +394,8 @@ function safeImageUrl(value) {
 }
 
 function cosmeticKey(value) {
-    return `${value?.type || value?.cosmetic_type || ""}:${value?.id || value?.cosmetic_id || ""}`;
+    if (value?.cosmetic_type) return `${value.cosmetic_type}:${value?.cosmetic_id || ""}`;
+    return `${value?.type || ""}:${value?.id || ""}`;
 }
 
 function cosmeticTypeLabel(value) {

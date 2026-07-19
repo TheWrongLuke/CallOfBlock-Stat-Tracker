@@ -67,7 +67,7 @@ describe("progression admin API", () => {
         const api = createProgressionAdminApi({ rpc });
 
         await api.setPlayerBan("player-1", true, "Repeated abuse");
-        await api.grantPlayerCosmetic({
+        await api.sendCosmeticGift({
             profileId: "player-1",
             cosmeticType: "title",
             cosmeticId: "founder",
@@ -75,14 +75,14 @@ describe("progression admin API", () => {
             note: "Thanks for helping"
         });
         await api.revokePlayerCosmetic("player-1", "title", "founder", "Season reward correction");
-        await api.listOwnCosmeticGifts();
+        await api.listPendingCosmeticGifts();
 
         expect(rpc).toHaveBeenNthCalledWith(1, "admin_set_player_community_ban", {
             p_profile_id: "player-1",
             p_banned: true,
             p_reason: "Repeated abuse"
         });
-        expect(rpc).toHaveBeenNthCalledWith(2, "admin_grant_player_cosmetic", {
+        expect(rpc).toHaveBeenNthCalledWith(2, "admin_send_cosmetic_gift", {
             p_profile_id: "player-1",
             p_cosmetic_type: "title",
             p_cosmetic_id: "founder",
@@ -95,7 +95,7 @@ describe("progression admin API", () => {
             p_cosmetic_id: "founder",
             p_note: "Season reward correction"
         });
-        expect(rpc).toHaveBeenNthCalledWith(4, "list_my_cosmetic_gifts");
+        expect(rpc).toHaveBeenNthCalledWith(4, "admin_list_pending_cosmetic_gifts");
     });
 
     it("loads private revocation history through the protected admin RPC", async () => {

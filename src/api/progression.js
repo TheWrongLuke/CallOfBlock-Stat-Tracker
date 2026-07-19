@@ -33,8 +33,8 @@ export function createProgressionAdminApi(client) {
             return client.rpc("admin_list_cosmetic_revocation_history");
         },
 
-        async listOwnCosmeticGifts() {
-            return client.rpc("list_my_cosmetic_gifts");
+        async listPendingCosmeticGifts() {
+            return client.rpc("admin_list_pending_cosmetic_gifts");
         },
 
         async setPlayerBan(profileId, banned, reason) {
@@ -45,8 +45,8 @@ export function createProgressionAdminApi(client) {
             });
         },
 
-        async grantPlayerCosmetic(grant) {
-            return client.rpc("admin_grant_player_cosmetic", {
+        async sendCosmeticGift(grant) {
+            return client.rpc("admin_send_cosmetic_gift", {
                 p_profile_id: grant.profileId,
                 p_cosmetic_type: grant.cosmeticType,
                 p_cosmetic_id: grant.cosmeticId,

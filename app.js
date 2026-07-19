@@ -1,4 +1,5 @@
 import { createFeedbackApi } from "./src/api/feedback.js";
+import { createNotificationApi } from "./src/api/notifications.js";
 import { saveProfileCustomization, syncDiscordProfile } from "./src/api/profile.js";
 import { createProgressionAdminApi } from "./src/api/progression.js";
 import {
@@ -59,6 +60,7 @@ import {
     renderTicketDetailContent
 } from "./src/views/feedback.js";
 import { renderProgressionAdminContent } from "./src/views/progression.js";
+import { renderGiftNotificationPopup, renderNotificationInbox } from "./src/views/notifications.js";
 
 const MODE_LABELS = {
     overall: "Overall",
@@ -117,6 +119,7 @@ const CHAMPION_ROTATE_MS = 5000;
 const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64, 103, 109, 97, 105, 108, 46, 99, 111, 109];
 const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v2";
 const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
+const NOTIFICATION_POPUP_SESSION_KEY = "cob_notification_popup_seen_v1";
 const BADGE_SEEN_STORAGE_KEY = "cob_seen_badges_v1";
 const WEEKLY_MISSION_STORAGE_KEY = "cob_weekly_missions_v1";
 const ACCOUNT_MAX_LEVEL = 1000;
@@ -342,11 +345,23 @@ const state = {
     accountProfilesReady: false,
     accountProfileIndex: emptyAccountProfileIndex(),
     cosmeticOwnershipCache: new Map(),
-    accountGifts: [],
-    accountGiftsLoaded: false,
     accountMessage: "",
     accountSaving: false,
     accountPanelOpen: false,
+    accountPanelView: "profile",
+    notifications: {
+        api: null,
+        items: [],
+        loaded: false,
+        loading: false,
+        ready: true,
+        filter: "all",
+        expandedId: "",
+        giftPopupId: "",
+        busyId: "",
+        message: "",
+        error: ""
+    },
     cosmeticPicker: {
         type: "",
         showUnowned: cosmeticPickerPreferences.showUnowned,
@@ -420,6 +435,7 @@ const state = {
         ready: false,
         rules: [],
         grants: [],
+        pendingGifts: [],
         revocations: [],
         profiles: [],
         players: [],
@@ -529,6 +545,8 @@ function bindAvatarImageEvents() {
             handleAvatarFallback(image);
         } else if (image instanceof HTMLImageElement && image.hasAttribute("data-player-manager-avatar")) {
             image.remove();
+        } else if (image instanceof HTMLImageElement && image.hasAttribute("data-notification-preview-image")) {
+            image.remove();
         }
     }, true);
 }
@@ -568,6 +586,7 @@ function setupAuthClient() {
         }
     });
     state.feedback.api = createFeedbackApi(state.authClient);
+    state.notifications.api = createNotificationApi(state.authClient);
     state.progression.api = createProgressionAdminApi(state.authClient);
 }
 
@@ -610,7 +629,7 @@ async function applyAuthSession(session, shouldRender = false) {
         state.authProfile = null;
         state.authMessage = "";
         state.accountPanelOpen = false;
-        resetAccountGiftState();
+        resetNotificationState();
         resetWeeklyMissionState();
         resetStoreSessionState({ resetCatalog: true });
         resetFeedbackSessionState();
@@ -630,7 +649,7 @@ async function applyAuthSession(session, shouldRender = false) {
     await loadCosmeticCatalog({ force: true });
     await claimProgressionCosmetics();
     await loadAccountProfiles();
-    await loadOwnCosmeticGifts();
+    await loadOwnNotifications();
     await loadRemotePlaytests({ silent: true });
     await syncWeeklyMissions();
     resetFeedbackSessionState();
@@ -670,7 +689,7 @@ async function signInWithDiscord() {
     }
 
     state.authMessage = "";
-    resetAccountGiftState();
+    resetNotificationState();
     if (["playtests", "store", "feedback", "ticket"].includes(state.view)) rememberAuthReturn();
     const { error } = await state.authClient.auth.signInWithOAuth({
         provider: "discord",
@@ -699,7 +718,7 @@ async function signOutDiscord() {
     state.accountPanelOpen = false;
     state.accountMessage = "";
     state.authMessage = "";
-    resetAccountGiftState();
+    resetNotificationState();
     resetWeeklyMissionState();
     resetStoreSessionState({ resetCatalog: true });
     resetFeedbackSessionState();
@@ -1045,6 +1064,72 @@ function bindStaticEvents() {
         if (missionSwapClose || event.target.matches("[data-weekly-swap-backdrop]")) {
             event.preventDefault();
             closeWeeklyMissionSwapDialog();
+            return;
+        }
+
+        const notificationGiftClose = event.target.closest("[data-notification-gift-close]");
+        if (notificationGiftClose) {
+            event.preventDefault();
+            closeNotificationGiftDialog();
+            return;
+        }
+
+        const notificationPanelOpen = event.target.closest("[data-notification-panel-open]");
+        if (notificationPanelOpen) {
+            event.preventDefault();
+            openNotificationSidePanel();
+            return;
+        }
+
+        const notificationFilter = event.target.closest("[data-notification-filter]");
+        if (notificationFilter) {
+            event.preventDefault();
+            state.notifications.filter = notificationFilter.dataset.notificationFilter === "unread" ? "unread" : "all";
+            renderAccountSidePanel();
+            return;
+        }
+
+        const notificationRefresh = event.target.closest("[data-notification-refresh]");
+        if (notificationRefresh) {
+            event.preventDefault();
+            void loadOwnNotifications({ force: true, showPopup: false });
+            return;
+        }
+
+        const notificationToggle = event.target.closest("[data-notification-toggle]");
+        if (notificationToggle) {
+            event.preventDefault();
+            const notificationId = notificationToggle.dataset.notificationToggle || "";
+            const opening = state.notifications.expandedId !== notificationId;
+            state.notifications.expandedId = opening ? notificationId : "";
+            state.notifications.message = "";
+            renderAccountSidePanel();
+            const item = state.notifications.items.find((entry) => entry.id === notificationId);
+            if (opening && item && !item.readAt) void persistNotificationRead(notificationId, true);
+            return;
+        }
+
+        const notificationRead = event.target.closest("[data-notification-read]");
+        if (notificationRead) {
+            event.preventDefault();
+            void persistNotificationRead(
+                notificationRead.dataset.notificationRead || "",
+                notificationRead.dataset.notificationReadValue === "true"
+            );
+            return;
+        }
+
+        const notificationDelete = event.target.closest("[data-notification-delete]");
+        if (notificationDelete) {
+            event.preventDefault();
+            void deleteAccountNotification(notificationDelete.dataset.notificationDelete || "");
+            return;
+        }
+
+        const notificationClaim = event.target.closest("[data-notification-claim]");
+        if (notificationClaim) {
+            event.preventDefault();
+            void claimCosmeticGift(notificationClaim.dataset.notificationClaim || "");
             return;
         }
 
@@ -1477,6 +1562,10 @@ function bindStaticEvents() {
 
     document.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
+        if (state.notifications.giftPopupId) {
+            closeNotificationGiftDialog();
+            return;
+        }
         if (state.store.pendingPurchase) {
             closeStorePurchaseDialog();
             return;
@@ -2078,30 +2167,198 @@ async function loadAccountProfiles() {
     if (state.data) render();
 }
 
-function resetAccountGiftState() {
-    state.accountGifts = [];
-    state.accountGiftsLoaded = false;
+function resetNotificationState() {
+    const notifications = state.notifications;
+    notifications.items = [];
+    notifications.loaded = false;
+    notifications.loading = false;
+    notifications.ready = true;
+    notifications.filter = "all";
+    notifications.expandedId = "";
+    notifications.giftPopupId = "";
+    notifications.busyId = "";
+    notifications.message = "";
+    notifications.error = "";
 }
 
-async function loadOwnCosmeticGifts({ force = false } = {}) {
-    if (!state.progression.api || !state.authSession?.user || (state.accountGiftsLoaded && !force)) return;
+async function loadOwnNotifications({ force = false, showPopup = true } = {}) {
+    const notifications = state.notifications;
+    if (!notifications.api || !state.authSession?.user || notifications.loading || (notifications.loaded && !force)) return;
+    notifications.loading = true;
+    notifications.error = "";
+    renderNotificationSurfaces();
+
     try {
-        const giftResult = await state.progression.api.listOwnCosmeticGifts();
-        if (giftResult.error) throw giftResult.error;
-        state.accountGifts = (Array.isArray(giftResult.data) ? giftResult.data : []).map((gift) => ({
-            type: String(gift?.cosmetic_type || ""),
-            id: String(gift?.cosmetic_id || ""),
-            source: String(gift?.grant_source || ""),
-            note: String(gift?.gift_note || "").trim().slice(0, 200),
-            acquiredAt: String(gift?.acquired_at || "")
-        })).filter((gift) => gift.type && gift.id);
-        state.accountGiftsLoaded = true;
+        const result = await notifications.api.listOwn();
+        if (result.error) throw result.error;
+        notifications.items = (Array.isArray(result.data) ? result.data : [])
+            .map(normalizeAccountNotification)
+            .filter(Boolean);
+        notifications.ready = true;
+        if (!notifications.items.some((item) => item.id === notifications.expandedId)) {
+            notifications.expandedId = "";
+        }
+        if (showPopup) openNextGiftPopup();
     } catch (error) {
-        const code = String(error?.code || "");
-        if (!["42883", "PGRST202"].includes(code)) console.warn("Could not load cosmetic gifts", error);
-        state.accountGifts = [];
-        state.accountGiftsLoaded = true;
+        if (notificationSchemaMissing(error)) {
+            notifications.ready = false;
+            notifications.items = [];
+        } else {
+            console.warn("Could not load account notifications", error);
+            notifications.error = "Notifications could not be loaded right now.";
+        }
+    } finally {
+        notifications.loaded = true;
+        notifications.loading = false;
+        renderNotificationSurfaces();
     }
+}
+
+function normalizeAccountNotification(row) {
+    const id = String(row?.id || "").trim();
+    const type = String(row?.notification_type || "").trim();
+    if (!id || !["cosmetic_gift", "system"].includes(type)) return null;
+    const cosmeticType = String(row?.cosmetic_type || "").trim();
+    const cosmeticId = String(row?.cosmetic_id || "").trim();
+    const cosmetic = cosmeticType && cosmeticId ? progressionCatalogItem(`${cosmeticType}:${cosmeticId}`) : null;
+    return {
+        id,
+        type,
+        title: String(row?.title || "Notification").trim().slice(0, 120),
+        message: String(row?.message || "").trim().slice(0, 500),
+        cosmeticType,
+        cosmeticId,
+        giftSource: String(row?.gift_source || "").trim(),
+        senderName: String(row?.sender_name || "Call of Block").trim().slice(0, 80),
+        readAt: String(row?.read_at || ""),
+        claimedAt: String(row?.claimed_at || ""),
+        createdAt: String(row?.created_at || ""),
+        cosmeticName: String(row?.cosmetic_name || cosmetic?.name || cosmetic?.label || cosmeticId).trim().slice(0, 80),
+        cosmeticImage: String(cosmetic?.image || "").trim(),
+        cosmeticText: String(cosmetic?.text || cosmetic?.name || cosmetic?.label || "").trim().slice(0, 80),
+        cosmeticRarity: String(cosmetic?.rarity || "common").trim()
+    };
+}
+
+function notificationSchemaMissing(error) {
+    const code = String(error?.code || "");
+    const message = String(error?.message || error || "");
+    return ["42P01", "42883", "PGRST202", "PGRST205"].includes(code)
+        || /list_my_notifications|user_notifications|schema cache/i.test(message);
+}
+
+function openNextGiftPopup() {
+    const notifications = state.notifications;
+    if (notifications.giftPopupId) return;
+    const seen = notificationPopupSeenIds();
+    const gift = notifications.items.find((item) =>
+        item.type === "cosmetic_gift" && !item.claimedAt && !item.readAt && !seen.has(item.id)
+    );
+    if (!gift) return;
+    notifications.giftPopupId = gift.id;
+    markNotificationPopupSeen(gift.id);
+    void persistNotificationRead(gift.id, true);
+}
+
+function notificationPopupSeenIds() {
+    try {
+        const stored = JSON.parse(window.sessionStorage?.getItem(NOTIFICATION_POPUP_SESSION_KEY) || "[]");
+        return new Set(Array.isArray(stored) ? stored.filter((id) => typeof id === "string") : []);
+    } catch (_error) {
+        return new Set();
+    }
+}
+
+function markNotificationPopupSeen(notificationId) {
+    try {
+        const seen = notificationPopupSeenIds();
+        seen.add(notificationId);
+        window.sessionStorage?.setItem(NOTIFICATION_POPUP_SESSION_KEY, JSON.stringify([...seen].slice(-100)));
+    } catch (_error) {
+        // The notification remains available even when session storage is blocked.
+    }
+}
+
+async function persistNotificationRead(notificationId, read) {
+    const notifications = state.notifications;
+    const item = notifications.items.find((entry) => entry.id === notificationId);
+    if (!notifications.api || !item || notifications.busyId === notificationId) return;
+    const previous = item.readAt;
+    item.readAt = read ? new Date().toISOString() : "";
+    renderNotificationSurfaces();
+    try {
+        const result = await notifications.api.markRead(notificationId, read);
+        if (result.error) throw result.error;
+    } catch (error) {
+        item.readAt = previous;
+        notifications.error = "Could not update this notification.";
+        console.warn("Could not update notification read state", error);
+    } finally {
+        renderNotificationSurfaces();
+    }
+}
+
+async function deleteAccountNotification(notificationId) {
+    const notifications = state.notifications;
+    const item = notifications.items.find((entry) => entry.id === notificationId);
+    if (!notifications.api || !item || notifications.busyId) return;
+    const pendingGift = item.type === "cosmetic_gift" && !item.claimedAt;
+    const prompt = pendingGift
+        ? "Delete this notification and decline the unclaimed cosmetic gift?"
+        : "Delete this notification?";
+    if (!window.confirm(prompt)) return;
+
+    notifications.busyId = notificationId;
+    notifications.error = "";
+    renderNotificationSurfaces();
+    try {
+        const result = await notifications.api.delete(notificationId);
+        if (result.error) throw result.error;
+        notifications.items = notifications.items.filter((entry) => entry.id !== notificationId);
+        if (notifications.expandedId === notificationId) notifications.expandedId = "";
+        if (notifications.giftPopupId === notificationId) notifications.giftPopupId = "";
+        notifications.message = pendingGift ? "Gift declined and notification deleted." : "Notification deleted.";
+    } catch (error) {
+        notifications.error = "Could not delete this notification.";
+        console.error("Could not delete notification", error);
+    } finally {
+        notifications.busyId = "";
+        renderNotificationSurfaces();
+    }
+}
+
+async function claimCosmeticGift(notificationId) {
+    const notifications = state.notifications;
+    const item = notifications.items.find((entry) => entry.id === notificationId);
+    if (!notifications.api || !item || item.type !== "cosmetic_gift" || item.claimedAt || notifications.busyId) return;
+    notifications.busyId = notificationId;
+    notifications.error = "";
+    renderNotificationSurfaces();
+
+    try {
+        const result = await notifications.api.claimGift(notificationId);
+        if (result.error) throw result.error;
+        item.claimedAt = new Date().toISOString();
+        item.readAt = item.readAt || item.claimedAt;
+        notifications.giftPopupId = "";
+        notifications.message = `${item.cosmeticName || "Cosmetic"} was added to your collection.`;
+        state.accountMessage = notifications.message;
+        await loadAccountProfiles();
+        await loadOwnNotifications({ force: true, showPopup: false });
+    } catch (error) {
+        notifications.error = String(error?.message || "Could not claim this gift.");
+        console.error("Could not claim cosmetic gift", error);
+    } finally {
+        notifications.busyId = "";
+        renderNotificationSurfaces();
+    }
+}
+
+function renderNotificationSurfaces() {
+    if (!state.authReady) return;
+    renderAccountWidget();
+    if (state.accountPanelOpen) renderAccountSidePanel();
+    renderNotificationGiftDialog();
 }
 
 async function fetchPublicCosmeticInventory() {
@@ -2634,6 +2891,7 @@ function render() {
     renderTopNav();
     renderAccountWidget();
     renderAccountSidePanel();
+    renderNotificationGiftDialog();
     renderPlaytestConfirmationDialog();
     renderWeeklyMissionSwapDialog();
     renderStorePurchaseDialog();
@@ -2773,8 +3031,13 @@ function renderAccountWidget() {
     const profile = linkedStatsProfile();
     const avatarUrl = accountAvatarUrl(account, profile, 64);
     const name = accountDisplayName(account);
+    const unread = state.notifications.items.filter((item) => !item.readAt).length;
     container.innerHTML = `
-        <button class="account-pill" type="button" data-account-panel-open aria-label="${escapeHtml(`Open profile panel for ${name}`)}" aria-expanded="${state.accountPanelOpen ? "true" : "false"}">
+        <button class="notification-bell-button ${unread ? "has-unread" : ""}" type="button" data-notification-panel-open aria-label="${escapeHtml(`Open notifications${unread ? `, ${unread} unread` : ""}`)}" aria-expanded="${state.accountPanelOpen && state.accountPanelView === "notifications" ? "true" : "false"}">
+            <span class="notification-bell-symbol" aria-hidden="true">&#128276;</span>
+            ${unread ? `<strong>${escapeHtml(unread > 99 ? "99+" : unread)}</strong>` : ""}
+        </button>
+        <button class="account-pill" type="button" data-account-panel-open aria-label="${escapeHtml(`Open profile panel for ${name}`)}" aria-expanded="${state.accountPanelOpen && state.accountPanelView === "profile" ? "true" : "false"}">
             <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
                 ${renderAvatarImage(avatarUrl, account, profile, 64, "eager")}
             </span>
@@ -2786,6 +3049,7 @@ function renderAccountWidget() {
 function openAccountSidePanel() {
     if (!isDiscordLoggedIn()) return;
     state.accountPanelOpen = true;
+    state.accountPanelView = "profile";
     renderAccountWidget();
     renderAccountSidePanel();
     void syncWeeklyMissions();
@@ -2794,12 +3058,26 @@ function openAccountSidePanel() {
     });
 }
 
+function openNotificationSidePanel() {
+    if (!isDiscordLoggedIn()) return;
+    state.accountPanelOpen = true;
+    state.accountPanelView = "notifications";
+    state.notifications.message = "";
+    renderAccountWidget();
+    renderAccountSidePanel();
+    void loadOwnNotifications({ force: true, showPopup: false });
+    window.requestAnimationFrame(() => {
+        document.querySelector("[data-account-panel-close]")?.focus();
+    });
+}
+
 function closeAccountSidePanel() {
+    const previousView = state.accountPanelView;
     state.accountPanelOpen = false;
     renderAccountWidget();
     renderAccountSidePanel();
     window.requestAnimationFrame(() => {
-        document.querySelector("[data-account-panel-open]")?.focus();
+        document.querySelector(previousView === "notifications" ? "[data-notification-panel-open]" : "[data-account-panel-open]")?.focus();
     });
 }
 
@@ -2821,36 +3099,47 @@ function renderAccountSidePanel() {
     const account = state.authProfile || {};
     const profile = linkedStatsProfile();
     const avatarUrl = accountAvatarUrl(account, profile, 72);
+    const notificationsOpen = state.accountPanelView === "notifications";
     const previousScrollTop = host.querySelector(".profile-drawer")?.scrollTop || 0;
     host.innerHTML = `
         <div class="profile-drawer-backdrop" data-account-panel-backdrop>
-            <aside class="profile-drawer" role="dialog" aria-modal="true" aria-labelledby="profile-drawer-title">
+            <aside class="profile-drawer ${notificationsOpen ? "notification-drawer" : ""}" role="dialog" aria-modal="true" aria-labelledby="profile-drawer-title">
                 <header class="profile-drawer-header">
-                    <h2 id="profile-drawer-title">PROFILE</h2>
+                    <h2 id="profile-drawer-title">${notificationsOpen ? "NOTIFICATIONS" : "PROFILE"}</h2>
                     <button class="profile-drawer-close" type="button" data-account-panel-close aria-label="Close profile panel">&times;</button>
                 </header>
-                <div class="profile-drawer-identity">
-                    <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
-                        ${renderAvatarImage(avatarUrl, account, profile, 72, "eager")}
-                    </span>
-                    <div>
-                        <strong>${escapeHtml(accountDisplayName(account))}</strong>
-                        ${renderProfileTitle(account, { compact: true })}
-                        ${renderAccountLevelPill(account)}
+                ${notificationsOpen ? renderNotificationInbox({
+                    items: state.notifications.items,
+                    loading: state.notifications.loading,
+                    ready: state.notifications.ready,
+                    filter: state.notifications.filter,
+                    expandedId: state.notifications.expandedId,
+                    busyId: state.notifications.busyId,
+                    message: state.notifications.message,
+                    error: state.notifications.error
+                }) : `
+                    <div class="profile-drawer-identity">
+                        <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
+                            ${renderAvatarImage(avatarUrl, account, profile, 72, "eager")}
+                        </span>
+                        <div>
+                            <strong>${escapeHtml(accountDisplayName(account))}</strong>
+                            ${renderProfileTitle(account, { compact: true })}
+                            ${renderAccountLevelPill(account)}
+                        </div>
                     </div>
-                </div>
-                <div class="profile-drawer-actions ${isPlaytestAdmin() ? "admin" : ""}">
-                    <button class="profile-drawer-customize" type="button" data-route="account">Customize profile</button>
-                    <button class="profile-drawer-support" type="button" data-route="feedback">Feedback &amp; support</button>
-                    ${isPlaytestAdmin() ? `
-                        <button class="profile-drawer-tickets" type="button" data-route="admin-tickets">Ticket dashboard</button>
-                        <button class="profile-drawer-progression" type="button" data-route="admin-progression">Progression &amp; missions</button>
-                        <button class="profile-drawer-docs" type="button" data-route="admin-help">Admin documentation</button>
-                        <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
-                    ` : ""}
-                </div>
-                ${renderAccountGifts()}
-                ${renderWeeklyMissions(profile)}
+                    <div class="profile-drawer-actions ${isPlaytestAdmin() ? "admin" : ""}">
+                        <button class="profile-drawer-customize" type="button" data-route="account">Customize profile</button>
+                        <button class="profile-drawer-support" type="button" data-route="feedback">Feedback &amp; support</button>
+                        ${isPlaytestAdmin() ? `
+                            <button class="profile-drawer-tickets" type="button" data-route="admin-tickets">Ticket dashboard</button>
+                            <button class="profile-drawer-progression" type="button" data-route="admin-progression">Progression &amp; missions</button>
+                            <button class="profile-drawer-docs" type="button" data-route="admin-help">Admin documentation</button>
+                            <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
+                        ` : ""}
+                    </div>
+                    ${renderWeeklyMissions(profile)}
+                `}
             </aside>
         </div>
     `;
@@ -2858,25 +3147,26 @@ function renderAccountSidePanel() {
     if (drawer) drawer.scrollTop = previousScrollTop;
 }
 
-function renderAccountGifts() {
-    if (!state.accountGiftsLoaded || !state.accountGifts.length) return "";
-    return `
-        <section class="profile-drawer-gifts">
-            <header><p class="panel-kicker">Gifts</p><strong>${escapeHtml(state.accountGifts.length)}</strong></header>
-            <div>
-                ${state.accountGifts.map((gift) => {
-                    const cosmetic = progressionCatalogItem(`${gift.type}:${gift.id}`);
-                    return `
-                        <article>
-                            <strong>${escapeHtml(cosmetic?.name || cosmetic?.label || gift.id)}</strong>
-                            ${gift.note ? `<span>${escapeHtml(gift.note)}</span>` : ""}
-                            <small>${escapeHtml(gift.acquiredAt ? formatFullLocalDate(gift.acquiredAt) : gift.source === "friend" ? "Friend gift" : "Admin gift")}</small>
-                        </article>
-                    `;
-                }).join("")}
-            </div>
-        </section>
-    `;
+function renderNotificationGiftDialog() {
+    let host = document.getElementById("notification-gift-host");
+    if (!host) {
+        host = document.createElement("div");
+        host.id = "notification-gift-host";
+        document.body.appendChild(host);
+    }
+    const notification = state.notifications.items.find((item) => item.id === state.notifications.giftPopupId);
+    if (!notification || !isDiscordLoggedIn()) state.notifications.giftPopupId = "";
+    const open = Boolean(notification && !notification.claimedAt);
+    document.body.classList.toggle("notification-gift-open", open);
+    host.innerHTML = open
+        ? renderGiftNotificationPopup(notification, state.notifications.busyId === notification.id)
+        : "";
+}
+
+function closeNotificationGiftDialog() {
+    state.notifications.giftPopupId = "";
+    renderNotificationGiftDialog();
+    window.requestAnimationFrame(() => document.querySelector("[data-notification-panel-open]")?.focus());
 }
 
 function renderAccountPage() {
@@ -3002,6 +3292,7 @@ function resetProgressionAdminState() {
     progression.section = "cosmetics";
     progression.rules = [];
     progression.grants = [];
+    progression.pendingGifts = [];
     progression.revocations = [];
     progression.profiles = [];
     progression.players = [];
@@ -3692,6 +3983,7 @@ function renderProgressionAdminPage() {
             players: state.progression.players,
             catalog: adminCatalog,
             grants: state.progression.grants,
+            pendingGifts: state.progression.pendingGifts,
             revocations: state.progression.revocations,
             selectedId: state.progression.playerSelectedId,
             currentUserId: state.authSession?.user?.id || "",
@@ -3724,12 +4016,13 @@ async function loadProgressionAdminData({ force = false } = {}) {
 
     try {
         await loadCosmeticCatalog({ force });
-        const [rulesResult, grantsResult, weeklyResult, playersResult, revocationsResult] = await Promise.all([
+        const [rulesResult, grantsResult, weeklyResult, playersResult, revocationsResult, pendingGiftsResult] = await Promise.all([
             progression.api.listRules(),
             progression.api.listInventory(),
             progression.api.listWeeklyMissionTemplates(),
             progression.api.listManagedPlayers(),
-            progression.api.listCosmeticRevocations()
+            progression.api.listCosmeticRevocations(),
+            progression.api.listPendingCosmeticGifts()
         ]);
         if (weeklyResult.error) {
             progression.weeklyTemplates = [];
@@ -3745,17 +4038,21 @@ async function loadProgressionAdminData({ force = false } = {}) {
             progression.weeklyError = "";
             setWeeklyMissionTemplateCache(templates, true);
         }
-        if (playersResult.error || revocationsResult.error) {
+        if (playersResult.error || revocationsResult.error || pendingGiftsResult.error) {
             progression.players = [];
             progression.revocations = [];
+            progression.pendingGifts = [];
             progression.playersReady = false;
-            progression.playerError = playerManagerErrorMessage(playersResult.error || revocationsResult.error);
+            progression.playerError = playerManagerErrorMessage(playersResult.error || revocationsResult.error || pendingGiftsResult.error);
         } else {
             progression.players = (Array.isArray(playersResult.data) ? playersResult.data : [])
                 .map(normalizeManagedPlayer)
                 .filter(Boolean);
             progression.revocations = (Array.isArray(revocationsResult.data) ? revocationsResult.data : [])
                 .map(normalizeCosmeticRevocation)
+                .filter(Boolean);
+            progression.pendingGifts = (Array.isArray(pendingGiftsResult.data) ? pendingGiftsResult.data : [])
+                .map(normalizePendingCosmeticGift)
                 .filter(Boolean);
             progression.playersReady = true;
             progression.playerError = "";
@@ -3782,6 +4079,7 @@ async function loadProgressionAdminData({ force = false } = {}) {
         console.error("Could not load progression administration", error);
         progression.rules = [];
         progression.grants = [];
+        progression.pendingGifts = [];
         progression.revocations = [];
         progression.profiles = [];
         progression.ready = false;
@@ -3886,6 +4184,22 @@ function normalizeCosmeticRevocation(row) {
         reason: String(row?.reason || "").trim().slice(0, 300),
         revoked_at: String(row?.revoked_at || ""),
         revoked_by_username: String(row?.revoked_by_username || "").trim().slice(0, 80)
+    };
+}
+
+function normalizePendingCosmeticGift(row) {
+    const id = String(row?.id || "").trim();
+    const profileId = String(row?.profile_id || row?.recipient_id || "").trim();
+    const type = String(row?.cosmetic_type || "").trim();
+    const cosmeticId = String(row?.cosmetic_id || "").trim();
+    if (!id || !profileId || !STORE_CATEGORY_LABELS[type] || type === "all" || !cosmeticId) return null;
+    return {
+        id,
+        profile_id: profileId,
+        cosmetic_type: type,
+        cosmetic_id: cosmeticId,
+        message: String(row?.message || "").trim().slice(0, 200),
+        created_at: String(row?.created_at || "")
     };
 }
 
@@ -4473,7 +4787,7 @@ async function submitProgressionGrant(form) {
             if (reconciliation.error) throw reconciliation.error;
             state.store.catalogLoaded = false;
         }
-        const result = await progression.api.grantPlayerCosmetic({
+        const result = await progression.api.sendCosmeticGift({
             profileId,
             cosmeticType: cosmetic.type,
             cosmeticId: cosmetic.id,
@@ -4482,11 +4796,11 @@ async function submitProgressionGrant(form) {
         });
         if (result.error) throw result.error;
         progression.playerGrantKey = "";
-        progression.playerMessage = `${cosmetic.name} sent to ${profile.display_name || profile.username || "the selected player"}.`;
+        progression.playerMessage = `${cosmetic.name} was sent to ${profile.display_name || profile.username || "the selected player"}. It will be owned after they claim it.`;
         progression.loaded = false;
         await loadProgressionAdminData({ force: true });
         await loadAccountProfiles();
-        if (profileId === state.authSession?.user?.id) await loadOwnCosmeticGifts({ force: true });
+        if (profileId === state.authSession?.user?.id) await loadOwnNotifications({ force: true });
     } catch (error) {
         console.error("Could not grant cosmetic", error);
         progression.playerError = playerManagerErrorMessage(error, "Could not send this cosmetic.");
@@ -4529,7 +4843,7 @@ async function submitProgressionRevoke(form) {
         progression.loaded = false;
         await loadProgressionAdminData({ force: true });
         await loadAccountProfiles();
-        if (profileId === state.authSession?.user?.id) await loadOwnCosmeticGifts({ force: true });
+        if (profileId === state.authSession?.user?.id) await loadOwnNotifications({ force: true, showPopup: false });
         const reearned = progression.grants.some((entry) =>
             entry.profile_id === profileId
             && entry.cosmetic_type === cosmetic.type
@@ -4621,6 +4935,9 @@ function weeklyMissionAdminErrorMessage(error, fallback = "Weekly mission admini
 function playerManagerErrorMessage(error, fallback = "Player Manager is unavailable.") {
     const code = String(error?.code || "");
     const message = String(error?.message || error || "");
+    if (/admin_send_cosmetic_gift|admin_list_pending_cosmetic_gifts|user_notifications/i.test(message)) {
+        return "Run the new Supabase notification migration, then retry.";
+    }
     if (/admin_revoke_player_cosmetic_reearnable|admin_list_cosmetic_revocation_history/i.test(message)) {
         return "Run the newest incremental Supabase inventory and revocation sync script, then retry.";
     }

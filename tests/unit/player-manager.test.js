@@ -76,6 +76,7 @@ const baseProps = {
     players,
     catalog,
     grants,
+    pendingGifts: [],
     revocations: [],
     selectedId: "player-1",
     currentUserId: "owner-id",
@@ -234,7 +235,32 @@ describe("Player Manager view", () => {
         expect(html).toContain("Revoked by administrator");
         expect(html).toContain(">Restore<");
         expect(html).toContain("Restore Cosmetic");
-        expect(html).toContain("Restore cosmetic");
+        expect(html).toContain("Ownership is added only when they claim");
+        expect(html).toContain("Send gift");
+    });
+
+    it("shows pending gifts without counting them as owned or allowing duplicates", () => {
+        const html = renderPlayerManagerContent({
+            ...baseProps,
+            pendingGifts: [
+                {
+                    id: "gift-1",
+                    profile_id: "player-1",
+                    cosmetic_type: "background",
+                    cosmetic_id: "founder",
+                    message: "Thanks for testing"
+                }
+            ]
+        });
+
+        expect(html).toMatch(
+            /player-collection-item[^"]* pending(?:\s|")[^"]*" data-player-cosmetic-key="background:founder"/
+        );
+        expect(html).toContain("Gift awaiting claim");
+        expect(html).toContain("Thanks for testing");
+        expect(html).toContain("Awaiting claim");
+        expect(html).not.toContain('data-player-grant-open="background:founder"');
+        expect(html).toContain("1 owned / 2 catalog items");
     });
 
     it("renders a gift dialog with a note and only one X close control", () => {

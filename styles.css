@@ -1730,6 +1730,18 @@
     opacity: 0.5;
 }
 
+.player-collection-item.pending {
+    border-color: rgba(244, 188, 74, 0.48);
+    background: rgba(244, 188, 74, 0.08);
+    box-shadow: inset 3px 0 0 rgba(244, 188, 74, 0.72);
+}
+
+.player-collection-item.pending .player-collection-copy > span,
+.player-collection-item.pending .player-collection-action span {
+    color: var(--gold);
+    font-weight: 700;
+}
+
 .player-collection-item.archived {
     opacity: 0.5;
 }
@@ -2511,7 +2523,9 @@ a[aria-disabled="true"] {
 
 .account-widget {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    gap: 8px;
     min-width: 0;
 }
 
@@ -2557,6 +2571,42 @@ a[aria-disabled="true"] {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.notification-bell-button {
+    position: relative;
+    width: 44px;
+    min-width: 44px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0;
+}
+
+.notification-bell-button.has-unread {
+    border-color: rgba(244, 188, 74, 0.58);
+    background: rgba(244, 188, 74, 0.12);
+}
+
+.notification-bell-symbol {
+    font-family: Arial, sans-serif;
+    font-size: 1rem;
+    filter: grayscale(1);
+}
+
+.notification-bell-button > strong {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 19px;
+    height: 19px;
+    display: grid;
+    place-items: center;
+    border: 2px solid #0a1018;
+    border-radius: 999px;
+    padding: 0 4px;
+    background: #e94c59;
+    color: #fff;
+    font: 700 0.62rem/1 "Chakra Petch", sans-serif;
 }
 
 body.account-drawer-open {
@@ -2743,6 +2793,413 @@ body.account-drawer-open {
     font-size: 0.72rem;
 }
 
+.notification-drawer {
+    width: min(560px, 100vw);
+}
+
+.notification-inbox {
+    display: grid;
+    gap: 14px;
+}
+
+.notification-inbox-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.notification-inbox-heading h3,
+.notification-inbox-heading p {
+    margin: 0;
+}
+
+.notification-inbox-heading h3 {
+    margin-top: 3px;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.35rem;
+}
+
+.notification-inbox-heading > strong {
+    color: var(--gold);
+    font: 700 0.78rem "Chakra Petch", sans-serif;
+}
+
+.notification-inbox-filters {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 7px;
+}
+
+.notification-inbox-filters button,
+.notification-item-actions button,
+.notification-gift-actions button {
+    min-height: 38px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 7px 11px;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.76rem "Chakra Petch", sans-serif;
+}
+
+.notification-inbox-filters button:last-child {
+    justify-self: end;
+}
+
+.notification-inbox-filters button[aria-pressed="true"],
+.notification-inbox-filters button:hover,
+.notification-item-actions button:hover:not(:disabled),
+.notification-gift-actions button:hover:not(:disabled) {
+    border-color: rgba(244, 188, 74, 0.52);
+    background: rgba(244, 188, 74, 0.1);
+    color: var(--gold);
+}
+
+.notification-inbox-filters button:disabled,
+.notification-item-actions button:disabled,
+.notification-gift-actions button:disabled {
+    cursor: wait;
+    opacity: 0.6;
+}
+
+.notification-inbox-message {
+    margin: 0;
+    border-left: 3px solid var(--green);
+    padding: 8px 10px;
+    background: rgba(75, 215, 132, 0.08);
+    color: var(--text);
+    font-size: 0.78rem;
+}
+
+.notification-inbox-message.error {
+    border-left-color: #e94c59;
+    background: rgba(233, 76, 89, 0.08);
+}
+
+.notification-inbox-state {
+    min-height: 180px;
+    display: grid;
+    place-content: center;
+    gap: 5px;
+    border: 1px dashed var(--line);
+    padding: 24px;
+    color: var(--muted);
+    text-align: center;
+}
+
+.notification-inbox-state strong {
+    color: var(--text);
+}
+
+.notification-inbox-state.error {
+    border-color: rgba(233, 76, 89, 0.35);
+}
+
+.notification-list {
+    display: grid;
+    gap: 8px;
+}
+
+.notification-item {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: rgba(13, 20, 30, 0.76);
+}
+
+.notification-item.unread {
+    border-color: rgba(244, 188, 74, 0.48);
+    box-shadow: inset 3px 0 0 rgba(244, 188, 74, 0.74);
+}
+
+.notification-item.open {
+    background: rgba(18, 27, 39, 0.96);
+}
+
+.notification-item-summary {
+    width: 100%;
+    min-height: 78px;
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    padding: 10px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+}
+
+.notification-item-copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.notification-item-copy strong,
+.notification-item-copy span,
+.notification-item-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.notification-item-copy strong {
+    font: 700 0.88rem "Chakra Petch", sans-serif;
+}
+
+.notification-item-copy span,
+.notification-item-copy small {
+    color: var(--muted);
+    font-size: 0.7rem;
+}
+
+.notification-unread-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 12px rgba(244, 188, 74, 0.62);
+}
+
+.notification-expand-icon {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    color: var(--muted);
+    font: 700 1rem/1 "Chakra Petch", sans-serif;
+}
+
+.notification-cosmetic-preview {
+    --rarity-color: #a8b1bd;
+    position: relative;
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--rarity-color) 58%, var(--line));
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--rarity-color) 10%, #080d14);
+    color: var(--rarity-color);
+    text-align: center;
+}
+
+.notification-cosmetic-preview.large {
+    width: 132px;
+    height: 132px;
+    border-width: 2px;
+    border-radius: 8px;
+}
+
+.notification-cosmetic-preview img,
+.notification-preview-fallback {
+    grid-area: 1 / 1;
+}
+
+.notification-cosmetic-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.notification-preview-fallback {
+    font: 700 1.2rem "Chakra Petch", sans-serif;
+}
+
+.notification-cosmetic-preview > span:not(.notification-preview-fallback) {
+    max-width: 100%;
+    padding: 5px;
+    font: 700 0.58rem "Chakra Petch", sans-serif;
+    overflow-wrap: anywhere;
+}
+
+.notification-cosmetic-preview.large > span:not(.notification-preview-fallback) {
+    font-size: 0.9rem;
+}
+
+.notification-cosmetic-preview.rarity-rare {
+    --rarity-color: #6fb7ff;
+}
+
+.notification-cosmetic-preview.rarity-epic {
+    --rarity-color: #c388ff;
+}
+
+.notification-cosmetic-preview.rarity-legendary {
+    --rarity-color: #ffcb6b;
+}
+
+.notification-cosmetic-preview.rarity-mythic {
+    --rarity-color: #ff657d;
+}
+
+.notification-item-detail {
+    display: grid;
+    gap: 11px;
+    border-top: 1px solid var(--line);
+    padding: 12px;
+}
+
+.notification-item-detail > p {
+    margin: 0;
+    color: var(--text);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.notification-item-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.notification-item-meta strong {
+    color: var(--gold);
+}
+
+.notification-item-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 7px;
+}
+
+.notification-item-actions .primary,
+.notification-gift-actions .primary {
+    border-color: rgba(75, 215, 132, 0.48);
+    background: rgba(75, 215, 132, 0.12);
+    color: #9ff0bc;
+}
+
+.notification-item-actions .danger {
+    border-color: rgba(233, 76, 89, 0.42);
+    color: #ff9ba5;
+}
+
+body.notification-gift-open {
+    overflow: hidden;
+}
+
+.notification-gift-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 92;
+    display: grid;
+    place-items: center;
+    overflow-y: auto;
+    padding: 20px;
+    background: rgba(3, 6, 10, 0.78);
+    backdrop-filter: blur(8px);
+    animation: notification-backdrop-enter 180ms ease-out;
+}
+
+.notification-gift-dialog {
+    --rarity-color: #a8b1bd;
+    position: relative;
+    width: min(460px, 100%);
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--rarity-color) 58%, var(--line));
+    border-radius: 8px;
+    padding: 30px;
+    background: #0d1520;
+    box-shadow: 0 26px 80px rgba(0, 0, 0, 0.58);
+    color: var(--text);
+    text-align: center;
+    animation: notification-gift-enter 220ms ease-out;
+}
+
+.notification-gift-dialog.rarity-rare {
+    --rarity-color: #6fb7ff;
+}
+
+.notification-gift-dialog.rarity-epic {
+    --rarity-color: #c388ff;
+}
+
+.notification-gift-dialog.rarity-legendary {
+    --rarity-color: #ffcb6b;
+}
+
+.notification-gift-dialog.rarity-mythic {
+    --rarity-color: #ff657d;
+}
+
+.notification-gift-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.85rem "Chakra Petch", sans-serif;
+}
+
+.notification-gift-preview {
+    margin-top: 4px;
+}
+
+.notification-gift-dialog .panel-kicker,
+.notification-gift-dialog h2,
+.notification-gift-message {
+    margin: 0;
+}
+
+.notification-gift-dialog h2 {
+    color: var(--rarity-color);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 1.55rem;
+}
+
+.notification-gift-message {
+    max-width: 36ch;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.notification-gift-sender {
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+.notification-gift-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+@keyframes notification-backdrop-enter {
+    from {
+        opacity: 0;
+    }
+}
+
+@keyframes notification-gift-enter {
+    from {
+        opacity: 0;
+        transform: translateY(14px) scale(0.98);
+    }
+}
+
 .profile-drawer-missions {
     display: grid;
     gap: 14px;
@@ -2816,6 +3273,41 @@ body.account-drawer-open {
 
     .profile-drawer-missions .mission-head {
         align-items: flex-start;
+    }
+
+    .notification-item-summary {
+        grid-template-columns: 46px minmax(0, 1fr) auto;
+        gap: 8px;
+    }
+
+    .notification-cosmetic-preview {
+        width: 46px;
+        height: 46px;
+    }
+
+    .notification-unread-dot {
+        display: none;
+    }
+
+    .notification-item-meta,
+    .notification-item-actions {
+        align-items: stretch;
+    }
+
+    .notification-item-actions button {
+        flex: 1 1 130px;
+    }
+
+    .notification-gift-backdrop {
+        padding: 12px;
+    }
+
+    .notification-gift-dialog {
+        padding: 24px 18px 18px;
+    }
+
+    .notification-gift-actions {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -8567,6 +9059,8 @@ body.cosmetic-picker-open {
 @media (prefers-reduced-motion: reduce) {
     .profile-drawer-backdrop,
     .profile-drawer,
+    .notification-gift-backdrop,
+    .notification-gift-dialog,
     .mission-row.rewarding,
     .mission-claim-burst {
         animation: none;
