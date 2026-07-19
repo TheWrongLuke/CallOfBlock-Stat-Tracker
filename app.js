@@ -1,5 +1,11 @@
 import { createFeedbackApi } from "./src/api/feedback.js";
+import { saveProfileCustomization, syncDiscordProfile } from "./src/api/profile.js";
 import { createProgressionAdminApi } from "./src/api/progression.js";
+import {
+    claimWeeklyMissionReward,
+    ensureWeeklyMissions,
+    swapWeeklyMission
+} from "./src/api/weekly-missions.js";
 import { canOpenAdminRoute, isAdminProfile } from "./src/auth/permissions.js";
 import {
     COSMETIC_ACQUISITION_TYPES,
@@ -1988,47 +1994,12 @@ async function fetchSupabaseExport() {
 
 async function syncPlaytestProfile(user) {
     if (!state.authClient || !user?.id) return null;
-
-    const discordId = discordIdFromUser(user);
-    if (!discordId) {
-        state.authMessage = "Discord login connected, but Discord ID was not returned.";
-        return null;
-    }
-
-    const username = discordUsernameFromUser(user);
-    const avatarUrl = discordAvatarFromUser(user);
     try {
-        const { data: existing, error: selectError, extended, cosmeticsExtended } = await selectOwnProfile(user.id);
-        state.authProfileExtended = extended;
-        state.authCosmeticInventoryExtended = cosmeticsExtended;
-        if (selectError) throw selectError;
-
-        if (existing) {
-            const updatePayload = { username, avatar_url: avatarUrl || null };
-            if (state.authProfileExtended && !existing.display_name) updatePayload.display_name = username;
-            const { data, error } = await state.authClient
-                .from("profiles")
-                .update(updatePayload)
-                .eq("id", user.id)
-                .select(ownProfileSelectColumns())
-                .single();
-            if (error) throw error;
-            applyPlaytestProfile(data);
-            return data;
-        }
-
-        const { data, error } = await state.authClient
-            .from("profiles")
-            .insert({
-                id: user.id,
-                discord_id: discordId,
-                username,
-                avatar_url: avatarUrl || null,
-                ...(state.authProfileExtended ? { display_name: username, avatar_source: "discord" } : {})
-            })
-            .select(ownProfileSelectColumns())
-            .single();
+        const { data, error } = await syncDiscordProfile(state.authClient);
         if (error) throw error;
+        if (!data?.id || data.id !== user.id) throw new Error("Supabase returned an invalid profile.");
+        state.authProfileExtended = true;
+        state.authCosmeticInventoryExtended = true;
         applyPlaytestProfile(data);
         return data;
     } catch (error) {
@@ -6323,78 +6294,12 @@ function renderAccountMissionViews() {
 }
 
 async function loadRemoteWeeklyMissionRow(account, profile, cycle) {
-    const columns = "user_id, cycle_key, cycle_ends_at, missions, claimed_ids, swapped_ids, awaiting_link, created_at, updated_at";
-    const existing = await state.authClient
-        .from("profile_weekly_missions")
-        .select(columns)
-        .eq("user_id", account.id)
-        .eq("cycle_key", cycle.key)
-        .maybeSingle();
-    if (existing.error) throw existing.error;
-    if (existing.data) {
-        const needsInitialization = !Array.isArray(existing.data.missions)
-            || existing.data.missions.length !== WEEKLY_MISSION_COUNT
-            || (existing.data.awaiting_link && profile);
-        if (!needsInitialization) return existing.data;
-        return initializeRemoteWeeklyMissionRow(account, profile, cycle, columns);
+    const { data, error } = await ensureWeeklyMissions(state.authClient);
+    if (error) throw error;
+    if (!data?.user_id || data.user_id !== account.id || data.cycle_key !== cycle.key) {
+        throw new Error("Supabase returned an invalid weekly mission cycle.");
     }
-
-    const previousResult = await state.authClient
-        .from("profile_weekly_missions")
-        .select(columns)
-        .eq("user_id", account.id)
-        .lt("cycle_key", cycle.key)
-        .order("cycle_key", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-    if (previousResult.error) throw previousResult.error;
-
-    const freshMissions = generateWeeklyMissions(account, profile, cycle);
-    const missions = renewWeeklyMissions(previousResult.data, freshMissions, profile, cycle);
-    const inserted = await state.authClient
-        .from("profile_weekly_missions")
-        .insert({
-            user_id: account.id,
-            cycle_key: cycle.key,
-            cycle_ends_at: cycle.endsAt,
-            missions,
-            claimed_ids: [],
-            swapped_ids: [],
-            awaiting_link: !profile
-        })
-        .select(columns)
-        .single();
-    if (inserted.error) {
-        const raced = await state.authClient
-            .from("profile_weekly_missions")
-            .select(columns)
-            .eq("user_id", account.id)
-            .eq("cycle_key", cycle.key)
-            .maybeSingle();
-        if (raced.error || !raced.data) throw inserted.error;
-        return raced.data;
-    }
-    return inserted.data;
-}
-
-async function initializeRemoteWeeklyMissionRow(account, profile, cycle, columns) {
-    const missions = generateWeeklyMissions(account, profile, cycle);
-    const initialized = await state.authClient.rpc("initialize_weekly_missions", {
-        p_cycle_key: cycle.key,
-        p_cycle_ends_at: cycle.endsAt,
-        p_missions: missions,
-        p_awaiting_link: !profile
-    });
-    if (initialized.error) throw initialized.error;
-
-    const refreshed = await state.authClient
-        .from("profile_weekly_missions")
-        .select(columns)
-        .eq("user_id", account.id)
-        .eq("cycle_key", cycle.key)
-        .single();
-    if (refreshed.error) throw refreshed.error;
-    return refreshed.data;
+    return data;
 }
 
 function loadLocalWeeklyMissionRow(account, profile, cycle) {
@@ -6473,15 +6378,10 @@ async function claimWeeklyMission(missionId) {
     missionState.claimingId = mission.id;
     renderAccountMissionViews();
     try {
-        const { data, error } = await state.authClient.rpc("claim_weekly_mission", {
-            p_cycle_key: missionState.row.cycle_key,
-            p_mission_id: mission.id
-        });
+        const { data, error } = await claimWeeklyMissionReward(state.authClient, mission.id);
         if (error) throw error;
-        claimedIds.add(mission.id);
-        missionState.row.claimed_ids = [...claimedIds];
-        const xp = number(Array.isArray(data) ? data[0] : data);
-        if (xp || data === 0) applyAccountXp(xp);
+        missionState.row.claimed_ids = arrayField(data?.claimed_ids || [...claimedIds, mission.id]);
+        applyAccountXp(number(data?.xp));
         missionState.message = "";
         missionState.animatingId = mission.id;
         window.setTimeout(() => {
@@ -6555,30 +6455,16 @@ function renderWeeklyMissionSwapDialog() {
 
 async function submitWeeklyMissionSwap() {
     const missionState = state.weeklyMissions;
-    const profile = linkedStatsProfile();
     const mission = missionState.row?.missions?.find((entry) => entry.id === missionState.swapMissionId);
     if (isCurrentAccountCommunityBanned() || missionState.swapping || missionState.source !== "supabase"
-        || !mission?.carried || mission.swapUsed || !profile) return;
-
-    const replacement = generateWeeklyMissionReplacement(mission, profile);
-    if (!replacement) {
-        missionState.message = "No different mission is available for this slot right now.";
-        closeWeeklyMissionSwapDialog();
-        renderAccountMissionViews();
-        return;
-    }
+        || !mission?.carried || mission.swapUsed) return;
 
     missionState.swapping = true;
     renderWeeklyMissionSwapDialog();
     try {
-        const { data, error } = await state.authClient.rpc("swap_weekly_mission", {
-            p_cycle_key: missionState.row.cycle_key,
-            p_mission_id: mission.id,
-            p_replacement: replacement
-        });
+        const { data, error } = await swapWeeklyMission(state.authClient, mission.id);
         if (error) throw error;
-        missionState.row.missions = Array.isArray(data) ? data : replacementMissionLocally(missionState.row.missions, mission.id, replacement);
-        missionState.row.swapped_ids = [...new Set([...arrayField(missionState.row.swapped_ids), mission.id])];
+        missionState.row = normalizeWeeklyMissionRow(data);
         missionState.message = "Mission swapped. The new mission starts from your current stats.";
         missionState.swapMissionId = "";
     } catch (error) {
@@ -6589,28 +6475,6 @@ async function submitWeeklyMissionSwap() {
         renderWeeklyMissionSwapDialog();
         renderAccountMissionViews();
     }
-}
-
-function generateWeeklyMissionReplacement(mission, profile) {
-    const cycle = weeklyMissionCycle();
-    const rng = seededRandom(`${state.authProfile?.id}:${cycle.key}:${mission.id}:${Date.now()}`);
-    const usedFamilies = new Set((state.weeklyMissions.row?.missions || []).map((entry) => entry.family));
-    const candidates = shuffleWithRandom(weeklyMissionCandidates(profile, mission.difficulty, rng), rng);
-    const candidate = candidates.find((entry) => entry.family !== mission.family && !usedFamilies.has(entry.family))
-        || candidates.find((entry) => entry.family !== mission.family);
-    if (!candidate) return null;
-    const replacement = {
-        ...candidate,
-        id: `${cycle.key}-${mission.difficulty}-swap-${Date.now()}`,
-        baseline: weeklyMissionMetric(profile, candidate),
-        swapUsed: true,
-        swappedFrom: mission.id
-    };
-    return replacement;
-}
-
-function replacementMissionLocally(missions, missionId, replacement) {
-    return (missions || []).map((mission) => mission.id === missionId ? replacement : mission);
 }
 
 function weeklyMissionCycle(now = new Date()) {
@@ -10244,7 +10108,6 @@ async function submitAccountForm(form) {
         const draft = readAccountFormDraft(form);
         const linkedProfile = linkedStatsProfile();
         const badgeState = accountBadgeState(state.authProfile, linkedProfile);
-        const inferredLink = inferredMinecraftLinkPayload(state.authProfile, linkedProfile);
         const selectedBadges = draft.selectedBadges.filter((id) => badgeState.unlockedIds.has(id)).slice(0, 5);
         const customBackgroundUrl = state.authProfile?.custom_background_url || "";
 
@@ -10255,7 +10118,6 @@ async function submitAccountForm(form) {
         const payload = {
             display_name: cleanDisplayName(draft.displayName),
             avatar_source: draft.avatarSource,
-            custom_background_url: customBackgroundUrl || null,
             profile_background: cleanProfileBackground(draft.profileBackground, { ...state.authProfile, custom_background_url: customBackgroundUrl }, badgeStateAfterUpload),
             pfp_border: cleanPfpBorder(draft.pfpBorder, state.authProfile, badgeState),
             selected_badges: selectedBadges,
@@ -10268,19 +10130,19 @@ async function submitAccountForm(form) {
         state.accountMessage = "";
         setAccountFormSaving(form, true);
 
-        const { data, error } = await state.authClient
-            .from("profiles")
-            .update(payload)
-            .eq("id", state.authSession.user.id)
-            .select(ownProfileSelectColumns())
-            .single();
+        const { data, error } = await saveProfileCustomization(state.authClient, {
+            displayName: payload.display_name,
+            avatarSource: payload.avatar_source,
+            profileBackground: payload.profile_background,
+            pfpBorder: payload.pfp_border,
+            profileTitle: payload.profile_title || "none",
+            selectedBadges: payload.selected_badges
+        });
         if (error) throw error;
         verifySavedProfile(data, payload);
-
-        const linkResult = await saveInferredMinecraftLink(inferredLink);
-        applyPlaytestProfile(linkResult.profile || data);
+        applyPlaytestProfile(data);
         await loadAccountProfiles();
-        state.accountMessage = linkResult.warning ? `Profile saved. ${linkResult.warning}` : "Profile saved.";
+        state.accountMessage = "Profile saved.";
     } catch (error) {
         console.error("Failed to save account profile", error);
         state.accountMessage = error?.message || "Could not save profile right now.";
@@ -10386,34 +10248,6 @@ function accountMinecraftNameKeys(account) {
         ? [account.minecraft_player_name]
         : [account?.display_name, account?.username];
     return new Set(names.map(normalizePlayerName).filter(Boolean));
-}
-
-function inferredMinecraftLinkPayload(account, profile) {
-    if (!account || !profile?.playerId || !profile?.name) return {};
-    const payload = {};
-    if (!String(account.minecraft_player_id || "").trim()) payload.minecraft_player_id = profile.playerId;
-    if (!String(account.minecraft_player_name || "").trim()) payload.minecraft_player_name = profile.name;
-    return payload;
-}
-
-async function saveInferredMinecraftLink(payload) {
-    if (!payload?.minecraft_player_id && !payload?.minecraft_player_name) return { profile: null, warning: "" };
-    try {
-        const { data, error } = await state.authClient
-            .from("profiles")
-            .update(payload)
-            .eq("id", state.authSession.user.id)
-            .select(ownProfileSelectColumns())
-            .single();
-        if (error) throw error;
-        return { profile: data, warning: "" };
-    } catch (error) {
-        console.warn("Profile saved, but inferred Minecraft link could not be stored", error);
-        return {
-            profile: null,
-            warning: "Minecraft link was not stored, so run /linkminecraft in Discord's #minecraft-verification channel if the leaderboard icon does not stay linked after renaming."
-        };
-    }
 }
 
 function accountProfileCandidates() {
