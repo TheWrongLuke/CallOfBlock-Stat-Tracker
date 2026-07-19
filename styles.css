@@ -2831,6 +2831,47 @@ body.account-drawer-open {
     background: rgba(255, 255, 255, 0.05);
 }
 
+.avatar-image,
+.avatar-image-fallback {
+    grid-area: 1 / 1;
+    width: 100%;
+    height: 100%;
+}
+
+.avatar-image {
+    position: relative;
+    z-index: 1;
+}
+
+.avatar-image-fallback {
+    display: grid;
+    place-items: center;
+    border-radius: inherit;
+    background: #182534;
+    color: #eef4ff;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.avatar-image-fallback[hidden] {
+    display: none;
+}
+
+.account-avatar-large .avatar-image-fallback,
+.account-preview-avatar .avatar-image-fallback,
+.player-profile-avatar .avatar-image-fallback,
+.profile-preview-avatar .avatar-image-fallback,
+.cosmetic-picker-preview-avatar .avatar-image-fallback {
+    font-size: 1.25rem;
+}
+
+.avatar-image[src*="mc-heads"],
+.avatar-image[src*="mcheads"] {
+    image-rendering: pixelated;
+}
+
 .account-avatar-frame {
     width: 30px;
     height: 30px;

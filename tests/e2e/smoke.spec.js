@@ -256,9 +256,12 @@ async function installPageStubs(page, supabaseBody) {
     await page.route("https://test.supabase.co/rest/v1/**", (route) =>
         route.fulfill({ contentType: "application/json", body: "[]" })
     );
-    for (const pattern of ["https://api.mcheads.org/**", "https://mc-heads.net/**"]) {
-        await page.route(pattern, (route) => route.fulfill({ contentType: "image/png", body: transparentPng }));
-    }
+    await page.route("https://mc-heads.net/**", (route) =>
+        route.fulfill({ status: 502, contentType: "application/json", body: '{"error":"unavailable"}' })
+    );
+    await page.route("https://api.mcheads.org/**", (route) =>
+        route.fulfill({ contentType: "image/png", body: transparentPng })
+    );
     await page.route("https://fonts.googleapis.com/**", (route) =>
         route.fulfill({ contentType: "text/css", body: "" })
     );
@@ -576,17 +579,18 @@ test("an administrator can search players, inspect collections, and open protect
     await expect(page.locator("[data-player-ban-form]")).toBeHidden();
 });
 
-test("the Minecraft avatar ignores its catalog placeholder image", async ({ page }) => {
+test("the Minecraft avatar survives a failed primary skin service", async ({ page }) => {
     await openAdminApp(page, "#account");
     await expect(page.locator("[data-account-form]")).toBeVisible();
     await expect(page.locator(".account-hero .account-avatar-large img")).toHaveAttribute(
         "src",
-        /https:\/\/(?:api\.mcheads\.org\/head|mc-heads\.net\/avatar)\/AdminMC\/128/
+        /https:\/\/api\.mcheads\.org\/head\/AdminMC\/128/
     );
     await expect(page.locator("[data-account-preview-img]")).toHaveAttribute(
         "src",
-        /https:\/\/(?:api\.mcheads\.org\/head|mc-heads\.net\/avatar)\/AdminMC\//
+        /https:\/\/api\.mcheads\.org\/head\/AdminMC\//
     );
+    await expect(page.locator(".account-hero .avatar-image-fallback")).toBeHidden();
 });
 
 test("personal cosmetics remember the Show unowned preference after reload", async ({ page }) => {

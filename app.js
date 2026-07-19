@@ -506,6 +506,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
     setupAuthClient();
     loadPlaytestState();
+    bindAvatarImageEvents();
     applyRoute();
     bindStaticEvents();
     startChampionRotation();
@@ -513,6 +514,24 @@ document.addEventListener("DOMContentLoaded", () => {
     void loadRemotePlaytests({ silent: true });
     void loadData();
 });
+
+function bindAvatarImageEvents() {
+    document.addEventListener("load", (event) => {
+        const image = event.target;
+        if (!(image instanceof HTMLImageElement) || !image.classList.contains("avatar-image")) return;
+        image.hidden = false;
+        const fallback = image.previousElementSibling;
+        if (fallback?.classList.contains("avatar-image-fallback")) fallback.hidden = true;
+    }, true);
+    document.addEventListener("error", (event) => {
+        const image = event.target;
+        if (image instanceof HTMLImageElement && image.hasAttribute("data-avatar-fallbacks")) {
+            handleAvatarFallback(image);
+        } else if (image instanceof HTMLImageElement && image.hasAttribute("data-player-manager-avatar")) {
+            image.remove();
+        }
+    }, true);
+}
 
 function setupLiveConfig() {
     const params = new URLSearchParams(window.location.search);
@@ -1470,14 +1489,6 @@ function bindStaticEvents() {
     });
 
     document.addEventListener("mouseover", handleBadgeSeenEvent);
-    document.addEventListener("error", (event) => {
-        const image = event.target;
-        if (image instanceof HTMLImageElement && image.hasAttribute("data-avatar-fallbacks")) {
-            handleAvatarFallback(image);
-        } else if (image instanceof HTMLImageElement && image.hasAttribute("data-player-manager-avatar")) {
-            image.remove();
-        }
-    }, true);
     document.addEventListener("focusin", handleBadgeSeenEvent);
     document.addEventListener("mouseover", handleBadgeProgressEnter);
     document.addEventListener("mouseout", handleBadgeProgressLeave);
@@ -10273,8 +10284,11 @@ function renderAvatarImage(url, account, profile, size, loading = "lazy", extraA
     const currentUrl = String(url || skinHeadUrl(accountMinecraftName(account, profile), size));
     const fallbacks = avatarFallbackUrls(currentUrl, account, profile, size);
     const fallbackAttr = escapeHtml(JSON.stringify(fallbacks));
+    const fallbackLabel = initialsForName(
+        account?.display_name || account?.username || accountMinecraftName(account, profile) || "Player"
+    );
     const attrs = extraAttributes ? ` ${extraAttributes}` : "";
-    return `<img src="${escapeHtml(currentUrl)}" alt="" loading="${escapeHtml(loading)}" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackAttr}"${attrs}>`;
+    return `<span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(fallbackLabel)}</span><img class="avatar-image" src="${escapeHtml(currentUrl)}" alt="" loading="${escapeHtml(loading)}" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackAttr}"${attrs}>`;
 }
 
 function avatarFallbackUrls(currentUrl, account, profile, size) {
@@ -10282,6 +10296,7 @@ function avatarFallbackUrls(currentUrl, account, profile, size) {
     const urls = [
         skinHeadUrl(name, size),
         alternateSkinHeadUrl(name, size),
+        String(account?.avatar_url || "").trim(),
         skinHeadUrl(DEFAULT_SKIN_NAME, size),
         alternateSkinHeadUrl(DEFAULT_SKIN_NAME, size)
     ];
@@ -10295,6 +10310,9 @@ function avatarFallbackUrls(currentUrl, account, profile, size) {
 
 function setAvatarFallbacks(image, currentUrl, account, profile, size) {
     if (!image) return;
+    image.hidden = false;
+    const fallback = image.previousElementSibling;
+    if (fallback?.classList.contains("avatar-image-fallback")) fallback.hidden = false;
     image.dataset.avatarFallbacks = JSON.stringify(avatarFallbackUrls(currentUrl, account, profile, size));
 }
 
@@ -10313,6 +10331,7 @@ function handleAvatarFallback(image) {
         return;
     }
     image.removeAttribute("data-avatar-fallbacks");
+    image.hidden = true;
 }
 
 function accountAvatarUrl(account, profile, size = 64) {
@@ -11926,13 +11945,13 @@ function viewerTimeZoneLabel() {
 function skinHeadUrl(name, size) {
     const safeName = String(name || DEFAULT_SKIN_NAME).trim() || DEFAULT_SKIN_NAME;
     const safeSize = Math.max(16, Math.min(256, Math.round(number(size) || 96)));
-    return `https://api.mcheads.org/head/${encodeURIComponent(safeName)}/${safeSize}`;
+    return `https://mc-heads.net/avatar/${encodeURIComponent(safeName)}/${safeSize}`;
 }
 
 function alternateSkinHeadUrl(name, size) {
     const safeName = String(name || DEFAULT_SKIN_NAME).trim() || DEFAULT_SKIN_NAME;
     const safeSize = Math.max(16, Math.min(256, Math.round(number(size) || 96)));
-    return `https://mc-heads.net/avatar/${encodeURIComponent(safeName)}/${safeSize}`;
+    return `https://api.mcheads.org/head/${encodeURIComponent(safeName)}/${safeSize}`;
 }
 
 function openContactEmail() {
