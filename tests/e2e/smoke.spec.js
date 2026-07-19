@@ -40,6 +40,11 @@ window.COB_STATS_API_URL = "";
 window.COB_STATS_POLL_MS = 10000;
 `;
 
+const transparentPng = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    "base64"
+);
+
 const adminSupabaseStub = `
 (() => {
     const profile = {
@@ -74,6 +79,23 @@ const adminSupabaseStub = `
         banned_at: null,
         banned_by_username: null,
         created_at: "2026-07-02T12:00:00Z"
+    };
+    function currentCycleKey() {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+        return [start.getFullYear(), String(start.getMonth() + 1).padStart(2, "0"), String(start.getDate()).padStart(2, "0")].join("-");
+    }
+    const missionRow = {
+        user_id: profile.id,
+        cycle_key: currentCycleKey(),
+        cycle_ends_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        missions: [],
+        claimed_ids: [],
+        swapped_ids: [],
+        awaiting_link: false,
+        created_at: "2026-07-01T12:00:00Z",
+        updated_at: "2026-07-01T12:00:00Z"
     };
 
     function resultFor(table, calls) {
@@ -183,14 +205,23 @@ const adminSupabaseStub = `
                     signOut: async () => ({ error: null })
                 },
                 from: (table) => builder(table),
-                rpc: async (name) => ({
-                    data: name === "reconcile_cosmetic_ownership_v2"
-                        ? { eligible: 0, added: 0, removed: 0 }
-                        : name === "admin_list_managed_players"
-                            ? [profile, member]
-                            : [],
-                    error: null
-                }),
+                rpc: async (name) => {
+                    if (name === "sync_discord_profile_v2" && window.__profileSyncDelayMs) {
+                        await new Promise((resolve) => setTimeout(resolve, window.__profileSyncDelayMs));
+                    }
+                    return {
+                        data: name === "sync_discord_profile_v2" || name === "save_profile_customization_v2"
+                            ? profile
+                            : name === "ensure_weekly_missions_v2"
+                                ? missionRow
+                                : name === "reconcile_cosmetic_ownership_v2"
+                                    ? { eligible: 0, added: 0, removed: 0 }
+                                    : name === "admin_list_managed_players"
+                                        ? [profile, member]
+                                        : [],
+                        error: null
+                    };
+                },
                 storage: { from: () => ({}) }
             };
         }
@@ -202,7 +233,7 @@ const memberSupabaseStub = adminSupabaseStub
     .replace("is_admin: true", "is_admin: false")
     .replace("is_owner: true", "is_owner: false");
 
-const delayedAdminSupabaseStub = adminSupabaseStub
+const delayedAdminSupabaseStub = `window.__profileSyncDelayMs = 1200;\n${adminSupabaseStub}`
     .replace(
         "function builder(table) {\n        const calls = [];",
         `function builder(table) {
@@ -218,13 +249,26 @@ const delayedAdminSupabaseStub = adminSupabaseStub
                     );`
     );
 
-async function openApp(page, hash = "") {
+async function installPageStubs(page, supabaseBody) {
     await page.route("https://cdn.jsdelivr.net/**", (route) =>
-        route.fulfill({ contentType: "text/javascript", body: supabaseStub })
+        route.fulfill({ contentType: "text/javascript", body: supabaseBody })
+    );
+    await page.route("https://test.supabase.co/rest/v1/**", (route) =>
+        route.fulfill({ contentType: "application/json", body: "[]" })
+    );
+    for (const pattern of ["https://api.mcheads.org/**", "https://mc-heads.net/**"]) {
+        await page.route(pattern, (route) => route.fulfill({ contentType: "image/png", body: transparentPng }));
+    }
+    await page.route("https://fonts.googleapis.com/**", (route) =>
+        route.fulfill({ contentType: "text/css", body: "" })
     );
     await page.route("**/api-config.js*", (route) =>
         route.fulfill({ contentType: "text/javascript", body: configStub })
     );
+}
+
+async function openApp(page, hash = "") {
+    await installPageStubs(page, supabaseStub);
     await page.goto(`/${hash}`);
     await page.waitForLoadState("domcontentloaded");
 }
@@ -239,45 +283,25 @@ async function openAuthenticatedApp(page, hash = "") {
             }
         }`
     );
-    await page.route("https://cdn.jsdelivr.net/**", (route) =>
-        route.fulfill({ contentType: "text/javascript", body: authenticatedStub })
-    );
-    await page.route("**/api-config.js*", (route) =>
-        route.fulfill({ contentType: "text/javascript", body: configStub })
-    );
+    await installPageStubs(page, authenticatedStub);
     await page.goto(`/${hash}`);
     await page.waitForLoadState("domcontentloaded");
 }
 
 async function openAdminApp(page, hash = "#admin-progression") {
-    await page.route("https://cdn.jsdelivr.net/**", (route) =>
-        route.fulfill({ contentType: "text/javascript", body: adminSupabaseStub })
-    );
-    await page.route("**/api-config.js*", (route) =>
-        route.fulfill({ contentType: "text/javascript", body: configStub })
-    );
+    await installPageStubs(page, adminSupabaseStub);
     await page.goto(`/${hash}`);
     await page.waitForLoadState("domcontentloaded");
 }
 
 async function openMemberApp(page, hash = "") {
-    await page.route("https://cdn.jsdelivr.net/**", (route) =>
-        route.fulfill({ contentType: "text/javascript", body: memberSupabaseStub })
-    );
-    await page.route("**/api-config.js*", (route) =>
-        route.fulfill({ contentType: "text/javascript", body: configStub })
-    );
+    await installPageStubs(page, memberSupabaseStub);
     await page.goto(`/${hash}`);
     await page.waitForLoadState("domcontentloaded");
 }
 
 async function openDelayedAdminApp(page, hash = "#admin-help") {
-    await page.route("https://cdn.jsdelivr.net/**", (route) =>
-        route.fulfill({ contentType: "text/javascript", body: delayedAdminSupabaseStub })
-    );
-    await page.route("**/api-config.js*", (route) =>
-        route.fulfill({ contentType: "text/javascript", body: configStub })
-    );
+    await installPageStubs(page, delayedAdminSupabaseStub);
     await page.goto(`/${hash}`);
     await page.waitForLoadState("domcontentloaded");
 }

@@ -2006,7 +2006,7 @@ async function syncPlaytestProfile(user) {
         console.error("Failed to sync Discord profile", error);
         state.authProfile = null;
         PLAYTEST_VIEWER.isAdmin = false;
-        state.authMessage = "Discord login worked, but profile sync failed. Check the playtest schema.";
+        state.authMessage = "Discord login worked, but secure profile sync is unavailable. Apply the current Supabase security migration.";
         return null;
     }
 }
@@ -2032,11 +2032,6 @@ async function selectOwnProfile(userId) {
         .eq("id", userId)
         .maybeSingle();
     return { ...baseResult, extended: false, cosmeticsExtended: false };
-}
-
-function ownProfileSelectColumns() {
-    if (!state.authProfileExtended) return PROFILE_BASE_COLUMNS;
-    return state.authCosmeticInventoryExtended ? PROFILE_SELECT_COLUMNS : PROFILE_SELECT_COLUMNS_LEGACY;
 }
 
 async function loadAccountProfiles() {
@@ -6280,7 +6275,7 @@ async function syncWeeklyMissions() {
         console.warn("Weekly mission persistence is not available", error);
         missionState.row = loadLocalWeeklyMissionRow(account, profile, cycle);
         missionState.source = "local";
-        missionState.message = "Preview mode: run supabase-weekly-missions.sql to save mission progress and receive XP.";
+        missionState.message = "Preview mode: secure weekly mission persistence is currently unavailable.";
     } finally {
         missionState.loading = false;
         missionState.syncing = false;
