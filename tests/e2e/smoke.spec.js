@@ -198,6 +198,26 @@ const adminSupabaseStub = `
 })();
 `;
 
+const memberSupabaseStub = adminSupabaseStub
+    .replace("is_admin: true", "is_admin: false")
+    .replace("is_owner: true", "is_owner: false");
+
+const delayedAdminSupabaseStub = adminSupabaseStub
+    .replace(
+        "function builder(table) {\n        const calls = [];",
+        `function builder(table) {
+        window.__queriedSupabaseTables = window.__queriedSupabaseTables || [];
+        window.__queriedSupabaseTables.push(table);
+        const calls = [];`
+    )
+    .replace(
+        "return (resolve) => resolve(resultFor(table, calls));",
+        `return (resolve) => setTimeout(
+                        () => resolve(resultFor(table, calls)),
+                        table === "profiles" ? 1200 : 0
+                    );`
+    );
+
 async function openApp(page, hash = "") {
     await page.route("https://cdn.jsdelivr.net/**", (route) =>
         route.fulfill({ contentType: "text/javascript", body: supabaseStub })
@@ -240,6 +260,28 @@ async function openAdminApp(page, hash = "#admin-progression") {
     await page.waitForLoadState("domcontentloaded");
 }
 
+async function openMemberApp(page, hash = "") {
+    await page.route("https://cdn.jsdelivr.net/**", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: memberSupabaseStub })
+    );
+    await page.route("**/api-config.js*", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: configStub })
+    );
+    await page.goto(`/${hash}`);
+    await page.waitForLoadState("domcontentloaded");
+}
+
+async function openDelayedAdminApp(page, hash = "#admin-help") {
+    await page.route("https://cdn.jsdelivr.net/**", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: delayedAdminSupabaseStub })
+    );
+    await page.route("**/api-config.js*", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: configStub })
+    );
+    await page.goto(`/${hash}`);
+    await page.waitForLoadState("domcontentloaded");
+}
+
 test("homepage and primary navigation load without fatal errors", async ({ page }) => {
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -256,8 +298,10 @@ test("existing public hash routes still open", async ({ page }) => {
     await expect(page.locator("#playtests-view")).toBeVisible();
     await page.goto("/#how-to-play");
     await expect(page.locator("#how-to-play")).toBeVisible();
+    await expect(page.locator("#how-to-play")).toContainText("#minecraft-verification");
     await page.goto("/#faq");
     await expect(page.locator("#faq")).toBeVisible();
+    await expect(page.locator("#faq")).toContainText("#minecraft-verification");
     await page.goto("/#view=leaderboards&mode=battleRoyale&board=players&sort=wins");
     await expect(page.locator(".dashboard")).toBeVisible();
 });
@@ -322,15 +366,48 @@ test("signed-in feedback restores ticket fields and evidence after reload and re
 });
 
 test("admin routes reject a logged-out visitor", async ({ page }) => {
-    await openApp(page, "#admin-tickets");
-    await expect(page).toHaveURL(/#feedback$/);
-    await expect(page.locator("#admin-tickets-view")).toBeHidden();
-    await page.goto("/#admin-help");
-    await expect(page).not.toHaveURL(/#admin-help$/);
-    await expect(page.locator("#admin-help-view")).toBeHidden();
-    await page.goto("/#admin-progression");
+    const routes = [
+        ["#admin-tickets", "#admin-tickets-view", /#feedback$/],
+        ["#admin-help", "#admin-help-view", /\/$/],
+        ["#admin-progression", "#admin-progression-view", /\/$/],
+        ["#store", "#store-view", /\/$/],
+        ["#community-dates", "#community-admin-view", /#playtests$/],
+        ["#community-admin", "#community-admin-view", /#community-admin$/]
+    ];
+
+    await openApp(page, routes[0][0]);
+    for (const [route, selector, fallback] of routes) {
+        await page.goto(`/${route}`);
+        await expect(page).toHaveURL(fallback);
+        await expect(page.locator(selector)).toBeHidden();
+    }
+    await expect(page.getByRole("button", { name: "Admin documentation" })).toHaveCount(0);
+});
+
+test("admin routes reject a signed-in non-admin on direct navigation and refresh", async ({ page }) => {
+    await openMemberApp(page, "#admin-progression");
     await expect(page).not.toHaveURL(/#admin-progression$/);
     await expect(page.locator("#admin-progression-view")).toBeHidden();
+
+    await page.evaluate(() => window.history.replaceState(null, document.title, "#admin-help"));
+    await page.reload();
+    await expect(page).not.toHaveURL(/#admin-help$/);
+    await expect(page.locator("#admin-help-view")).toBeHidden();
+    await expect(page.getByRole("button", { name: "Admin documentation" })).toHaveCount(0);
+});
+
+test("protected admin content waits for profile verification", async ({ page }) => {
+    await openDelayedAdminApp(page);
+    await expect(page.locator("#admin-help-view")).toBeHidden();
+    await expect(page.locator("#home-view")).toBeVisible();
+    expect(await page.evaluate(() => window.__queriedSupabaseTables || [])).not.toContain(
+        "admin_documentation_sections"
+    );
+
+    await expect(page.locator("#admin-help-view")).toBeVisible();
+    await expect
+        .poll(() => page.evaluate(() => window.__queriedSupabaseTables || []))
+        .toContain("admin_documentation_sections");
 });
 
 test("the cosmetic editor stays open until its X button is used", async ({ page }) => {
@@ -480,11 +557,11 @@ test("the Minecraft avatar ignores its catalog placeholder image", async ({ page
     await expect(page.locator("[data-account-form]")).toBeVisible();
     await expect(page.locator(".account-hero .account-avatar-large img")).toHaveAttribute(
         "src",
-        /https:\/\/api\.mcheads\.org\/head\/AdminMC\//
+        /https:\/\/(?:api\.mcheads\.org\/head|mc-heads\.net\/avatar)\/AdminMC\/128/
     );
     await expect(page.locator("[data-account-preview-img]")).toHaveAttribute(
         "src",
-        /https:\/\/api\.mcheads\.org\/head\/AdminMC\//
+        /https:\/\/(?:api\.mcheads\.org\/head|mc-heads\.net\/avatar)\/AdminMC\//
     );
 });
 

@@ -1,6 +1,6 @@
 import { createFeedbackApi } from "./src/api/feedback.js";
 import { createProgressionAdminApi } from "./src/api/progression.js";
-import { isAdminProfile } from "./src/auth/permissions.js";
+import { canOpenAdminRoute, isAdminProfile } from "./src/auth/permissions.js";
 import {
     COSMETIC_ACQUISITION_TYPES,
     PROGRESSION_METRICS,
@@ -549,6 +549,7 @@ function setupAuthClient() {
 async function initAuth() {
     if (!state.authClient) {
         state.authReady = true;
+        applyRoute();
         enforceProtectedAdminRoute();
         render();
         return;
@@ -570,6 +571,7 @@ async function initAuth() {
         resetPlaytestViewer();
         resetFeedbackSessionState();
         resetProgressionAdminState();
+        applyRoute();
         enforceProtectedAdminRoute();
         render();
     }
@@ -592,6 +594,7 @@ async function applyAuthSession(session, shouldRender = false) {
         await loadCosmeticCatalog({ force: true });
         await loadAccountProfiles();
         await loadRemotePlaytests({ silent: true });
+        applyRoute();
         enforceProtectedAdminRoute();
         if (shouldRender) render();
         return;
@@ -607,9 +610,10 @@ async function applyAuthSession(session, shouldRender = false) {
     await syncWeeklyMissions();
     resetFeedbackSessionState();
     resetProgressionAdminState();
-    consumeAuthReturn();
     resetStoreSessionState();
     state.authReady = true;
+    consumeAuthReturn();
+    applyRoute();
     enforceProtectedAdminRoute();
     if (state.view === "store" && isPlaytestAdmin()) await loadStoreData();
     if (shouldRender) render();
@@ -1618,11 +1622,7 @@ function applyRoute() {
         return;
     }
     if (route === "admin-help") {
-        if (state.authReady && !isPlaytestAdmin()) {
-            state.view = "home";
-            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
-            return;
-        }
+        if (!openProtectedAdminRoute("home")) return;
         state.view = "adminHelp";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -1635,22 +1635,14 @@ function applyRoute() {
         return;
     }
     if (route === "admin-tickets") {
-        if (state.authReady && !isPlaytestAdmin()) {
-            state.view = "feedback";
-            window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#feedback`);
-            return;
-        }
+        if (!openProtectedAdminRoute("feedback", "#feedback")) return;
         state.view = "adminTickets";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
     }
     if (route === "admin-progression") {
-        if (state.authReady && !isPlaytestAdmin()) {
-            state.view = "home";
-            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
-            return;
-        }
+        if (!openProtectedAdminRoute("home")) return;
         state.view = "adminProgression";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -1669,11 +1661,7 @@ function applyRoute() {
         return;
     }
     if (route === "store") {
-        if (state.authReady && !isPlaytestAdmin()) {
-            state.view = "home";
-            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
-            return;
-        }
+        if (!openProtectedAdminRoute("home")) return;
         state.view = "store";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -1687,11 +1675,7 @@ function applyRoute() {
         return;
     }
     if (route === "community-dates") {
-        if (state.authReady && !isPlaytestAdmin()) {
-            state.view = "playtests";
-            window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#playtests`);
-            return;
-        }
+        if (!openProtectedAdminRoute("playtests", "#playtests")) return;
         state.view = "communityAdmin";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -1730,6 +1714,22 @@ function applyRoute() {
     state.view = "player";
     state.selectedId = playerId;
     state.playerTab = PLAYER_TABS[tab] ? tab : "overview";
+}
+
+function openProtectedAdminRoute(fallbackView, fallbackHash = "") {
+    if (canOpenAdminRoute({ authReady: state.authReady, profile: state.authProfile })) return true;
+
+    state.view = fallbackView;
+    state.selectedId = null;
+    state.profilePreviewOpen = false;
+    if (state.authReady) {
+        window.history.replaceState(
+            null,
+            document.title,
+            `${window.location.pathname}${window.location.search}${fallbackHash}`
+        );
+    }
+    return false;
 }
 
 function routeToPlayer(playerId, tab = state.playerTab || "overview") {
@@ -5584,7 +5584,7 @@ function renderAccountLinkPanel(account, linkedProfile) {
                     </div>
                 </div>
             ` : `
-                <p class="mode-empty">Run <code>/linkminecraft</code> in Discord, then run the shown <code>/discordlink &lt;code&gt;</code> command in Minecraft while the bot and server are online.</p>
+                <p class="mode-empty">Run <code>/linkminecraft</code> in Discord's <strong>#minecraft-verification</strong> channel, then run the shown <code>/discordlink &lt;code&gt;</code> command in Minecraft while the bot and server are online.</p>
             `}
         </section>
     `;
@@ -10411,7 +10411,7 @@ async function saveInferredMinecraftLink(payload) {
         console.warn("Profile saved, but inferred Minecraft link could not be stored", error);
         return {
             profile: null,
-            warning: "Minecraft link was not stored, so run /linkminecraft if the leaderboard icon does not stay linked after renaming."
+            warning: "Minecraft link was not stored, so run /linkminecraft in Discord's #minecraft-verification channel if the leaderboard icon does not stay linked after renaming."
         };
     }
 }
