@@ -8060,9 +8060,10 @@ body.store-purchase-open {
     border: 1px solid var(--line);
     border-radius: 18px;
     padding: 18px;
-    display: grid;
-    align-content: end;
-    justify-items: start;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-start;
     gap: 14px;
     overflow: hidden;
     background:
@@ -8071,6 +8072,18 @@ body.store-purchase-open {
         var(--panel-strong);
     background-size: cover;
     background-position: center;
+}
+
+.account-custom-preview-identity {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    align-items: end;
+    gap: 16px;
+}
+
+.account-custom-preview-copy {
+    min-width: 0;
 }
 
 .account-preview-avatar {
@@ -8091,15 +8104,34 @@ body.store-purchase-open {
     image-rendering: pixelated;
 }
 
-.account-custom-preview strong {
+.account-custom-preview [data-account-preview-name] {
     display: block;
     font-family: "Chakra Petch", sans-serif;
     font-size: clamp(1.7rem, 3vw, 2.7rem);
     line-height: 0.96;
+    overflow-wrap: anywhere;
 }
 
-.account-custom-preview span {
+.account-custom-preview .account-level-pill {
+    margin-top: 9px;
+}
+
+.account-custom-preview .account-preview-badges {
+    width: 100%;
+    margin-top: 0;
+    border-top: 1px solid rgba(238, 244, 255, 0.14);
+    padding-top: 12px;
+}
+
+.account-custom-preview .profile-badge {
+    max-width: 100%;
+}
+
+.account-custom-preview .account-preview-meta {
+    max-width: 100%;
     color: var(--muted);
+    font-size: 0.7rem;
+    overflow-wrap: anywhere;
 }
 
 .account-custom-preview.profile-bg-br {
@@ -9530,6 +9562,23 @@ code {
     .cosmetic-field-media {
         width: 46px;
         height: 46px;
+    }
+
+    .account-custom-preview {
+        min-height: 300px;
+        padding: 14px;
+    }
+
+    .account-custom-preview-identity {
+        grid-template-columns: 104px minmax(0, 1fr);
+        align-items: end;
+        gap: 12px;
+    }
+
+    .account-preview-avatar {
+        width: 104px;
+        height: 104px;
+        border-radius: 18px;
     }
 
     .search-box,

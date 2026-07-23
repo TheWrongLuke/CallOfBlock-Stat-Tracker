@@ -2,11 +2,7 @@ import { createFeedbackApi } from "./api/feedback.js";
 import { createNotificationApi } from "./api/notifications.js";
 import { saveProfileCustomization, syncDiscordProfile } from "./api/profile.js";
 import { createProgressionAdminApi } from "./api/progression.js";
-import {
-    claimWeeklyMissionReward,
-    ensureWeeklyMissions,
-    swapWeeklyMission
-} from "./api/weekly-missions.js";
+import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "./api/weekly-missions.js";
 import { canOpenAdminRoute, isAdminProfile } from "./auth/permissions.js";
 import {
     COSMETIC_ACQUISITION_TYPES,
@@ -32,10 +28,7 @@ import {
     ticketStatusLabel
 } from "./config/feedback.js";
 import { validateReplyInput, validateTicketInput } from "./utils/feedback-validation.js";
-import {
-    headshotRatePercent,
-    meetsSharpshooterRequirement
-} from "./utils/cosmetic-progress.js";
+import { headshotRatePercent, meetsSharpshooterRequirement } from "./utils/cosmetic-progress.js";
 import {
     createFeedbackAttachmentView,
     createFeedbackTicketId,
@@ -45,10 +38,7 @@ import {
     validateFeedbackAttachment
 } from "./services/feedback-attachments.js";
 import { createFeedbackDraftSession } from "./services/feedback-draft-session.js";
-import {
-    loadAdminTicketPreferences,
-    saveAdminTicketPreferences
-} from "./services/admin-ticket-preferences.js";
+import { loadAdminTicketPreferences, saveAdminTicketPreferences } from "./services/admin-ticket-preferences.js";
 import {
     loadCosmeticPickerPreferences,
     saveCosmeticPickerPreferences
@@ -117,7 +107,10 @@ const MAIN_VIEWS = {
 const DEFAULT_API_POLL_MS = 10000;
 const DEFAULT_SKIN_NAME = "Steve";
 const CHAMPION_ROTATE_MS = 5000;
-const CONTACT_EMAIL_CODES = [108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64, 103, 109, 97, 105, 108, 46, 99, 111, 109];
+const CONTACT_EMAIL_CODES = [
+    108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64,
+    103, 109, 97, 105, 108, 46, 99, 111, 109
+];
 const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v2";
 const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
 const NOTIFICATION_POPUP_SESSION_KEY = "cob_notification_popup_seen_v1";
@@ -185,9 +178,12 @@ const PUBLIC_PROFILE_SELECT_COLUMNS = [
 ].join(", ");
 const PUBLIC_PROFILE_PROGRESSION_COLUMNS = `${PUBLIC_PROFILE_SELECT_COLUMNS}, weekly_missions_completed, hard_missions_completed`;
 const PUBLIC_PROFILE_SELECT_COLUMNS_LEGACY = PUBLIC_PROFILE_COLUMNS_LEGACY.join(", ");
-const PLAYTEST_SELECT_COLUMNS = "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
-const PLAYTEST_SLOT_SELECT_COLUMNS = "id, playtest_id, start_datetime, end_datetime, label, is_main, source, confirmed_at, confirmed_by, created_at";
-const AVAILABILITY_SELECT_COLUMNS = "id, playtest_id, slot_id, user_id, status, mode_preference, available_start_datetime, available_end_datetime, created_at, updated_at";
+const PLAYTEST_SELECT_COLUMNS =
+    "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
+const PLAYTEST_SLOT_SELECT_COLUMNS =
+    "id, playtest_id, start_datetime, end_datetime, label, is_main, source, confirmed_at, confirmed_by, created_at";
+const AVAILABILITY_SELECT_COLUMNS =
+    "id, playtest_id, slot_id, user_id, status, mode_preference, available_start_datetime, available_end_datetime, created_at, updated_at";
 const NOTIFICATION_SELECT_COLUMNS = "id, playtest_id, slot_id, user_id, notify_on_confirmation, created_at, updated_at";
 const RARITY_ORDER = ["common", "rare", "epic", "legendary", "mythic"];
 const RARITY_LABELS = {
@@ -202,7 +198,9 @@ function storeCatalogEntries(type) {
     const entries = window.COB_STORE_COSMETICS?.[type];
     if (!Array.isArray(entries)) return [];
     return entries
-        .filter((entry) => entry && typeof entry === "object" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(String(entry.id || "")))
+        .filter(
+            (entry) => entry && typeof entry === "object" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(String(entry.id || ""))
+        )
         .map((entry) => ({
             ...entry,
             id: String(entry.id),
@@ -223,38 +221,176 @@ const PROFILE_ICONS = [
         image: "./assets/branding/icon.png",
         unlock: "default"
     },
-    { id: "discord", label: "Discord picture", category: "Default", rarity: "common", source: "discord", unlock: "default" },
-    { id: "minecraft", label: "Minecraft skin", category: "Default", rarity: "common", source: "minecraft", unlock: "default" },
+    {
+        id: "discord",
+        label: "Discord picture",
+        category: "Default",
+        rarity: "common",
+        source: "discord",
+        unlock: "default"
+    },
+    {
+        id: "minecraft",
+        label: "Minecraft skin",
+        category: "Default",
+        rarity: "common",
+        source: "minecraft",
+        unlock: "default"
+    },
     ...storeCatalogEntries("icon")
 ];
 const PROFILE_BACKGROUNDS = [
-    { id: "default", label: "Default", category: "Default", rarity: "common", unlock: "default", image: "./assets/profile-backgrounds/default.png" },
-    { id: "br", label: "Battle Royale", category: "Game Modes", rarity: "rare", unlock: "br_winner", image: "./assets/profile-backgrounds/battle-royale.png" },
-    { id: "dm", label: "Deathmatch", category: "Game Modes", rarity: "rare", unlock: "dm_winner", image: "./assets/profile-backgrounds/deathmatch.png" },
-    { id: "night", label: "Night Ops", category: "Milestones", rarity: "epic", unlock: "veteran", image: "./assets/profile-backgrounds/night-ops.png" },
+    {
+        id: "default",
+        label: "Default",
+        category: "Default",
+        rarity: "common",
+        unlock: "default",
+        image: "./assets/profile-backgrounds/default.png"
+    },
+    {
+        id: "br",
+        label: "Battle Royale",
+        category: "Game Modes",
+        rarity: "rare",
+        unlock: "br_winner",
+        image: "./assets/profile-backgrounds/battle-royale.png"
+    },
+    {
+        id: "dm",
+        label: "Deathmatch",
+        category: "Game Modes",
+        rarity: "rare",
+        unlock: "dm_winner",
+        image: "./assets/profile-backgrounds/deathmatch.png"
+    },
+    {
+        id: "night",
+        label: "Night Ops",
+        category: "Milestones",
+        rarity: "epic",
+        unlock: "veteran",
+        image: "./assets/profile-backgrounds/night-ops.png"
+    },
     { id: "custom", label: "Custom image", category: "Personal", rarity: "common", unlock: "custom" },
     ...storeCatalogEntries("background")
 ];
 const PFP_BORDERS = [
-    { id: "none", label: "None", category: "Default", rarity: "common", unlock: "default", image: "./assets/pfp-borders/none.png", inset: 0 },
-    { id: "green", label: "Linked Green", category: "Milestones", rarity: "common", unlock: "linked", image: "./assets/pfp-borders/green.png", inset: 0 },
-    { id: "gold", label: "First Win Gold", category: "Milestones", rarity: "rare", unlock: "first_win", image: "./assets/pfp-borders/gold.png", inset: 0 },
-    { id: "blue", label: "Deathmatch Blue", category: "Game Modes", rarity: "rare", unlock: "dm_winner", image: "./assets/pfp-borders/blue.png", inset: 0 },
-    { id: "red", label: "Battle Royale Red", category: "Game Modes", rarity: "rare", unlock: "br_winner", image: "./assets/pfp-borders/red.png", inset: 0 },
+    {
+        id: "none",
+        label: "None",
+        category: "Default",
+        rarity: "common",
+        unlock: "default",
+        image: "./assets/pfp-borders/none.png",
+        inset: 0
+    },
+    {
+        id: "green",
+        label: "Linked Green",
+        category: "Milestones",
+        rarity: "common",
+        unlock: "linked",
+        image: "./assets/pfp-borders/green.png",
+        inset: 0
+    },
+    {
+        id: "gold",
+        label: "First Win Gold",
+        category: "Milestones",
+        rarity: "rare",
+        unlock: "first_win",
+        image: "./assets/pfp-borders/gold.png",
+        inset: 0
+    },
+    {
+        id: "blue",
+        label: "Deathmatch Blue",
+        category: "Game Modes",
+        rarity: "rare",
+        unlock: "dm_winner",
+        image: "./assets/pfp-borders/blue.png",
+        inset: 0
+    },
+    {
+        id: "red",
+        label: "Battle Royale Red",
+        category: "Game Modes",
+        rarity: "rare",
+        unlock: "br_winner",
+        image: "./assets/pfp-borders/red.png",
+        inset: 0
+    },
     ...storeCatalogEntries("border")
 ];
 const PROFILE_TITLES = [
     { id: "none", label: "No title", text: "", category: "Default", rarity: "common", unlock: "default" },
     { id: "owner", label: "Owner", text: "Owner", category: "Exclusive", rarity: "mythic", unlock: "inventory" },
-    { id: "linked_operative", label: "Linked Operative", text: "Linked Operative", category: "Milestones", rarity: "common", unlock: "linked" },
-    { id: "br_survivor", label: "BR Survivor", text: "Battle Royale Survivor", category: "Game Modes", rarity: "rare", unlock: "br_winner" },
-    { id: "dm_victor", label: "DM Victor", text: "Deathmatch Victor", category: "Game Modes", rarity: "rare", unlock: "dm_winner" },
+    {
+        id: "linked_operative",
+        label: "Linked Operative",
+        text: "Linked Operative",
+        category: "Milestones",
+        rarity: "common",
+        unlock: "linked"
+    },
+    {
+        id: "br_survivor",
+        label: "BR Survivor",
+        text: "Battle Royale Survivor",
+        category: "Game Modes",
+        rarity: "rare",
+        unlock: "br_winner"
+    },
+    {
+        id: "dm_victor",
+        label: "DM Victor",
+        text: "Deathmatch Victor",
+        category: "Game Modes",
+        rarity: "rare",
+        unlock: "dm_winner"
+    },
     { id: "veteran", label: "Veteran", text: "Veteran", category: "Milestones", rarity: "rare", unlock: "veteran" },
-    { id: "sharpshooter", label: "Sharpshooter", text: "Sharpshooter", category: "Milestones", rarity: "epic", unlock: "sharpshooter" },
-    { id: "br_champion", label: "BR Champion", text: "Battle Royale Champion", category: "Game Modes", rarity: "legendary", unlock: "br_wins_live" },
-    { id: "dm_champion", label: "DM Champion", text: "Deathmatch Champion", category: "Game Modes", rarity: "legendary", unlock: "dm_wins_live" },
-    { id: "br_apex", label: "BR Apex", text: "Battle Royale Apex", category: "Game Modes", rarity: "mythic", unlock: "br_kills_10000" },
-    { id: "dm_apex", label: "DM Apex", text: "Deathmatch Apex", category: "Game Modes", rarity: "mythic", unlock: "dm_kills_10000" },
+    {
+        id: "sharpshooter",
+        label: "Sharpshooter",
+        text: "Sharpshooter",
+        category: "Milestones",
+        rarity: "epic",
+        unlock: "sharpshooter"
+    },
+    {
+        id: "br_champion",
+        label: "BR Champion",
+        text: "Battle Royale Champion",
+        category: "Game Modes",
+        rarity: "legendary",
+        unlock: "br_wins_live"
+    },
+    {
+        id: "dm_champion",
+        label: "DM Champion",
+        text: "Deathmatch Champion",
+        category: "Game Modes",
+        rarity: "legendary",
+        unlock: "dm_wins_live"
+    },
+    {
+        id: "br_apex",
+        label: "BR Apex",
+        text: "Battle Royale Apex",
+        category: "Game Modes",
+        rarity: "mythic",
+        unlock: "br_kills_10000"
+    },
+    {
+        id: "dm_apex",
+        label: "DM Apex",
+        text: "Deathmatch Apex",
+        category: "Game Modes",
+        rarity: "mythic",
+        unlock: "dm_kills_10000"
+    },
     ...storeCatalogEntries("title")
 ];
 const STORE_CATEGORY_LABELS = {
@@ -303,8 +439,10 @@ const PLAYTEST_COUNT_ORDER = ["available", "preferred", "maybe", "unavailable"];
 const PLAYTEST_MODE_OPTIONS = ["Battle Royale", "Deathmatch", "Either"];
 const PLAYTEST_INTEREST_MIN_SCALE = 10;
 const COMMUNITY_SLOT_ACTIVE_STATUSES = new Set(["available", "preferred", "maybe"]);
-const CONFIRMATION_STATUS_HELP = "Unconfirmed means this is a possible event date. The admin will confirm the event on that date if it will be possible to execute.";
-const BEST_DATE_SCORE_HELP = "Best Date ranks by the strongest overlapping time window first. Preferred = 5, Available = 3, Maybe = 1, Unavailable = 0.";
+const CONFIRMATION_STATUS_HELP =
+    "Unconfirmed means this is a possible event date. The admin will confirm the event on that date if it will be possible to execute.";
+const BEST_DATE_SCORE_HELP =
+    "Best Date ranks by the strongest overlapping time window first. Preferred = 5, Available = 3, Maybe = 1, Unavailable = 0.";
 
 const PLAYTEST_SEED_USERS = [];
 const DEFAULT_PLAYTESTS = [];
@@ -520,23 +658,31 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function bindAvatarImageEvents() {
-    document.addEventListener("load", (event) => {
-        const image = event.target;
-        if (!(image instanceof HTMLImageElement) || !image.classList.contains("avatar-image")) return;
-        image.hidden = false;
-        const fallback = image.previousElementSibling;
-        if (fallback?.classList.contains("avatar-image-fallback")) fallback.hidden = true;
-    }, true);
-    document.addEventListener("error", (event) => {
-        const image = event.target;
-        if (image instanceof HTMLImageElement && image.hasAttribute("data-avatar-fallbacks")) {
-            handleAvatarFallback(image);
-        } else if (image instanceof HTMLImageElement && image.hasAttribute("data-player-manager-avatar")) {
-            image.remove();
-        } else if (image instanceof HTMLImageElement && image.hasAttribute("data-notification-preview-image")) {
-            image.remove();
-        }
-    }, true);
+    document.addEventListener(
+        "load",
+        (event) => {
+            const image = event.target;
+            if (!(image instanceof HTMLImageElement) || !image.classList.contains("avatar-image")) return;
+            image.hidden = false;
+            const fallback = image.previousElementSibling;
+            if (fallback?.classList.contains("avatar-image-fallback")) fallback.hidden = true;
+        },
+        true
+    );
+    document.addEventListener(
+        "error",
+        (event) => {
+            const image = event.target;
+            if (image instanceof HTMLImageElement && image.hasAttribute("data-avatar-fallbacks")) {
+                handleAvatarFallback(image);
+            } else if (image instanceof HTMLImageElement && image.hasAttribute("data-player-manager-avatar")) {
+                image.remove();
+            } else if (image instanceof HTMLImageElement && image.hasAttribute("data-notification-preview-image")) {
+                image.remove();
+            }
+        },
+        true
+    );
 }
 
 function setupLiveConfig() {
@@ -657,7 +803,11 @@ async function claimProgressionCosmetics() {
         const result = await claimCanonicalProgressionCosmetics(state.authClient);
         if (result.error) {
             const code = String(result.error.code || "");
-            if (["42883", "PGRST202"].includes(code) || /could not find.*claim_progression_cosmetics/i.test(result.error.message || "")) return;
+            if (
+                ["42883", "PGRST202"].includes(code) ||
+                /could not find.*claim_progression_cosmetics/i.test(result.error.message || "")
+            )
+                return;
             throw result.error;
         }
         const rewards = Array.isArray(result.data) ? result.data : [];
@@ -1421,12 +1571,22 @@ function bindStaticEvents() {
 
         if (event.target.matches("[data-weekly-template-weapon-scope]")) {
             const form = event.target.closest("[data-weekly-template-form]");
-            form?.querySelector("[data-weekly-template-exact-weapon]")?.toggleAttribute("hidden", event.target.value !== "exact_weapon");
-            form?.querySelector("[data-weekly-template-category]")?.toggleAttribute("hidden", event.target.value !== "weapon_category");
+            form?.querySelector("[data-weekly-template-exact-weapon]")?.toggleAttribute(
+                "hidden",
+                event.target.value !== "exact_weapon"
+            );
+            form?.querySelector("[data-weekly-template-category]")?.toggleAttribute(
+                "hidden",
+                event.target.value !== "weapon_category"
+            );
             return;
         }
 
-        if (event.target.matches("[data-progression-cosmetic-type], [data-progression-acquisition], [data-progression-time-limit], [data-progression-count-limit]")) {
+        if (
+            event.target.matches(
+                "[data-progression-cosmetic-type], [data-progression-acquisition], [data-progression-time-limit], [data-progression-count-limit]"
+            )
+        ) {
             const form = event.target.closest("[data-progression-cosmetic-form]");
             syncProgressionCosmeticEditor(form);
             if (event.target.matches("[data-progression-cosmetic-type]")) updateProgressionDraftPreview(form);
@@ -1439,7 +1599,12 @@ function bindStaticEvents() {
         }
 
         const accountForm = event.target.closest("[data-account-form]");
-        if (accountForm && event.target.matches("[name='avatarSource'], [name='profileBackground'], [name='pfpBorder'], [name='profileTitle']")) {
+        if (
+            accountForm &&
+            event.target.matches(
+                "[name='avatarSource'], [name='profileBackground'], [name='pfpBorder'], [name='profileTitle']"
+            )
+        ) {
             updateAccountCustomizePreview(accountForm);
         }
         if (accountForm && event.target.matches("[name='selectedBadges']")) {
@@ -1465,7 +1630,10 @@ function bindStaticEvents() {
 
         if (event.target.matches("[data-catalog-acquisition]")) {
             const form = event.target.closest("[data-catalog-form]");
-            form?.querySelector("[data-catalog-shop-fields]")?.toggleAttribute("hidden", event.target.value !== "store");
+            form?.querySelector("[data-catalog-shop-fields]")?.toggleAttribute(
+                "hidden",
+                event.target.value !== "store"
+            );
         }
     });
 
@@ -1667,7 +1835,8 @@ function bindStaticEvents() {
     championCarousel.addEventListener("scroll", () => {
         window.clearTimeout(state.championScrollTimer);
         state.championScrollTimer = window.setTimeout(() => {
-            const mode = championCarousel.scrollLeft > championCarousel.clientWidth * 0.5 ? "deathmatch" : "battleRoyale";
+            const mode =
+                championCarousel.scrollLeft > championCarousel.clientWidth * 0.5 ? "deathmatch" : "battleRoyale";
             if (mode !== state.championMode) {
                 state.championMode = mode;
                 renderChampionControls();
@@ -2065,9 +2234,9 @@ async function fetchSupabaseExport() {
         const response = await fetch(url, {
             cache: "no-store",
             headers: {
-                "apikey": state.supabaseKey,
-                "Authorization": `Bearer ${state.supabaseKey}`,
-                "Accept": "application/json"
+                apikey: state.supabaseKey,
+                Authorization: `Bearer ${state.supabaseKey}`,
+                Accept: "application/json"
             }
         });
         if (!response.ok) return null;
@@ -2094,7 +2263,8 @@ async function syncPlaytestProfile(user) {
         console.error("Failed to sync Discord profile", error);
         state.authProfile = null;
         PLAYTEST_VIEWER.isAdmin = false;
-        state.authMessage = "Discord login worked, but secure profile sync is unavailable. Apply the current Supabase security migration.";
+        state.authMessage =
+            "Discord login worked, but secure profile sync is unavailable. Apply the current Supabase security migration.";
         return null;
     }
 }
@@ -2178,7 +2348,8 @@ function resetNotificationState() {
 
 async function loadOwnNotifications({ force = false, showPopup = true } = {}) {
     const notifications = state.notifications;
-    if (!notifications.api || !state.authSession?.user || notifications.loading || (notifications.loaded && !force)) return;
+    if (!notifications.api || !state.authSession?.user || notifications.loading || (notifications.loaded && !force))
+        return;
     notifications.loading = true;
     notifications.error = "";
     renderNotificationSurfaces();
@@ -2219,18 +2390,28 @@ function normalizeAccountNotification(row) {
     return {
         id,
         type,
-        title: String(row?.title || "Notification").trim().slice(0, 120),
-        message: String(row?.message || "").trim().slice(0, 500),
+        title: String(row?.title || "Notification")
+            .trim()
+            .slice(0, 120),
+        message: String(row?.message || "")
+            .trim()
+            .slice(0, 500),
         cosmeticType,
         cosmeticId,
         giftSource: String(row?.gift_source || "").trim(),
-        senderName: String(row?.sender_name || "Call of Block").trim().slice(0, 80),
+        senderName: String(row?.sender_name || "Call of Block")
+            .trim()
+            .slice(0, 80),
         readAt: String(row?.read_at || ""),
         claimedAt: String(row?.claimed_at || ""),
         createdAt: String(row?.created_at || ""),
-        cosmeticName: String(row?.cosmetic_name || cosmetic?.name || cosmetic?.label || cosmeticId).trim().slice(0, 80),
+        cosmeticName: String(row?.cosmetic_name || cosmetic?.name || cosmetic?.label || cosmeticId)
+            .trim()
+            .slice(0, 80),
         cosmeticImage: String(cosmetic?.image || "").trim(),
-        cosmeticText: String(cosmetic?.text || cosmetic?.name || cosmetic?.label || "").trim().slice(0, 80),
+        cosmeticText: String(cosmetic?.text || cosmetic?.name || cosmetic?.label || "")
+            .trim()
+            .slice(0, 80),
         cosmeticRarity: String(cosmetic?.rarity || "common").trim()
     };
 }
@@ -2238,16 +2419,18 @@ function normalizeAccountNotification(row) {
 function notificationSchemaMissing(error) {
     const code = String(error?.code || "");
     const message = String(error?.message || error || "");
-    return ["42P01", "42883", "PGRST202", "PGRST205"].includes(code)
-        || /list_my_notifications|user_notifications|schema cache/i.test(message);
+    return (
+        ["42P01", "42883", "PGRST202", "PGRST205"].includes(code) ||
+        /list_my_notifications|user_notifications|schema cache/i.test(message)
+    );
 }
 
 function openNextGiftPopup() {
     const notifications = state.notifications;
     if (notifications.giftPopupId) return;
     const seen = notificationPopupSeenIds();
-    const gift = notifications.items.find((item) =>
-        item.type === "cosmetic_gift" && !item.claimedAt && !item.readAt && !seen.has(item.id)
+    const gift = notifications.items.find(
+        (item) => item.type === "cosmetic_gift" && !item.claimedAt && !item.readAt && !seen.has(item.id)
     );
     if (!gift) return;
     notifications.giftPopupId = gift.id;
@@ -2516,24 +2699,32 @@ function mapRemotePlaytests(playtestRows, slotRows, availabilityRows, profileMap
         bySlot[row.slot_id].push(vote);
     }
 
-    return (playtestRows || []).map((row) => {
-        const slots = (slotsByPlaytest.get(row.id) || []).sort((a, b) => dateValue(a.startAt) - dateValue(b.startAt));
-        const mainSlot = slots.find((slot) => slot.id === row.main_slot_id) || slots.find((slot) => slot.isMain) || slots[0] || null;
-        return {
-            id: String(row.id),
-            title: String(row.title || "Community Playtest"),
-            description: String(row.description || ""),
-            status: ["upcoming", "voting", "closed", "finished"].includes(row.status) ? row.status : "voting",
-            createdBy: row.created_by || "",
-            createdAt: row.created_at || new Date().toISOString(),
-            mainSlotId: mainSlot?.id || "",
-            frozen: Boolean(row.votes_frozen),
-            archived: Boolean(row.archived_at),
-            remote: true,
-            slots,
-            remoteVotesBySlot: votesByPlaytest.get(row.id) || {}
-        };
-    }).filter((playtest) => !playtest.archived);
+    return (playtestRows || [])
+        .map((row) => {
+            const slots = (slotsByPlaytest.get(row.id) || []).sort(
+                (a, b) => dateValue(a.startAt) - dateValue(b.startAt)
+            );
+            const mainSlot =
+                slots.find((slot) => slot.id === row.main_slot_id) ||
+                slots.find((slot) => slot.isMain) ||
+                slots[0] ||
+                null;
+            return {
+                id: String(row.id),
+                title: String(row.title || "Community Playtest"),
+                description: String(row.description || ""),
+                status: ["upcoming", "voting", "closed", "finished"].includes(row.status) ? row.status : "voting",
+                createdBy: row.created_by || "",
+                createdAt: row.created_at || new Date().toISOString(),
+                mainSlotId: mainSlot?.id || "",
+                frozen: Boolean(row.votes_frozen),
+                archived: Boolean(row.archived_at),
+                remote: true,
+                slots,
+                remoteVotesBySlot: votesByPlaytest.get(row.id) || {}
+            };
+        })
+        .filter((playtest) => !playtest.archived);
 }
 
 function remoteSlotToLocal(row) {
@@ -2595,7 +2786,9 @@ function syncRemoteUserVotes(playtests) {
         delete state.playtests.votes[playtest.id];
         if (!isDiscordLoggedIn()) continue;
         for (const slot of playtest.slots || []) {
-            const ownVote = (playtest.remoteVotesBySlot?.[slot.id] || []).find((vote) => vote.userId === PLAYTEST_VIEWER.userId);
+            const ownVote = (playtest.remoteVotesBySlot?.[slot.id] || []).find(
+                (vote) => vote.userId === PLAYTEST_VIEWER.userId
+            );
             if (!ownVote) continue;
             state.playtests.votes[playtest.id] = state.playtests.votes[playtest.id] || {};
             state.playtests.votes[playtest.id][slot.id] = ownVote;
@@ -2610,7 +2803,8 @@ function syncRemoteSubscriptions(playtestIds, subscriptionRows) {
     if (!isDiscordLoggedIn()) return;
     for (const row of subscriptionRows || []) {
         if (!row?.playtest_id || !row.slot_id || row.notify_on_confirmation === false) continue;
-        state.playtests.notificationSubscriptions[row.playtest_id] = state.playtests.notificationSubscriptions[row.playtest_id] || {};
+        state.playtests.notificationSubscriptions[row.playtest_id] =
+            state.playtests.notificationSubscriptions[row.playtest_id] || {};
         state.playtests.notificationSubscriptions[row.playtest_id][row.slot_id] = {
             id: row.id,
             userId: row.user_id,
@@ -2664,14 +2858,14 @@ function discordIdFromUser(user) {
     const metadata = user?.user_metadata || {};
     const identityData = identity?.identity_data || {};
     return String(
-        identityData.provider_id
-        || identityData.id
-        || identityData.sub
-        || metadata.provider_id
-        || metadata.id
-        || metadata.sub
-        || identity?.identity_id
-        || ""
+        identityData.provider_id ||
+            identityData.id ||
+            identityData.sub ||
+            metadata.provider_id ||
+            metadata.id ||
+            metadata.sub ||
+            identity?.identity_id ||
+            ""
     );
 }
 
@@ -2680,20 +2874,20 @@ function discordUsernameFromUser(user) {
     const metadata = user?.user_metadata || {};
     const identityData = identity?.identity_data || {};
     return String(
-        metadata.user_name
-        || metadata.username
-        || metadata.preferred_username
-        || identityData.user_name
-        || identityData.username
-        || identityData.preferred_username
-        || metadata.global_name
-        || metadata.full_name
-        || metadata.name
-        || identityData.global_name
-        || identityData.full_name
-        || identityData.name
-        || user?.email?.split("@")[0]
-        || "Discord user"
+        metadata.user_name ||
+            metadata.username ||
+            metadata.preferred_username ||
+            identityData.user_name ||
+            identityData.username ||
+            identityData.preferred_username ||
+            metadata.global_name ||
+            metadata.full_name ||
+            metadata.name ||
+            identityData.global_name ||
+            identityData.full_name ||
+            identityData.name ||
+            user?.email?.split("@")[0] ||
+            "Discord user"
     );
 }
 
@@ -2701,20 +2895,15 @@ function discordAvatarFromUser(user) {
     const identity = discordIdentityFromUser(user);
     const metadata = user?.user_metadata || {};
     const identityData = identity?.identity_data || {};
-    return String(
-        metadata.avatar_url
-        || metadata.picture
-        || identityData.avatar_url
-        || identityData.picture
-        || ""
-    );
+    return String(metadata.avatar_url || metadata.picture || identityData.avatar_url || identityData.picture || "");
 }
 
 function initialsForName(value) {
-    const parts = String(value || "You").trim().split(/\s+/).filter(Boolean);
-    const initials = parts.length > 1
-        ? `${parts[0][0] || ""}${parts[1][0] || ""}`
-        : (parts[0] || "You").slice(0, 3);
+    const parts = String(value || "You")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
+    const initials = parts.length > 1 ? `${parts[0][0] || ""}${parts[1][0] || ""}` : (parts[0] || "You").slice(0, 3);
     return initials.toUpperCase();
 }
 
@@ -2730,7 +2919,11 @@ function applyData(data, preview, dataMode) {
     rebuildCache();
     void syncWeeklyMissions();
 
-    if (previousSelectedId && profileById(previousSelectedId) && (state.view === "player" || state.profilePreviewOpen)) {
+    if (
+        previousSelectedId &&
+        profileById(previousSelectedId) &&
+        (state.view === "player" || state.profilePreviewOpen)
+    ) {
         state.selectedId = previousSelectedId;
     } else {
         state.selectedId = null;
@@ -2763,46 +2956,57 @@ function exportSignature(data) {
     if (!data) return "";
     const modeParts = Object.entries(data.modes || {})
         .map(([id, mode]) => {
-            const totals = (mode.players || []).reduce((sum, player) => {
-                const stats = normalizeStats(player.stats);
-                sum.kills += stats.kills;
-                sum.wins += stats.wins;
-                sum.games += stats.games;
-                sum.deaths += stats.deaths;
-                sum.mvp += stats.mvp;
-                return sum;
-            }, { kills: 0, wins: 0, games: 0, deaths: 0, mvp: 0 });
+            const totals = (mode.players || []).reduce(
+                (sum, player) => {
+                    const stats = normalizeStats(player.stats);
+                    sum.kills += stats.kills;
+                    sum.wins += stats.wins;
+                    sum.games += stats.games;
+                    sum.deaths += stats.deaths;
+                    sum.mvp += stats.mvp;
+                    return sum;
+                },
+                { kills: 0, wins: 0, games: 0, deaths: 0, mvp: 0 }
+            );
             return `${id}:${mode.totalPlayers || 0}:${mode.players?.length || 0}:${totals.wins}:${totals.kills}:${totals.games}:${totals.deaths}:${totals.mvp}`;
         })
         .join(",");
-    const profileParts = (data.profiles || []).map((profile) => {
-        const br = normalizeStats(profile.battleRoyale?.stats);
-        const dm = normalizeStats(profile.deathmatch?.stats);
-        const weaponParts = ["battleRoyale", "deathmatch"].flatMap((mode) => (
-            (profile[mode]?.details?.weapons || []).map((weapon) => {
-                const stats = normalizeStats(weapon.stats);
-                return `${mode}:${weapon.id || weapon.label}:${stats.kills}:${stats.hits}:${stats.headshots}:${stats.headshotKills}:${stats.utilityKills}:${stats.vehicleKills}`;
-            })
-        )).join(";");
-        const last = (profile.recentMatches || [])[0]?.endedAt || "";
-        const badgeStats = [br, dm].map((stats) => [
-            stats.aces,
-            stats.bestAceStreak,
-            stats.bestRapidStreak,
-            stats.flawlessWins,
-            stats.bestFlawlessWinKills,
-            stats.longestWinStreak,
-            stats.longestKillDistance,
-            stats.closestKillDistance,
-            stats.greatestHeightAdvantage,
-            stats.bestOneMagazineKills,
-            stats.largestComebackDeficit,
-            stats.lowestWinningHealth,
-            stats.maxZoneDamageInWin
-        ].join(":")).join(":");
-        const achievements = [...profileAwardedBadgeIds(profile)].sort().join(".");
-        return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.hits}:${br.headshots}:${br.headshotKills}:${br.mvp}:${br.playtimeSeconds}:${br.utilityKills}:${br.vehicleKills}:${dm.games}:${dm.kills}:${dm.wins}:${dm.hits}:${dm.headshots}:${dm.headshotKills}:${dm.mvp}:${dm.playtimeSeconds}:${dm.utilityKills}:${dm.vehicleKills}:${badgeStats}:${achievements}:${profile.recentMatches?.length || 0}:${last}:${weaponParts}`;
-    }).join(",");
+    const profileParts = (data.profiles || [])
+        .map((profile) => {
+            const br = normalizeStats(profile.battleRoyale?.stats);
+            const dm = normalizeStats(profile.deathmatch?.stats);
+            const weaponParts = ["battleRoyale", "deathmatch"]
+                .flatMap((mode) =>
+                    (profile[mode]?.details?.weapons || []).map((weapon) => {
+                        const stats = normalizeStats(weapon.stats);
+                        return `${mode}:${weapon.id || weapon.label}:${stats.kills}:${stats.hits}:${stats.headshots}:${stats.headshotKills}:${stats.utilityKills}:${stats.vehicleKills}`;
+                    })
+                )
+                .join(";");
+            const last = (profile.recentMatches || [])[0]?.endedAt || "";
+            const badgeStats = [br, dm]
+                .map((stats) =>
+                    [
+                        stats.aces,
+                        stats.bestAceStreak,
+                        stats.bestRapidStreak,
+                        stats.flawlessWins,
+                        stats.bestFlawlessWinKills,
+                        stats.longestWinStreak,
+                        stats.longestKillDistance,
+                        stats.closestKillDistance,
+                        stats.greatestHeightAdvantage,
+                        stats.bestOneMagazineKills,
+                        stats.largestComebackDeficit,
+                        stats.lowestWinningHealth,
+                        stats.maxZoneDamageInWin
+                    ].join(":")
+                )
+                .join(":");
+            const achievements = [...profileAwardedBadgeIds(profile)].sort().join(".");
+            return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.hits}:${br.headshots}:${br.headshotKills}:${br.mvp}:${br.playtimeSeconds}:${br.utilityKills}:${br.vehicleKills}:${dm.games}:${dm.kills}:${dm.wins}:${dm.hits}:${dm.headshots}:${dm.headshotKills}:${dm.mvp}:${dm.playtimeSeconds}:${dm.utilityKills}:${dm.vehicleKills}:${badgeStats}:${achievements}:${profile.recentMatches?.length || 0}:${last}:${weaponParts}`;
+        })
+        .join(",");
     const live = data.liveStatus || {};
     const livePart = `${live.onlinePlayers ?? ""}:${live.state ?? ""}:${live.mode ?? ""}:${live.mapId ?? ""}:${live.redScore ?? ""}:${live.blueScore ?? ""}:${live.matchPlayers ?? ""}:${live.alivePlayers ?? ""}:${live.teamMode ?? ""}`;
     return `${data.schemaVersion || ""}|${data.generatedAt || ""}|${data.profiles?.length || 0}|${modeParts}|${profileParts}|${livePart}`;
@@ -2819,7 +3023,13 @@ function emptyExport() {
         sourceFile: "match_leaderboards_web.json",
         supportedSorts: Object.keys(SORT_LABELS),
         modes: {
-            battleRoyale: { id: "battleRoyale", label: "Battle Royale", totalPlayers: 0, leaderboards: {}, players: [] },
+            battleRoyale: {
+                id: "battleRoyale",
+                label: "Battle Royale",
+                totalPlayers: 0,
+                leaderboards: {},
+                players: []
+            },
             deathmatch: { id: "deathmatch", label: "Deathmatch", totalPlayers: 0, leaderboards: {}, players: [] }
         },
         profiles: []
@@ -3093,7 +3303,11 @@ function closeAccountSidePanel() {
     renderAccountWidget();
     renderAccountSidePanel();
     window.requestAnimationFrame(() => {
-        document.querySelector(previousView === "notifications" ? "[data-notification-panel-open]" : "[data-account-panel-open]")?.focus();
+        document
+            .querySelector(
+                previousView === "notifications" ? "[data-notification-panel-open]" : "[data-account-panel-open]"
+            )
+            ?.focus();
     });
 }
 
@@ -3124,16 +3338,19 @@ function renderAccountSidePanel() {
                     <h2 id="profile-drawer-title">${notificationsOpen ? "NOTIFICATIONS" : "PROFILE"}</h2>
                     <button class="profile-drawer-close" type="button" data-account-panel-close aria-label="Close profile panel">&times;</button>
                 </header>
-                ${notificationsOpen ? renderNotificationInbox({
-                    items: state.notifications.items,
-                    loading: state.notifications.loading,
-                    ready: state.notifications.ready,
-                    filter: state.notifications.filter,
-                    expandedId: state.notifications.expandedId,
-                    busyId: state.notifications.busyId,
-                    message: state.notifications.message,
-                    error: state.notifications.error
-                }) : `
+                ${
+                    notificationsOpen
+                        ? renderNotificationInbox({
+                              items: state.notifications.items,
+                              loading: state.notifications.loading,
+                              ready: state.notifications.ready,
+                              filter: state.notifications.filter,
+                              expandedId: state.notifications.expandedId,
+                              busyId: state.notifications.busyId,
+                              message: state.notifications.message,
+                              error: state.notifications.error
+                          })
+                        : `
                     <div class="profile-drawer-identity">
                         <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
                             ${renderAvatarImage(avatarUrl, account, profile, 72, "eager")}
@@ -3147,15 +3364,20 @@ function renderAccountSidePanel() {
                     <div class="profile-drawer-actions ${isPlaytestAdmin() ? "admin" : ""}">
                         <button class="profile-drawer-customize" type="button" data-route="account">Customize profile</button>
                         <button class="profile-drawer-support" type="button" data-route="feedback">Feedback &amp; support</button>
-                        ${isPlaytestAdmin() ? `
+                        ${
+                            isPlaytestAdmin()
+                                ? `
                             <button class="profile-drawer-tickets" type="button" data-route="admin-tickets">Ticket dashboard</button>
                             <button class="profile-drawer-progression" type="button" data-route="admin-progression">Progression &amp; missions</button>
                             <button class="profile-drawer-docs" type="button" data-route="admin-help">Admin documentation</button>
                             <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
-                        ` : ""}
+                        `
+                                : ""
+                        }
                     </div>
                     ${renderWeeklyMissions(profile)}
-                `}
+                `
+                }
             </aside>
         </div>
     `;
@@ -3195,7 +3417,9 @@ function renderAccountPage() {
     }
 
     if (!isDiscordLoggedIn()) {
-        body.innerHTML = renderAccountLoginPanel("Login with Discord to connect your profile, notifications, and cosmetics.");
+        body.innerHTML = renderAccountLoginPanel(
+            "Login with Discord to connect your profile, notifications, and cosmetics."
+        );
         return;
     }
 
@@ -3208,9 +3432,10 @@ function renderAccountPage() {
     const schemaNote = state.authProfileExtended
         ? ""
         : `<p class="account-warning">Run the updated Supabase schema to unlock profile customization and Minecraft linking on the website.</p>`;
-    const cosmeticSchemaNote = state.authProfileExtended && !state.authCosmeticInventoryExtended
-        ? `<p class="account-warning">Additional cosmetic inventory fields are not configured yet. Existing customization remains available.</p>`
-        : "";
+    const cosmeticSchemaNote =
+        state.authProfileExtended && !state.authCosmeticInventoryExtended
+            ? `<p class="account-warning">Additional cosmetic inventory fields are not configured yet. Existing customization remains available.</p>`
+            : "";
 
     body.innerHTML = `
         <section class="account-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} ${backgroundCosmeticOwnershipDataAttributes(account)}>
@@ -3226,9 +3451,11 @@ function renderAccountPage() {
                     ${renderAccountSignedDate(account)}
                     ${renderAccountLevelPill(account)}
                     <div class="account-badge-row">
-                        ${selectedBadges.length
-                            ? selectedBadges.map((badge) => renderProfileBadge(badge)).join("")
-                            : `<span class="profile-badge empty">No badges equipped</span>`}
+                        ${
+                            selectedBadges.length
+                                ? selectedBadges.map((badge) => renderProfileBadge(badge)).join("")
+                                : `<span class="profile-badge empty">No badges equipped</span>`
+                        }
                     </div>
                 </div>
             </div>
@@ -3277,9 +3504,8 @@ function resetFeedbackSessionState() {
     feedback.adminTicketsLoaded = false;
     feedback.adminTicketsLoading = false;
     feedback.selectedTicket = null;
-    feedback.selectedTicketId = state.view === "ticket"
-        ? new URLSearchParams(window.location.hash.replace(/^#/, "")).get("ticket") || ""
-        : "";
+    feedback.selectedTicketId =
+        state.view === "ticket" ? new URLSearchParams(window.location.hash.replace(/^#/, "")).get("ticket") || "" : "";
     feedback.detailLoading = false;
     feedback.detailLoadedId = "";
     feedback.attachment = { managed: false, loading: false, signedUrl: "", kind: "file", error: "" };
@@ -3588,7 +3814,9 @@ async function loadFeedbackTicketDetail(ticketId, { force = false } = {}) {
             const [historyResult, reporterResult, adminsResult] = await Promise.all([
                 feedback.api.listHistory(ticketId),
                 feedback.api.getReporter(feedback.selectedTicket.created_by),
-                feedback.adminMetadataLoaded ? Promise.resolve({ data: feedback.admins, error: null }) : feedback.api.listAdmins()
+                feedback.adminMetadataLoaded
+                    ? Promise.resolve({ data: feedback.admins, error: null })
+                    : feedback.api.listAdmins()
             ]);
             if (historyResult.error) throw historyResult.error;
             feedback.history = Array.isArray(historyResult.data) ? historyResult.data : [];
@@ -3667,9 +3895,10 @@ async function updateUserTicketStatus(status) {
     const feedback = state.feedback;
     const ticket = feedback.selectedTicket;
     if (!feedback.api || !ticket || feedback.updating || isPlaytestAdmin()) return;
-    const allowed = status === "closed"
-        ? USER_CLOSABLE_TICKET_STATUSES.includes(ticket.status)
-        : status === "open" && USER_REOPENABLE_TICKET_STATUSES.includes(ticket.status);
+    const allowed =
+        status === "closed"
+            ? USER_CLOSABLE_TICKET_STATUSES.includes(ticket.status)
+            : status === "open" && USER_REOPENABLE_TICKET_STATUSES.includes(ticket.status);
     if (!allowed) return;
     if (status === "closed" && !window.confirm("Close this ticket? You can reopen it later.")) return;
     feedback.updating = true;
@@ -3699,8 +3928,12 @@ async function submitAdminTicketUpdate(form) {
     const assignedAdmin = String(values.get("assignedAdmin") || "") || null;
     const statusHost = form.querySelector("[data-admin-ticket-status]");
     const submit = form.querySelector("button[type='submit']");
-    if (["closed", "rejected"].includes(statusValue) && statusValue !== ticket.status
-        && !window.confirm(`Change this ticket to ${ticketStatusLabel(statusValue)}?`)) return;
+    if (
+        ["closed", "rejected"].includes(statusValue) &&
+        statusValue !== ticket.status &&
+        !window.confirm(`Change this ticket to ${ticketStatusLabel(statusValue)}?`)
+    )
+        return;
 
     feedback.updating = true;
     if (submit) {
@@ -3732,7 +3965,13 @@ function renderAdminTicketsPage() {
     const body = document.getElementById("admin-tickets-body");
     if (!body) return;
     if (!state.authReady) {
-        body.innerHTML = renderAdminTicketsContent({ loading: true, tickets: [], filters: adminTicketFilters(), counts: emptyAdminTicketCounts(), error: "" });
+        body.innerHTML = renderAdminTicketsContent({
+            loading: true,
+            tickets: [],
+            filters: adminTicketFilters(),
+            counts: emptyAdminTicketCounts(),
+            error: ""
+        });
         return;
     }
     if (!isPlaytestAdmin()) {
@@ -3751,7 +3990,8 @@ function renderAdminTicketsPage() {
 
 async function loadAdminFeedbackTickets({ force = false } = {}) {
     const feedback = state.feedback;
-    if (!feedback.api || !isPlaytestAdmin() || feedback.adminTicketsLoading || (feedback.adminTicketsLoaded && !force)) return;
+    if (!feedback.api || !isPlaytestAdmin() || feedback.adminTicketsLoading || (feedback.adminTicketsLoaded && !force))
+        return;
     feedback.adminTicketsLoading = true;
     feedback.error = "";
     if (state.view === "adminTickets") renderAdminTicketsPage();
@@ -3800,7 +4040,11 @@ function filteredAdminFeedbackTickets() {
             ticket.map_name,
             ticket.weapon_or_item,
             ticket.match_id
-        ].some((value) => String(value || "").toLowerCase().includes(query));
+        ].some((value) =>
+            String(value || "")
+                .toLowerCase()
+                .includes(query)
+        );
     });
 
     return [...rows].sort((a, b) => {
@@ -3831,9 +4075,10 @@ function emptyAdminTicketCounts() {
 }
 
 function feedbackReporterLabel(userId) {
-    const account = state.accountProfileIndex?.byId?.get(userId)
-        || state.accountProfiles.find((profile) => profile.id === userId)
-        || (state.authProfile?.id === userId ? state.authProfile : null);
+    const account =
+        state.accountProfileIndex?.byId?.get(userId) ||
+        state.accountProfiles.find((profile) => profile.id === userId) ||
+        (state.authProfile?.id === userId ? state.authProfile : null);
     return account ? accountDisplayName(account) : "Unknown player";
 }
 
@@ -3841,7 +4086,10 @@ function feedbackAuthorNames() {
     const names = new Map();
     if (state.authProfile?.id) names.set(state.authProfile.id, accountDisplayName(state.authProfile));
     if (state.feedback.reporter?.id) {
-        names.set(state.feedback.reporter.id, state.feedback.reporter.display_name || state.feedback.reporter.username || "Reporter");
+        names.set(
+            state.feedback.reporter.id,
+            state.feedback.reporter.display_name || state.feedback.reporter.username || "Reporter"
+        );
     }
     for (const admin of state.feedback.admins) {
         names.set(admin.id, admin.display_name || admin.username || "Administrator");
@@ -3856,7 +4104,10 @@ function isFeedbackTicketId(value) {
 function feedbackErrorMessage(error, fallback) {
     const code = String(error?.code || "");
     const message = String(error?.message || "");
-    if (["42P01", "PGRST205"].includes(code) || /feedback_(tickets|ticket_messages)/i.test(message) && /not find|does not exist/i.test(message)) {
+    if (
+        ["42P01", "PGRST205"].includes(code) ||
+        (/feedback_(tickets|ticket_messages)/i.test(message) && /not find|does not exist/i.test(message))
+    ) {
         return "Feedback is temporarily unavailable because its database setup is incomplete.";
     }
     if (code === "42501" || /permission|row-level security|not authorized/i.test(message)) {
@@ -3892,7 +4143,9 @@ function ticketSummaryText(ticket) {
         ticket.match_id ? `Match ID: ${ticket.match_id}` : "",
         "",
         ticket.description
-    ].filter((line, index, lines) => line || (index > 0 && index < lines.length - 1)).join("\n");
+    ]
+        .filter((line, index, lines) => line || (index > 0 && index < lines.length - 1))
+        .join("\n");
 }
 
 function renderAdminDocumentationPage() {
@@ -3916,7 +4169,13 @@ function renderAdminDocumentationPage() {
 
 async function loadAdminDocumentation({ force = false } = {}) {
     const feedback = state.feedback;
-    if (!feedback.api || !isPlaytestAdmin() || feedback.documentationLoading || (feedback.documentationLoaded && !force)) return;
+    if (
+        !feedback.api ||
+        !isPlaytestAdmin() ||
+        feedback.documentationLoading ||
+        (feedback.documentationLoaded && !force)
+    )
+        return;
     feedback.documentationLoading = true;
     feedback.error = "";
     if (state.view === "adminHelp") renderAdminDocumentationPage();
@@ -4032,14 +4291,15 @@ async function loadProgressionAdminData({ force = false } = {}) {
 
     try {
         await loadCosmeticCatalog({ force });
-        const [rulesResult, grantsResult, weeklyResult, playersResult, revocationsResult, pendingGiftsResult] = await Promise.all([
-            progression.api.listRules(),
-            progression.api.listInventory(),
-            progression.api.listWeeklyMissionTemplates(),
-            progression.api.listManagedPlayers(),
-            progression.api.listCosmeticRevocations(),
-            progression.api.listPendingCosmeticGifts()
-        ]);
+        const [rulesResult, grantsResult, weeklyResult, playersResult, revocationsResult, pendingGiftsResult] =
+            await Promise.all([
+                progression.api.listRules(),
+                progression.api.listInventory(),
+                progression.api.listWeeklyMissionTemplates(),
+                progression.api.listManagedPlayers(),
+                progression.api.listCosmeticRevocations(),
+                progression.api.listPendingCosmeticGifts()
+            ]);
         if (weeklyResult.error) {
             progression.weeklyTemplates = [];
             progression.weeklyReady = false;
@@ -4059,7 +4319,9 @@ async function loadProgressionAdminData({ force = false } = {}) {
             progression.revocations = [];
             progression.pendingGifts = [];
             progression.playersReady = false;
-            progression.playerError = playerManagerErrorMessage(playersResult.error || revocationsResult.error || pendingGiftsResult.error);
+            progression.playerError = playerManagerErrorMessage(
+                playersResult.error || revocationsResult.error || pendingGiftsResult.error
+            );
         } else {
             progression.players = (Array.isArray(playersResult.data) ? playersResult.data : [])
                 .map(normalizeManagedPlayer)
@@ -4077,7 +4339,9 @@ async function loadProgressionAdminData({ force = false } = {}) {
             }
         }
         if (!state.store.catalogProgressionReady) {
-            throw new Error(state.store.catalogMessage || "Cosmetic progression access is not configured for administrators.");
+            throw new Error(
+                state.store.catalogMessage || "Cosmetic progression access is not configured for administrators."
+            );
         }
         if (rulesResult.error) throw rulesResult.error;
         if (grantsResult.error) throw grantsResult.error;
@@ -4140,9 +4404,13 @@ async function loadWeeklyMissionTemplates({ force = false } = {}) {
 }
 
 function normalizeWeeklyMissionTemplate(row) {
-    const id = String(row?.id || "").trim().toLowerCase();
+    const id = String(row?.id || "")
+        .trim()
+        .toLowerCase();
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) return null;
-    const familyValue = String(row?.family || id).trim().toLowerCase();
+    const familyValue = String(row?.family || id)
+        .trim()
+        .toLowerCase();
     const family = /^[a-z0-9][a-z0-9_-]{0,63}$/.test(familyValue) ? familyValue : id;
     const difficulty = WEEKLY_DIFFICULTY_VALUES.has(row?.difficulty) ? row.difficulty : "easy";
     const mode = WEEKLY_MODE_VALUES.has(row?.mode) ? row.mode : "overall";
@@ -4153,14 +4421,21 @@ function normalizeWeeklyMissionTemplate(row) {
         id,
         family,
         difficulty,
-        label: String(row?.label || id).trim().slice(0, 80) || id,
-        description: String(row?.description || "").trim().slice(0, 240),
+        label:
+            String(row?.label || id)
+                .trim()
+                .slice(0, 80) || id,
+        description: String(row?.description || "")
+            .trim()
+            .slice(0, 240),
         metric,
         target: Math.min(1_000_000_000, Math.max(1, Math.floor(number(row?.target)))),
         xp: Math.min(20_000, Math.max(1, Math.floor(number(row?.xp)))),
         mode,
         weaponScope,
-        weaponId: String(row?.weapon_id || "").trim().slice(0, 80),
+        weaponId: String(row?.weapon_id || "")
+            .trim()
+            .slice(0, 80),
         weaponCategory,
         active: row?.active !== false,
         sortOrder: Math.min(100_000, Math.max(0, Math.floor(number(row?.sort_order)))),
@@ -4174,16 +4449,28 @@ function normalizeManagedPlayer(row) {
     if (!id) return null;
     return {
         id,
-        username: String(row?.username || "").trim().slice(0, 80),
-        display_name: String(row?.display_name || "").trim().slice(0, 80),
-        avatar_url: String(row?.avatar_url || "").trim().slice(0, 1000),
-        minecraft_player_name: String(row?.minecraft_player_name || "").trim().slice(0, 80),
+        username: String(row?.username || "")
+            .trim()
+            .slice(0, 80),
+        display_name: String(row?.display_name || "")
+            .trim()
+            .slice(0, 80),
+        avatar_url: String(row?.avatar_url || "")
+            .trim()
+            .slice(0, 1000),
+        minecraft_player_name: String(row?.minecraft_player_name || "")
+            .trim()
+            .slice(0, 80),
         is_admin: Boolean(row?.is_admin),
         is_owner: Boolean(row?.is_owner),
         banned_from_voting: Boolean(row?.banned_from_voting),
-        ban_reason: String(row?.ban_reason || "").trim().slice(0, 300),
+        ban_reason: String(row?.ban_reason || "")
+            .trim()
+            .slice(0, 300),
         banned_at: String(row?.banned_at || ""),
-        banned_by_username: String(row?.banned_by_username || "").trim().slice(0, 80),
+        banned_by_username: String(row?.banned_by_username || "")
+            .trim()
+            .slice(0, 80),
         created_at: String(row?.created_at || "")
     };
 }
@@ -4197,9 +4484,13 @@ function normalizeCosmeticRevocation(row) {
         profile_id: profileId,
         cosmetic_type: type,
         cosmetic_id: id,
-        reason: String(row?.reason || "").trim().slice(0, 300),
+        reason: String(row?.reason || "")
+            .trim()
+            .slice(0, 300),
         revoked_at: String(row?.revoked_at || ""),
-        revoked_by_username: String(row?.revoked_by_username || "").trim().slice(0, 80)
+        revoked_by_username: String(row?.revoked_by_username || "")
+            .trim()
+            .slice(0, 80)
     };
 }
 
@@ -4214,24 +4505,32 @@ function normalizePendingCosmeticGift(row) {
         profile_id: profileId,
         cosmetic_type: type,
         cosmetic_id: cosmeticId,
-        message: String(row?.message || "").trim().slice(0, 200),
+        message: String(row?.message || "")
+            .trim()
+            .slice(0, 200),
         created_at: String(row?.created_at || "")
     };
 }
 
 function focusProgressionEditor() {
-    window.requestAnimationFrame(() => document.querySelector("[data-progression-cosmetic-close], [data-weekly-template-close], [data-player-grant-close], [data-player-revoke-close], [data-player-ban-close]")?.focus());
+    window.requestAnimationFrame(() =>
+        document
+            .querySelector(
+                "[data-progression-cosmetic-close], [data-weekly-template-close], [data-player-grant-close], [data-player-revoke-close], [data-player-ban-close]"
+            )
+            ?.focus()
+    );
 }
 
 function progressionEditorOpen() {
     return Boolean(
-        state.progression.editorKey
-        || state.progression.creating
-        || state.progression.weeklyEditorId
-        || state.progression.creatingWeekly
-        || state.progression.playerGrantKey
-        || state.progression.playerRevokeKey
-        || state.progression.playerBanOpen
+        state.progression.editorKey ||
+        state.progression.creating ||
+        state.progression.weeklyEditorId ||
+        state.progression.creatingWeekly ||
+        state.progression.playerGrantKey ||
+        state.progression.playerRevokeKey ||
+        state.progression.playerBanOpen
     );
 }
 
@@ -4266,23 +4565,26 @@ function progressionAdminCatalogItems() {
 }
 
 function requiredFallbackCosmetic(type, id) {
-    return (type === "icon" && id === "minecraft")
-        || (type === "background" && id === "default")
-        || (type === "border" && id === "none")
-        || (type === "title" && id === "none");
+    return (
+        (type === "icon" && id === "minecraft") ||
+        (type === "background" && id === "default") ||
+        (type === "border" && id === "none") ||
+        (type === "title" && id === "none")
+    );
 }
 
 function normalizeBuiltInAdminCosmetic(type, item, index) {
     const inferredRule = inferredCosmeticRule(item.unlock);
-    const acquisitionType = item.id === "owner" && type === "title"
-        ? "owner"
-        : item.unlock === "default"
-            ? "default"
-            : item.unlock === "store"
+    const acquisitionType =
+        item.id === "owner" && type === "title"
+            ? "owner"
+            : item.unlock === "default"
+              ? "default"
+              : item.unlock === "store"
                 ? "store"
                 : inferredRule
-                    ? "progression"
-                    : "exclusive";
+                  ? "progression"
+                  : "exclusive";
     return {
         ...item,
         type,
@@ -4330,14 +4632,21 @@ function inferredCosmeticRule(unlockId) {
         return { mode: "overall", metric: "account_linked", target: 1, active: true, sort_order: 0 };
     }
     if (badge.progress.type === "sharpshooter") {
-        return { mode: "overall", metric: "headshot_rate", target: badge.progress.rateTarget || 35, active: true, sort_order: 0 };
+        return {
+            mode: "overall",
+            metric: "headshot_rate",
+            target: badge.progress.rateTarget || 35,
+            active: true,
+            sort_order: 0
+        };
     }
     if (badge.progress.type === "tiered" && badge.metric?.stat && badge.tiers?.[0]) {
-        const mode = badge.metric.scope === "battleRoyale"
-            ? "battle_royale"
-            : badge.metric.scope === "deathmatch"
-                ? "deathmatch"
-                : "overall";
+        const mode =
+            badge.metric.scope === "battleRoyale"
+                ? "battle_royale"
+                : badge.metric.scope === "deathmatch"
+                  ? "deathmatch"
+                  : "overall";
         return {
             mode,
             metric: badge.metric.stat,
@@ -4347,11 +4656,12 @@ function inferredCosmeticRule(unlockId) {
         };
     }
     if (!badge.progress.stat || !badge.progress.target) return null;
-    const mode = badge.progress.scope === "battleRoyale"
-        ? "battle_royale"
-        : badge.progress.scope === "deathmatch"
-            ? "deathmatch"
-            : "overall";
+    const mode =
+        badge.progress.scope === "battleRoyale"
+            ? "battle_royale"
+            : badge.progress.scope === "deathmatch"
+              ? "deathmatch"
+              : "overall";
     return {
         mode,
         metric: badge.progress.stat,
@@ -4374,16 +4684,27 @@ async function submitProgressionCosmetic(form) {
     try {
         const originalKey = String(values.get("originalKey") || "").trim();
         const existing = originalKey ? progressionCosmeticByKey(originalKey) : null;
-        const type = String(values.get("cosmeticType") || "").trim().toLowerCase();
-        const id = String(values.get("cosmeticId") || "").trim().toLowerCase();
+        const type = String(values.get("cosmeticType") || "")
+            .trim()
+            .toLowerCase();
+        const id = String(values.get("cosmeticId") || "")
+            .trim()
+            .toLowerCase();
         const key = cosmeticCatalogKey(type, id);
         if (!STORE_CATEGORY_LABELS[type] || type === "all") throw new Error("Choose a valid cosmetic type.");
-        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) throw new Error("The cosmetic ID can only use lowercase letters, numbers, _ and -.");
-        if (!existing && progressionAdminCatalogItems().some((item) => cosmeticCatalogKey(item.type, item.id) === key)) {
+        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id))
+            throw new Error("The cosmetic ID can only use lowercase letters, numbers, _ and -.");
+        if (
+            !existing &&
+            progressionAdminCatalogItems().some((item) => cosmeticCatalogKey(item.type, item.id) === key)
+        ) {
             throw new Error("That cosmetic ID already exists.");
         }
 
-        const name = String(values.get("name") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+        const name = String(values.get("name") || "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 80);
         if (!name) throw new Error("Enter a cosmetic name.");
         const acquisitionType = String(values.get("acquisitionType") || "exclusive").trim();
         if (!COSMETIC_ACQUISITION_VALUES.has(acquisitionType)) throw new Error("Choose how the cosmetic is earned.");
@@ -4398,7 +4719,8 @@ async function submitProgressionCosmetic(form) {
             const target = Number(values.get("target"));
             if (!PROGRESSION_MODE_VALUES.has(mode)) throw new Error("Choose a valid game mode.");
             if (!PROGRESSION_METRIC_VALUES.has(metric)) throw new Error("Choose a valid tracked requirement.");
-            if (!Number.isFinite(target) || target <= 0 || target > 1_000_000_000) throw new Error("Required amount must be above zero.");
+            if (!Number.isFinite(target) || target <= 0 || target > 1_000_000_000)
+                throw new Error("Required amount must be above zero.");
             ruleConfig = { mode, metric, target, active: values.get("ruleActive") === "on" };
         }
 
@@ -4415,33 +4737,56 @@ async function submitProgressionCosmetic(form) {
         }
         const supplyText = countLimited ? String(values.get("supplyLimit") || "").trim() : "";
         const supplyLimit = supplyText ? Number(supplyText) : null;
-        if (countLimited && (supplyLimit === null || !Number.isInteger(supplyLimit) || supplyLimit < 1 || supplyLimit > 100_000_000)) {
+        if (
+            countLimited &&
+            (supplyLimit === null || !Number.isInteger(supplyLimit) || supplyLimit < 1 || supplyLimit > 100_000_000)
+        ) {
             throw new Error("Available copies must be a positive whole number.");
         }
 
         const price = Number(values.get("shopPrice"));
         const unitAmount = shopEnabled ? Math.round(price * 100) : null;
-        if (shopEnabled && (!Number.isFinite(unitAmount) || unitAmount < 1)) throw new Error("Enter a shop preview price above zero.");
+        if (shopEnabled && (!Number.isFinite(unitAmount) || unitAmount < 1))
+            throw new Error("Enter a shop preview price above zero.");
 
-        let imageUrl = type === "title" ? "" : String(values.get("imageUrl") || existing?.image || "").trim().slice(0, 1000);
+        let imageUrl =
+            type === "title"
+                ? ""
+                : String(values.get("imageUrl") || existing?.image || "")
+                      .trim()
+                      .slice(0, 1000);
         const asset = values.get("asset");
         progression.saving = true;
         progression.error = "";
         progression.message = "";
         if (status) status.textContent = "Saving cosmetic...";
-        if (type !== "title" && asset instanceof File && asset.size > 0) imageUrl = await uploadCatalogAsset(asset, type, id);
+        if (type !== "title" && asset instanceof File && asset.size > 0)
+            imageUrl = await uploadCatalogAsset(asset, type, id);
         const dynamicIcon = type === "icon" && ["discord", "minecraft"].includes(id);
-        if (type !== "title" && !dynamicIcon && !imageUrl) throw new Error("Add a PNG, WebP or GIF asset URL or upload a file.");
+        if (type !== "title" && !dynamicIcon && !imageUrl)
+            throw new Error("Add a PNG, WebP or GIF asset URL or upload a file.");
 
         const payload = {
             cosmetic_type: type,
             cosmetic_id: id,
             name,
-            description: String(values.get("description") || "").trim().slice(0, 300),
-            category: String(values.get("category") || "Default").trim().replace(/\s+/g, " ").slice(0, 40) || "Default",
+            description: String(values.get("description") || "")
+                .trim()
+                .slice(0, 300),
+            category:
+                String(values.get("category") || "Default")
+                    .trim()
+                    .replace(/\s+/g, " ")
+                    .slice(0, 40) || "Default",
             rarity: cleanRarity(values.get("rarity")),
             image_url: type === "title" ? null : imageUrl || null,
-            title_text: type === "title" ? String(values.get("titleText") || name).trim().replace(/\s+/g, " ").slice(0, 48) || name : null,
+            title_text:
+                type === "title"
+                    ? String(values.get("titleText") || name)
+                          .trim()
+                          .replace(/\s+/g, " ")
+                          .slice(0, 48) || name
+                    : null,
             border_inset: type === "border" ? Math.min(30, Math.max(0, number(values.get("borderInset")))) : 0,
             active: values.get("active") === "on",
             acquisition_type: acquisitionType,
@@ -4450,7 +4795,9 @@ async function submitProgressionCosmetic(form) {
             supply_limit: shopEnabled ? supplyLimit : null,
             shop_enabled: shopEnabled,
             shop_unit_amount: unitAmount,
-            shop_currency: String(values.get("shopCurrency") || "eur").trim().toLowerCase(),
+            shop_currency: String(values.get("shopCurrency") || "eur")
+                .trim()
+                .toLowerCase(),
             shop_featured: shopEnabled && values.get("shopFeatured") === "on",
             sort_order: Math.min(100000, Math.max(0, Math.floor(number(values.get("sortOrder"))))),
             created_by: state.authSession.user.id,
@@ -4459,7 +4806,9 @@ async function submitProgressionCosmetic(form) {
         const catalogResult = await progression.api.saveCatalogItem(payload);
         if (catalogResult.error) throw catalogResult.error;
 
-        const currentRule = progression.rules.find((rule) => cosmeticCatalogKey(rule.cosmetic_type, rule.cosmetic_id) === key);
+        const currentRule = progression.rules.find(
+            (rule) => cosmeticCatalogKey(rule.cosmetic_type, rule.cosmetic_id) === key
+        );
         if (ruleConfig) {
             const ruleResult = await progression.api.saveRule({
                 id: currentRule?.id || "",
@@ -4518,8 +4867,12 @@ async function toggleProgressionCosmeticArchive(key) {
 async function deleteProgressionCosmetic(key) {
     const item = progressionCosmeticByKey(key);
     const progression = state.progression;
-    if (!item || item.builtIn || !item.remoteCatalog || !progression.api || progression.saving || !isPlaytestAdmin()) return;
-    if (!window.confirm(`Permanently delete ${item.name}? Its mission and every ownership record will also be deleted.`)) return;
+    if (!item || item.builtIn || !item.remoteCatalog || !progression.api || progression.saving || !isPlaytestAdmin())
+        return;
+    if (
+        !window.confirm(`Permanently delete ${item.name}? Its mission and every ownership record will also be deleted.`)
+    )
+        return;
     progression.saving = true;
     progression.error = "";
     try {
@@ -4549,9 +4902,15 @@ async function submitWeeklyMissionTemplate(form) {
     const status = form.querySelector("[data-weekly-template-status]");
 
     try {
-        const originalId = String(values.get("originalId") || "").trim().toLowerCase();
-        const templateId = String(values.get("templateId") || "").trim().toLowerCase();
-        const family = String(values.get("family") || "").trim().toLowerCase();
+        const originalId = String(values.get("originalId") || "")
+            .trim()
+            .toLowerCase();
+        const templateId = String(values.get("templateId") || "")
+            .trim()
+            .toLowerCase();
+        const family = String(values.get("family") || "")
+            .trim()
+            .toLowerCase();
         if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(templateId)) {
             throw new Error("The template ID can only use lowercase letters, numbers, _ and -.");
         }
@@ -4559,7 +4918,8 @@ async function submitWeeklyMissionTemplate(form) {
             throw new Error("The rotation group can only use lowercase letters, numbers, _ and -.");
         }
         if (originalId && originalId !== templateId) throw new Error("An existing template ID cannot be changed.");
-        if (!originalId && weeklyMissionTemplateById(templateId)) throw new Error("That weekly mission ID already exists.");
+        if (!originalId && weeklyMissionTemplateById(templateId))
+            throw new Error("That weekly mission ID already exists.");
 
         const difficulty = String(values.get("difficulty") || "");
         const mode = String(values.get("mode") || "");
@@ -4574,9 +4934,14 @@ async function submitWeeklyMissionTemplate(form) {
             throw new Error("Choose a valid weapon category.");
         }
 
-        const weaponId = String(values.get("weaponId") || "").trim().slice(0, 80);
+        const weaponId = String(values.get("weaponId") || "")
+            .trim()
+            .slice(0, 80);
         if (weaponScope === "exact_weapon" && !weaponId) throw new Error("Enter the tracked weapon ID.");
-        const label = String(values.get("label") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+        const label = String(values.get("label") || "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 80);
         if (!label) throw new Error("Enter a mission name.");
         const target = Number(values.get("target"));
         const xp = Number(values.get("xp"));
@@ -4600,7 +4965,9 @@ async function submitWeeklyMissionTemplate(form) {
             family,
             difficulty,
             label,
-            description: String(values.get("description") || "").trim().slice(0, 240),
+            description: String(values.get("description") || "")
+                .trim()
+                .slice(0, 240),
             metric,
             target,
             xp,
@@ -4640,7 +5007,10 @@ async function toggleWeeklyMissionTemplateArchive(templateId) {
         await reloadWeeklyMissionAdminData();
     } catch (error) {
         console.error("Could not change weekly mission archive state", error);
-        progression.weeklyError = weeklyMissionAdminErrorMessage(error, "Could not change this mission's archive state.");
+        progression.weeklyError = weeklyMissionAdminErrorMessage(
+            error,
+            "Could not change this mission's archive state."
+        );
     } finally {
         progression.saving = false;
         if (state.view === "adminProgression") renderProgressionAdminPage();
@@ -4651,7 +5021,12 @@ async function deleteWeeklyMissionTemplate(templateId) {
     const template = weeklyMissionTemplateById(templateId);
     const progression = state.progression;
     if (!template || !progression.api || progression.saving || !isPlaytestAdmin()) return;
-    if (!window.confirm(`Permanently delete ${template.label}? Existing assigned copies will remain until they rotate out.`)) return;
+    if (
+        !window.confirm(
+            `Permanently delete ${template.label}? Existing assigned copies will remain until they rotate out.`
+        )
+    )
+        return;
     progression.saving = true;
     progression.weeklyError = "";
     progression.weeklyMessage = "";
@@ -4704,8 +5079,8 @@ async function ensureProgressionCatalogOverride(item, overrides = {}) {
         updated_at: new Date().toISOString()
     });
     if (result.error) throw result.error;
-    const existingRule = state.progression.rules.find((rule) =>
-        cosmeticCatalogKey(rule.cosmetic_type, rule.cosmetic_id) === cosmeticCatalogKey(item.type, item.id)
+    const existingRule = state.progression.rules.find(
+        (rule) => cosmeticCatalogKey(rule.cosmetic_type, rule.cosmetic_id) === cosmeticCatalogKey(item.type, item.id)
     );
     if (acquisitionType === "progression" && !existingRule && item.inferredRule) {
         const ruleResult = await state.progression.api.saveRule({
@@ -4770,7 +5145,9 @@ function updateProgressionDraftPreview(form) {
     if (!form || !preview) return;
     const type = String(form.elements.namedItem("cosmeticType")?.value || "background");
     if (type === "title") {
-        const title = String(form.elements.namedItem("titleText")?.value || form.elements.namedItem("name")?.value || "Title").trim();
+        const title = String(
+            form.elements.namedItem("titleText")?.value || form.elements.namedItem("name")?.value || "Title"
+        ).trim();
         preview.innerHTML = `<span class="profile-title-cosmetic">${escapeHtml(title || "Title")}</span>`;
         return;
     }
@@ -4796,7 +5173,11 @@ function previewProgressionAsset(input) {
     if (!file || !preview) return;
     if (!new Set(["image/png", "image/webp", "image/gif"]).has(file.type) || file.size > 8 * 1024 * 1024) {
         input.value = "";
-        if (status) status.textContent = file.size > 8 * 1024 * 1024 ? "The asset is larger than 8 MB." : "Only PNG, WebP and GIF assets are accepted.";
+        if (status)
+            status.textContent =
+                file.size > 8 * 1024 * 1024
+                    ? "The asset is larger than 8 MB."
+                    : "Only PNG, WebP and GIF assets are accepted.";
         return;
     }
     const objectUrl = URL.createObjectURL(file);
@@ -4812,8 +5193,9 @@ async function submitProgressionGrant(form) {
 
     try {
         const profileId = String(values.get("profileId") || "").trim();
-        const profile = progression.players.find((entry) => entry.id === profileId)
-            || progression.profiles.find((entry) => entry.id === profileId);
+        const profile =
+            progression.players.find((entry) => entry.id === profileId) ||
+            progression.profiles.find((entry) => entry.id === profileId);
         const cosmetic = progressionCatalogItem(values.get("cosmeticKey"));
         const source = String(values.get("source") || "").trim();
         if (!profile) throw new Error("Choose a player account.");
@@ -4838,7 +5220,10 @@ async function submitProgressionGrant(form) {
             cosmeticType: cosmetic.type,
             cosmeticId: cosmetic.id,
             source,
-            note: String(values.get("note") || "").trim().replace(/\s+/g, " ").slice(0, 200)
+            note: String(values.get("note") || "")
+                .trim()
+                .replace(/\s+/g, " ")
+                .slice(0, 200)
         });
         if (result.error) throw result.error;
         progression.playerGrantKey = "";
@@ -4862,9 +5247,15 @@ async function submitProgressionRevoke(form) {
     const values = new FormData(form);
     const profileId = String(values.get("profileId") || "").trim();
     const cosmetic = progressionCatalogItem(values.get("cosmeticKey"));
-    const note = String(values.get("note") || "").trim().replace(/\s+/g, " ").slice(0, 300);
-    const grant = progression.grants.find((entry) =>
-        entry.profile_id === profileId && entry.cosmetic_type === cosmetic?.type && entry.cosmetic_id === cosmetic?.id
+    const note = String(values.get("note") || "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 300);
+    const grant = progression.grants.find(
+        (entry) =>
+            entry.profile_id === profileId &&
+            entry.cosmetic_type === cosmetic?.type &&
+            entry.cosmetic_id === cosmetic?.id
     );
     try {
         if (!cosmetic || !grant) throw new Error("Choose an owned cosmetic from the selected player.");
@@ -4890,16 +5281,17 @@ async function submitProgressionRevoke(form) {
         await loadProgressionAdminData({ force: true });
         await loadAccountProfiles();
         if (profileId === state.authSession?.user?.id) await loadOwnNotifications({ force: true, showPopup: false });
-        const reearned = progression.grants.some((entry) =>
-            entry.profile_id === profileId
-            && entry.cosmetic_type === cosmetic.type
-            && entry.cosmetic_id === cosmetic.id
+        const reearned = progression.grants.some(
+            (entry) =>
+                entry.profile_id === profileId &&
+                entry.cosmetic_type === cosmetic.type &&
+                entry.cosmetic_id === cosmetic.id
         );
         progression.playerMessage = reearned
             ? `${cosmetic.name || "Cosmetic"} was revoked and immediately re-earned because its progression requirement is already met. The note was saved.`
             : cosmetic.acquisitionType === "progression"
-                ? `${cosmetic.name || "Cosmetic"} revoked. The note was saved, and the cosmetic can be earned through progression again.`
-                : `${cosmetic.name || "Cosmetic"} revoked. The note was saved with the revocation.`;
+              ? `${cosmetic.name || "Cosmetic"} revoked. The note was saved, and the cosmetic can be earned through progression again.`
+              : `${cosmetic.name || "Cosmetic"} revoked. The note was saved with the revocation.`;
     } catch (error) {
         console.error("Could not revoke cosmetic", error);
         progression.playerError = playerManagerErrorMessage(error, "Could not revoke this cosmetic.");
@@ -4922,7 +5314,10 @@ async function submitPlayerCommunityBan(form) {
         if (profile.is_owner || profile.id === state.authSession?.user?.id) {
             throw new Error("The owner account and your own account cannot be banned here.");
         }
-        const reason = String(values.get("reason") || "").trim().replace(/\s+/g, " ").slice(0, 300);
+        const reason = String(values.get("reason") || "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 300);
         progression.saving = true;
         progression.playerError = "";
         progression.playerMessage = "";
@@ -4956,7 +5351,10 @@ function progressionAdminErrorMessage(error, fallback = "Progression administrat
     if (/row-level security|permission|unauthorized|forbidden|access is not configured/i.test(message)) {
         return "Run the newest Supabase progression access repair script, then retry.";
     }
-    if (["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code) || /schema|relation|column|progression|reconcile_cosmetic_ownership/i.test(message)) {
+    if (
+        ["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code) ||
+        /schema|relation|column|progression|reconcile_cosmetic_ownership/i.test(message)
+    ) {
         return "Run the newest incremental Supabase progression script, then retry.";
     }
     return message || fallback;
@@ -4965,8 +5363,10 @@ function progressionAdminErrorMessage(error, fallback = "Progression administrat
 function weeklyMissionAdminErrorMessage(error, fallback = "Weekly mission administration is unavailable.") {
     const code = String(error?.code || "");
     const message = String(error?.message || error || "");
-    if (["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code)
-        || /weekly_mission_templates|admin_.*weekly_mission_template|schema cache/i.test(message)) {
+    if (
+        ["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code) ||
+        /weekly_mission_templates|admin_.*weekly_mission_template|schema cache/i.test(message)
+    ) {
         return "Run the newest Supabase weekly mission manager script, then retry.";
     }
     if (/at least 4 active easy|at least 3 active hard|rotation pool/i.test(message)) {
@@ -4987,8 +5387,12 @@ function playerManagerErrorMessage(error, fallback = "Player Manager is unavaila
     if (/admin_revoke_player_cosmetic_reearnable|admin_list_cosmetic_revocation_history/i.test(message)) {
         return "Run the newest incremental Supabase inventory and revocation sync script, then retry.";
     }
-    if (["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code)
-        || /admin_list_managed_players|cosmetic_revocations|admin_set_player_community_ban|admin_(grant|revoke)_player_cosmetic|schema cache/i.test(message)) {
+    if (
+        ["42P01", "42703", "42883", "PGRST202", "PGRST204", "PGRST205"].includes(code) ||
+        /admin_list_managed_players|cosmetic_revocations|admin_set_player_community_ban|admin_(grant|revoke)_player_cosmetic|schema cache/i.test(
+            message
+        )
+    ) {
         return "Run the newest incremental Supabase inventory and revocation sync script, then retry.";
     }
     if (/owner account|your own account|required fallback/i.test(message)) return message;
@@ -5018,11 +5422,12 @@ async function loadCosmeticCatalog({ force = false } = {}) {
         ? "cosmetic_type, cosmetic_id, name, description, category, rarity, image_url, title_text, border_inset, active, shop_enabled, shop_unit_amount, shop_currency, shop_featured, sort_order, created_at, updated_at"
         : "cosmetic_type, cosmetic_id, name, description, category, rarity, image_url, title_text, border_inset, active, sort_order, created_at, updated_at";
     const progressionColumns = `${legacyColumns}, acquisition_type, available_from, available_until, supply_limit`;
-    const runCatalogQuery = (columns) => state.authClient
-        .from(source)
-        .select(columns)
-        .order("sort_order", { ascending: true })
-        .order("name", { ascending: true });
+    const runCatalogQuery = (columns) =>
+        state.authClient
+            .from(source)
+            .select(columns)
+            .order("sort_order", { ascending: true })
+            .order("name", { ascending: true });
     let result = await runCatalogQuery(progressionColumns);
     const progressionError = result.error;
     const progressionReady = !result.error;
@@ -5054,27 +5459,45 @@ function catalogAdminSetupMessage(error) {
 }
 
 function normalizeCosmeticCatalogRow(value) {
-    const type = String(value?.cosmetic_type || value?.type || "").trim().toLowerCase();
-    const id = String(value?.cosmetic_id || value?.id || "").trim().toLowerCase();
+    const type = String(value?.cosmetic_type || value?.type || "")
+        .trim()
+        .toLowerCase();
+    const id = String(value?.cosmetic_id || value?.id || "")
+        .trim()
+        .toLowerCase();
     if (!STORE_CATEGORY_LABELS[type] || type === "all" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) return null;
-    const name = String(value?.name || id).trim().slice(0, 80) || id;
+    const name =
+        String(value?.name || id)
+            .trim()
+            .slice(0, 80) || id;
     const imageUrl = String(value?.image_url || value?.image || "").trim();
     const shopEnabled = Boolean(value?.shop_enabled ?? value?.shopEnabled);
-    const savedAcquisition = String(value?.acquisition_type || value?.acquisitionType || "").trim().toLowerCase();
+    const savedAcquisition = String(value?.acquisition_type || value?.acquisitionType || "")
+        .trim()
+        .toLowerCase();
     const acquisitionType = COSMETIC_ACQUISITION_VALUES.has(savedAcquisition)
         ? savedAcquisition
-        : shopEnabled ? "store" : "exclusive";
+        : shopEnabled
+          ? "store"
+          : "exclusive";
     const supplyLimitValue = Number(value?.supply_limit ?? value?.supplyLimit);
     return {
         type,
         id,
         label: name,
         name,
-        description: String(value?.description || "").trim().slice(0, 300),
-        category: String(value?.category || "Store").trim().slice(0, 40) || "Store",
+        description: String(value?.description || "")
+            .trim()
+            .slice(0, 300),
+        category:
+            String(value?.category || "Store")
+                .trim()
+                .slice(0, 40) || "Store",
         rarity: cleanRarity(value?.rarity),
         image: imageUrl,
-        text: String(value?.title_text || value?.text || name).trim().slice(0, 48),
+        text: String(value?.title_text || value?.text || name)
+            .trim()
+            .slice(0, 48),
         inset: Math.min(30, Math.max(0, number(value?.border_inset ?? value?.inset))),
         unlock: acquisitionType === "default" ? "default" : acquisitionType === "store" ? "store" : "inventory",
         active: value?.active !== false,
@@ -5084,7 +5507,9 @@ function normalizeCosmeticCatalogRow(value) {
         availableUntil: value?.available_until || value?.availableUntil || "",
         supplyLimit: Number.isInteger(supplyLimitValue) && supplyLimitValue > 0 ? supplyLimitValue : null,
         unitAmount: Math.max(0, Math.floor(number(value?.shop_unit_amount ?? value?.unitAmount))),
-        currency: String(value?.shop_currency || value?.currency || "eur").trim().toLowerCase(),
+        currency: String(value?.shop_currency || value?.currency || "eur")
+            .trim()
+            .toLowerCase(),
         featured: Boolean(value?.shop_featured ?? value?.featured),
         sortOrder: Math.max(0, Math.floor(number(value?.sort_order ?? value?.sortOrder))),
         createdAt: value?.created_at || "",
@@ -5122,21 +5547,19 @@ function remoteCatalogItem(key) {
 }
 
 function catalogShopItems() {
-    return state.store.catalogItems
-        .filter(cosmeticCanAppearInShop)
-        .map((item) => ({
-            type: item.type,
-            id: item.id,
-            name: item.name,
-            description: item.description || "Store-exclusive cosmetic.",
-            rarity: item.rarity,
-            unitAmount: item.unitAmount,
-            currency: item.currency || "eur",
-            featured: item.featured,
-            sortOrder: item.sortOrder,
-            purchasable: false,
-            catalogDraft: true
-        }));
+    return state.store.catalogItems.filter(cosmeticCanAppearInShop).map((item) => ({
+        type: item.type,
+        id: item.id,
+        name: item.name,
+        description: item.description || "Store-exclusive cosmetic.",
+        rarity: item.rarity,
+        unitAmount: item.unitAmount,
+        currency: item.currency || "eur",
+        featured: item.featured,
+        sortOrder: item.sortOrder,
+        purchasable: false,
+        catalogDraft: true
+    }));
 }
 
 function mergeStoreItems(catalogItems, paymentItems) {
@@ -5157,12 +5580,16 @@ async function loadStoreData({ force = false } = {}) {
     await loadCosmeticCatalog({ force });
     let items = catalogShopItems();
     let backendReady = false;
-    let message = STORE_CHECKOUT_ENABLED ? "Checkout offline" : "Purchases are paused. This page is an admin-only preview.";
+    let message = STORE_CHECKOUT_ENABLED
+        ? "Checkout offline"
+        : "Purchases are paused. This page is an admin-only preview.";
 
     if (state.authClient) {
         const catalogResult = await state.authClient
             .from("cosmetic_store_items")
-            .select("cosmetic_type, cosmetic_id, name, description, rarity, unit_amount, currency, featured, sort_order")
+            .select(
+                "cosmetic_type, cosmetic_id, name, description, rarity, unit_amount, currency, featured, sort_order"
+            )
             .eq("active", true)
             .order("sort_order", { ascending: true });
 
@@ -5203,13 +5630,19 @@ function normalizeStoreItem(value) {
     const catalogItem = cosmeticCatalogItem(type, id);
     if (!catalogItem || catalogItem.unlock !== "store" || !cosmeticCanAppearInShop(catalogItem)) return null;
     const unitAmount = Math.max(0, Math.floor(number(value?.unit_amount ?? value?.unitAmount)));
-    const currency = String(value?.currency || "").trim().toLowerCase();
+    const currency = String(value?.currency || "")
+        .trim()
+        .toLowerCase();
     if (unitAmount < 1 || !/^[a-z]{3}$/.test(currency)) return null;
     return {
         type,
         id,
-        name: String(value?.name || catalogItem.label || "Cosmetic").trim().slice(0, 80),
-        description: String(value?.description || "Store-exclusive cosmetic.").trim().slice(0, 240),
+        name: String(value?.name || catalogItem.label || "Cosmetic")
+            .trim()
+            .slice(0, 80),
+        description: String(value?.description || "Store-exclusive cosmetic.")
+            .trim()
+            .slice(0, 240),
         rarity: cleanRarity(value?.rarity || catalogItem.rarity),
         unitAmount,
         currency,
@@ -5224,7 +5657,10 @@ function storeProducts() {
     return state.store.items
         .map(normalizeStoreItem)
         .filter(Boolean)
-        .sort((a, b) => Number(b.featured) - Number(a.featured) || a.sortOrder - b.sortOrder || a.unitAmount - b.unitAmount);
+        .sort(
+            (a, b) =>
+                Number(b.featured) - Number(a.featured) || a.sortOrder - b.sortOrder || a.unitAmount - b.unitAmount
+        );
 }
 
 function storeProduct(type, id) {
@@ -5240,7 +5676,7 @@ function formatStorePrice(product) {
     try {
         const formatter = new Intl.NumberFormat(undefined, { style: "currency", currency });
         const fractionDigits = formatter.resolvedOptions().maximumFractionDigits;
-        return formatter.format(number(product?.unitAmount) / (10 ** fractionDigits));
+        return formatter.format(number(product?.unitAmount) / 10 ** fractionDigits);
     } catch (_error) {
         return `${formatNumber(product?.unitAmount)} ${currency}`;
     }
@@ -5263,7 +5699,8 @@ function renderStorePage() {
     const adminTab = ["preview", "catalog"].includes(state.store.adminTab) ? state.store.adminTab : "preview";
     const category = STORE_CATEGORY_LABELS[state.store.category] ? state.store.category : "all";
     const products = storeProducts().filter((item) => category === "all" || item.type === category);
-    const checkoutLabel = STORE_CHECKOUT_ENABLED && state.store.backendReady ? "Test checkout enabled" : "Purchases paused";
+    const checkoutLabel =
+        STORE_CHECKOUT_ENABLED && state.store.backendReady ? "Test checkout enabled" : "Purchases paused";
 
     body.innerHTML = `
         <section class="store-heading">
@@ -5284,22 +5721,26 @@ function renderStorePage() {
         </nav>
 
         ${state.store.message ? `<p class="store-status">${escapeHtml(state.store.message)}</p>` : ""}
-        ${adminTab === "catalog"
-            ? renderStoreCatalogAdmin()
-            : renderStorePreview(category, products)}
+        ${adminTab === "catalog" ? renderStoreCatalogAdmin() : renderStorePreview(category, products)}
     `;
 }
 
 function renderStorePreview(category, products) {
     return `
         <nav class="store-tabs" aria-label="Store categories">
-            ${Object.entries(STORE_CATEGORY_LABELS).map(([id, label]) => `
+            ${Object.entries(STORE_CATEGORY_LABELS)
+                .map(
+                    ([id, label]) => `
                 <button type="button" data-store-category="${escapeHtml(id)}" class="${category === id ? "active" : ""}" aria-pressed="${category === id ? "true" : "false"}">${escapeHtml(label)}</button>
-            `).join("")}
+            `
+                )
+                .join("")}
         </nav>
-        ${products.length
-            ? `<section class="store-grid" aria-live="polite">${products.map(renderStoreCard).join("")}</section>`
-            : `<section class="store-empty"><h3>${category === "all" ? "No shop items prepared yet" : `No ${escapeHtml(STORE_CATEGORY_LABELS[category].toLowerCase())} prepared yet`}</h3></section>`}
+        ${
+            products.length
+                ? `<section class="store-grid" aria-live="polite">${products.map(renderStoreCard).join("")}</section>`
+                : `<section class="store-empty"><h3>${category === "all" ? "No shop items prepared yet" : `No ${escapeHtml(STORE_CATEGORY_LABELS[category].toLowerCase())} prepared yet`}</h3></section>`
+        }
     `;
 }
 
@@ -5318,8 +5759,13 @@ function renderStoreCatalogAdmin() {
     }
 
     const editing = remoteCatalogItem(state.store.editingKey);
-    const items = [...state.store.catalogItems]
-        .sort((a, b) => Number(b.active) - Number(a.active) || a.type.localeCompare(b.type) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const items = [...state.store.catalogItems].sort(
+        (a, b) =>
+            Number(b.active) - Number(a.active) ||
+            a.type.localeCompare(b.type) ||
+            a.sortOrder - b.sortOrder ||
+            a.name.localeCompare(b.name)
+    );
     return `
         <section class="catalog-admin-toolbar">
             <div>
@@ -5363,7 +5809,13 @@ function renderCatalogEditor(item = null) {
     const price = (Math.max(0, value.unitAmount) / 100).toFixed(2);
     const typeField = editing
         ? `<input type="hidden" name="cosmeticType" value="${escapeHtml(value.type)}"><span class="catalog-locked-value">${escapeHtml(STORE_CATEGORY_LABELS[value.type] || value.type)}</span>`
-        : `<select name="cosmeticType" required>${Object.entries(STORE_CATEGORY_LABELS).filter(([id]) => id !== "all").map(([id, label]) => `<option value="${escapeHtml(id)}" ${value.type === id ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`;
+        : `<select name="cosmeticType" required>${Object.entries(STORE_CATEGORY_LABELS)
+              .filter(([id]) => id !== "all")
+              .map(
+                  ([id, label]) =>
+                      `<option value="${escapeHtml(id)}" ${value.type === id ? "selected" : ""}>${escapeHtml(label)}</option>`
+              )
+              .join("")}</select>`;
     const idField = editing
         ? `<input type="hidden" name="cosmeticId" value="${escapeHtml(value.id)}"><span class="catalog-locked-value"><code>${escapeHtml(value.id)}</code></span>`
         : `<input name="cosmeticId" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" placeholder="founder_night" autocomplete="off">`;
@@ -5469,8 +5921,12 @@ function renderCatalogAdminItem(item) {
 async function submitCatalogForm(form) {
     if (!isPlaytestAdmin() || !state.authClient || !state.authSession?.user || state.store.savingCatalog) return;
     const values = new FormData(form);
-    const type = String(values.get("cosmeticType") || "").trim().toLowerCase();
-    const id = String(values.get("cosmeticId") || "").trim().toLowerCase();
+    const type = String(values.get("cosmeticType") || "")
+        .trim()
+        .toLowerCase();
+    const id = String(values.get("cosmeticId") || "")
+        .trim()
+        .toLowerCase();
     const key = cosmeticCatalogKey(type, id);
     const editing = remoteCatalogItem(state.store.editingKey);
     const status = form.querySelector("[data-catalog-form-status]");
@@ -5478,13 +5934,19 @@ async function submitCatalogForm(form) {
 
     try {
         if (!STORE_CATEGORY_LABELS[type] || type === "all") throw new Error("Choose a valid cosmetic type.");
-        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) throw new Error("The ID can only use lowercase letters, numbers, _ and -.");
-        if (!editing && remoteCatalogItem(key)) throw new Error("That cosmetic ID already exists. Open it from the collection to edit it.");
-        const builtInCollision = cosmeticCatalogCollection(type, { includeInactive: true })
-            .find((item) => item.id === id && !item.remoteCatalog);
+        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id))
+            throw new Error("The ID can only use lowercase letters, numbers, _ and -.");
+        if (!editing && remoteCatalogItem(key))
+            throw new Error("That cosmetic ID already exists. Open it from the collection to edit it.");
+        const builtInCollision = cosmeticCatalogCollection(type, { includeInactive: true }).find(
+            (item) => item.id === id && !item.remoteCatalog
+        );
         if (!editing && builtInCollision) throw new Error("That ID is already used by a built-in cosmetic.");
 
-        const name = String(values.get("name") || "").trim().replace(/\s+/g, " ").slice(0, 80);
+        const name = String(values.get("name") || "")
+            .trim()
+            .replace(/\s+/g, " ")
+            .slice(0, 80);
         if (!name) throw new Error("Enter a cosmetic name.");
         const acquisitionType = String(values.get("acquisitionType") || editing?.acquisitionType || "exclusive").trim();
         if (!COSMETIC_ACQUISITION_VALUES.has(acquisitionType)) throw new Error("Choose how this cosmetic is earned.");
@@ -5494,7 +5956,8 @@ async function submitCatalogForm(form) {
         const shopEnabled = acquisitionType === "store";
         const priceNumber = Number(values.get("shopPrice"));
         const unitAmount = shopEnabled ? Math.round(priceNumber * 100) : 0;
-        if (shopEnabled && (!Number.isFinite(unitAmount) || unitAmount < 1)) throw new Error("Enter a shop preview price above zero.");
+        if (shopEnabled && (!Number.isFinite(unitAmount) || unitAmount < 1))
+            throw new Error("Enter a shop preview price above zero.");
 
         state.store.savingCatalog = true;
         if (submit) {
@@ -5532,16 +5995,30 @@ async function submitCatalogForm(form) {
             cosmetic_type: type,
             cosmetic_id: id,
             name,
-            description: String(values.get("description") || "").trim().slice(0, 300),
-            category: String(values.get("category") || "Store").trim().replace(/\s+/g, " ").slice(0, 40) || "Store",
+            description: String(values.get("description") || "")
+                .trim()
+                .slice(0, 300),
+            category:
+                String(values.get("category") || "Store")
+                    .trim()
+                    .replace(/\s+/g, " ")
+                    .slice(0, 40) || "Store",
             rarity: cleanRarity(values.get("rarity")),
             image_url: imageUrl || null,
-            title_text: type === "title" ? String(values.get("titleText") || name).trim().replace(/\s+/g, " ").slice(0, 48) || name : null,
+            title_text:
+                type === "title"
+                    ? String(values.get("titleText") || name)
+                          .trim()
+                          .replace(/\s+/g, " ")
+                          .slice(0, 48) || name
+                    : null,
             border_inset: type === "border" ? Math.min(30, Math.max(0, number(values.get("borderInset")))) : 0,
             active: values.get("active") === "on",
             shop_enabled: shopEnabled,
             shop_unit_amount: shopEnabled ? unitAmount : null,
-            shop_currency: String(values.get("shopCurrency") || "eur").trim().toLowerCase(),
+            shop_currency: String(values.get("shopCurrency") || "eur")
+                .trim()
+                .toLowerCase(),
             shop_featured: shopEnabled && values.get("shopFeatured") === "on",
             sort_order: Math.min(100000, Math.max(0, Math.floor(number(values.get("sortOrder"))))),
             created_by: state.authSession.user.id,
@@ -5606,13 +6083,11 @@ async function uploadCatalogAsset(file, type, id) {
     const userId = state.authSession?.user?.id;
     if (!userId) throw new Error("Your Discord session expired. Log in again.");
     const objectPath = `${userId}/catalog/${type}/${id}/${Date.now()}.${extension}`;
-    const upload = await state.authClient.storage
-        .from(COSMETIC_MEDIA_BUCKET)
-        .upload(objectPath, file, {
-            cacheControl: "3600",
-            contentType: file.type,
-            upsert: false
-        });
+    const upload = await state.authClient.storage.from(COSMETIC_MEDIA_BUCKET).upload(objectPath, file, {
+        cacheControl: "3600",
+        contentType: file.type,
+        upsert: false
+    });
     if (upload.error) throw upload.error;
     const publicResult = state.authClient.storage.from(COSMETIC_MEDIA_BUCKET).getPublicUrl(objectPath);
     const publicUrl = String(publicResult?.data?.publicUrl || "").trim();
@@ -5629,7 +6104,10 @@ function previewCatalogAsset(input) {
     if (!new Set(["image/png", "image/webp", "image/gif"]).has(file.type) || file.size > 8 * 1024 * 1024) {
         input.value = "";
         if (status) {
-            status.textContent = file.size > 8 * 1024 * 1024 ? "The asset is larger than 8 MB." : "Only PNG, WebP and GIF assets are accepted.";
+            status.textContent =
+                file.size > 8 * 1024 * 1024
+                    ? "The asset is larger than 8 MB."
+                    : "Only PNG, WebP and GIF assets are accepted.";
             status.classList.add("error");
         }
         return;
@@ -5693,10 +6171,10 @@ function renderStoreCard(product) {
     const action = owned
         ? `<span class="store-owned">Owned</span>`
         : !STORE_CHECKOUT_ENABLED || !product.purchasable
-            ? `<span class="store-preview-only">Preview only</span>`
-            : !state.store.backendReady
-                ? `<button type="button" disabled>Unavailable</button>`
-                : `<button type="button" data-store-type="${escapeHtml(product.type)}" data-store-buy="${escapeHtml(product.id)}" ${purchasing ? "disabled" : ""}>${purchasing ? "Opening..." : "Buy"}</button>`;
+          ? `<span class="store-preview-only">Preview only</span>`
+          : !state.store.backendReady
+            ? `<button type="button" disabled>Unavailable</button>`
+            : `<button type="button" data-store-type="${escapeHtml(product.type)}" data-store-buy="${escapeHtml(product.id)}" ${purchasing ? "disabled" : ""}>${purchasing ? "Opening..." : "Buy"}</button>`;
 
     return `
         <article class="store-card rarity-${rarity} ${owned ? "owned" : ""} ${product.featured ? "featured" : ""}">
@@ -5792,7 +6270,17 @@ function renderStorePurchaseDialog() {
 async function submitStorePurchase() {
     const pending = state.store.pendingPurchase;
     const product = pending ? storeProduct(pending.type, pending.id) : null;
-    if (!STORE_CHECKOUT_ENABLED || !isPlaytestAdmin() || !product || !product.purchasable || !state.authClient || !state.authSession?.user || !state.store.backendReady || state.store.purchasingKey) return;
+    if (
+        !STORE_CHECKOUT_ENABLED ||
+        !isPlaytestAdmin() ||
+        !product ||
+        !product.purchasable ||
+        !state.authClient ||
+        !state.authSession?.user ||
+        !state.store.backendReady ||
+        state.store.purchasingKey
+    )
+        return;
 
     const key = storeProductKey(product.type, product.id);
     state.store.purchasingKey = key;
@@ -5915,7 +6403,9 @@ function renderAccountLinkPanel(account, linkedProfile) {
                 <p class="panel-kicker">Minecraft Link</p>
                 <h3>${linkedProfile ? "Connected" : "Not connected"}</h3>
             </div>
-            ${linkedProfile ? `
+            ${
+                linkedProfile
+                    ? `
                 <div class="linked-player-card">
                     ${renderPlayerAvatar(linkedProfile, linkedProfile, 64, "linked-player-avatar")}
                     <div>
@@ -5923,9 +6413,11 @@ function renderAccountLinkPanel(account, linkedProfile) {
                         <span>${escapeHtml(account.minecraft_player_uuid || "Linked through Discord bot")}</span>
                     </div>
                 </div>
-            ` : `
+            `
+                    : `
                 <p class="mode-empty">Run <code>/linkminecraft</code> in Discord's <strong>#minecraft-verification</strong> channel, then run the shown <code>/discordlink &lt;code&gt;</code> command in Minecraft while the bot and server are online.</p>
-            `}
+            `
+            }
         </section>
     `;
 }
@@ -5956,6 +6448,7 @@ function renderAccountCustomizeForm(account, badgeState) {
     const border = cleanPfpBorder(account.pfp_border, account, badgeState);
     const title = cleanProfileTitle(account.profile_title, account, badgeState);
     const selectedIds = selectedAccountBadgeIds(account, badgeState.unlockedIds);
+    const selectedBadges = selectedAccountBadges(account, badgeState);
     const linkedProfile = linkedStatsProfile();
     const avatarUrl = accountAvatarUrl(account, linkedProfile, 180);
 
@@ -5989,16 +6482,26 @@ function renderAccountCustomizeForm(account, badgeState) {
                         }).join("")}
                     </div>
                 </div>
-                <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Profile preview" data-account-preview ${backgroundCosmeticOwnershipDataAttributes(account)}>
-                    <span class="account-preview-avatar ${avatarFrameClass(account)}" data-account-preview-avatar${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
-                        ${renderAvatarImage(avatarUrl, account, linkedProfile, 180, "eager", "data-account-preview-img")}
-                    </span>
-                    <div>
-                        <p class="panel-kicker">Preview</p>
-                        <strong data-account-preview-name>${escapeHtml(accountDisplayName(account))}</strong>
-                        <div data-account-preview-title>${renderProfileTitle(account, { empty: true })}</div>
-                        <span data-account-preview-meta>${escapeHtml(avatarSourceLabel(avatarSource))} - ${escapeHtml(backgroundLabel(background))} - ${escapeHtml(pfpBorderLabel(border))} - ${escapeHtml(profileTitleLabel(title))}</span>
+                <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Complete profile preview" data-account-preview data-account-preview-background="${escapeHtml(background)}" ${backgroundCosmeticOwnershipDataAttributes(account)}>
+                    <div class="account-custom-preview-identity">
+                        <span class="account-preview-avatar ${avatarFrameClass(account)}" data-account-preview-avatar${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
+                            ${renderAvatarImage(avatarUrl, account, linkedProfile, 180, "eager", "data-account-preview-img")}
+                        </span>
+                        <div class="account-custom-preview-copy">
+                            <p class="panel-kicker">Profile preview</p>
+                            <strong data-account-preview-name>${escapeHtml(accountDisplayName(account))}</strong>
+                            <div data-account-preview-title>${renderProfileTitle(account, { empty: true })}</div>
+                            ${renderAccountLevelPill(account)}
+                        </div>
                     </div>
+                    <div class="account-badge-row compact account-preview-badges" data-account-preview-badges>
+                        ${
+                            selectedBadges.length
+                                ? selectedBadges.map((badge) => renderProfileBadge(badge)).join("")
+                                : `<span class="profile-badge empty">No badges equipped</span>`
+                        }
+                    </div>
+                    <span class="account-preview-meta" data-account-preview-meta>${escapeHtml(avatarSourceLabel(avatarSource))} - ${escapeHtml(backgroundLabel(background))} - ${escapeHtml(pfpBorderLabel(border))} - ${escapeHtml(profileTitleLabel(title))}</span>
                 </aside>
             </div>
             <button type="submit" ${state.accountSaving || !state.authProfileExtended ? "disabled" : ""}>${state.accountSaving ? "Saving..." : "Save profile"}</button>
@@ -6042,8 +6545,7 @@ function renderCosmeticFieldMedia(type, account, profile, badgeState, selectedId
 
     if (type === "badges") {
         const ids = selectedIds instanceof Set ? selectedIds : new Set(selectedIds || []);
-        const badges = BADGE_CATALOG
-            .filter((badge) => ids.has(badge.id))
+        const badges = BADGE_CATALOG.filter((badge) => ids.has(badge.id))
             .slice(0, 3)
             .map((badge) => badgeDisplay(badge, badgeState.context, true));
         return `
@@ -6077,7 +6579,9 @@ function cosmeticSelectionLabel(type, account, selectedIds = new Set()) {
 }
 
 function updateCosmeticFieldButtons(form, account, profile, badgeState) {
-    const selectedIds = new Set([...form.querySelectorAll("input[name='selectedBadges']:checked")].map((input) => input.value));
+    const selectedIds = new Set(
+        [...form.querySelectorAll("input[name='selectedBadges']:checked")].map((input) => input.value)
+    );
     for (const type of ["icon", "background", "border", "title", "badges"]) {
         const media = form.querySelector(`[data-cosmetic-field-media='${type}']`);
         if (media) media.innerHTML = renderCosmeticFieldMedia(type, account, profile, badgeState, selectedIds);
@@ -6191,8 +6695,7 @@ function cosmeticPickerHost() {
 
 function renderCosmeticPickerPreview(account, profile, badgeState, selectedIds, type) {
     const avatarUrl = accountAvatarUrl(account, profile, 112);
-    const badges = BADGE_CATALOG
-        .filter((badge) => selectedIds.has(badge.id))
+    const badges = BADGE_CATALOG.filter((badge) => selectedIds.has(badge.id))
         .slice(0, 5)
         .map((badge) => badgeDisplay(badge, badgeState.context, true));
     return `
@@ -6218,16 +6721,25 @@ function renderCosmeticPickerPreview(account, profile, badgeState, selectedIds, 
 function cosmeticPickerItems(type, account) {
     if (type === "icon") {
         const legacy = account?.custom_avatar_url
-            ? [{ id: "custom", label: "Uploaded icon", category: "Legacy", rarity: "common", image: account.custom_avatar_url, unlock: "custom" }]
+            ? [
+                  {
+                      id: "custom",
+                      label: "Uploaded icon",
+                      category: "Legacy",
+                      rarity: "common",
+                      image: account.custom_avatar_url,
+                      unlock: "custom"
+                  }
+              ]
             : [];
         return [...cosmeticCatalogCollection("icon"), ...legacy];
     }
     if (type === "background") {
         return cosmeticCatalogCollection("background")
             .filter((item) => item.id !== "custom" || Boolean(account?.custom_background_url))
-            .map((item) => item.id === "custom"
-                ? { ...item, label: "Uploaded background", category: "Legacy" }
-                : item);
+            .map((item) =>
+                item.id === "custom" ? { ...item, label: "Uploaded background", category: "Legacy" } : item
+            );
     }
     if (type === "border") return cosmeticCatalogCollection("border");
     if (type === "title") return cosmeticCatalogCollection("title");
@@ -6253,23 +6765,29 @@ function cosmeticOptionSelected(type, id, draft, selectedIds) {
 function renderCosmeticGroups(type, items, account, profile, badgeState, selectedIds) {
     if (!items.length) return `<p class="mode-empty">No owned cosmetics in this collection.</p>`;
     if (type === "badges") {
-        const rarities = state.cosmeticPicker.rarityDirection === "asc" ? [...RARITY_ORDER] : [...RARITY_ORDER].reverse();
-        return rarities.map((rarity) => {
-            const group = items
-                .filter((item) => item.rarity === rarity)
-                .sort((a, b) => a.label.localeCompare(b.label));
-            return group.length ? renderCosmeticGroup(RARITY_LABELS[rarity], type, group, account, profile, badgeState, selectedIds) : "";
-        }).join("");
+        const rarities =
+            state.cosmeticPicker.rarityDirection === "asc" ? [...RARITY_ORDER] : [...RARITY_ORDER].reverse();
+        return rarities
+            .map((rarity) => {
+                const group = items
+                    .filter((item) => item.rarity === rarity)
+                    .sort((a, b) => a.label.localeCompare(b.label));
+                return group.length
+                    ? renderCosmeticGroup(RARITY_LABELS[rarity], type, group, account, profile, badgeState, selectedIds)
+                    : "";
+            })
+            .join("");
     }
 
-    const categories = [...new Set(items.map((item) => item.category || "Other"))]
-        .sort((a, b) => cosmeticCategoryRank(a) - cosmeticCategoryRank(b) || a.localeCompare(b));
-    return categories.map((category) => {
-        const group = items
-            .filter((item) => (item.category || "Other") === category)
-            .sort(cosmeticRarityCompare);
-        return renderCosmeticGroup(category, type, group, account, profile, badgeState, selectedIds);
-    }).join("");
+    const categories = [...new Set(items.map((item) => item.category || "Other"))].sort(
+        (a, b) => cosmeticCategoryRank(a) - cosmeticCategoryRank(b) || a.localeCompare(b)
+    );
+    return categories
+        .map((category) => {
+            const group = items.filter((item) => (item.category || "Other") === category).sort(cosmeticRarityCompare);
+            return renderCosmeticGroup(category, type, group, account, profile, badgeState, selectedIds);
+        })
+        .join("");
 }
 
 function renderCosmeticGroup(label, type, items, account, profile, badgeState, selectedIds) {
@@ -6292,9 +6810,8 @@ function renderCosmeticOption(type, item, account, profile, badgeState, selected
     const unavailable = !item.owned || selectionFull;
     const isNew = type === "badges" && item.owned && isBadgeNew(account, item.id);
     const displayItem = item.displayItem || item;
-    const badgeAttributes = type === "badges"
-        ? `data-badge-id="${escapeHtml(item.id)}" ${badgeProgressDataAttributes(displayItem)}`
-        : "";
+    const badgeAttributes =
+        type === "badges" ? `data-badge-id="${escapeHtml(item.id)}" ${badgeProgressDataAttributes(displayItem)}` : "";
     const ownershipAttributes = cosmeticOwnershipDataAttributes(
         type,
         item.id,
@@ -6346,9 +6863,8 @@ function renderCosmeticOptionMedia(type, item, account, profile) {
             </span>
         `;
     }
-    const url = type === "icon"
-        ? profileIconOptionUrl(item, account, profile, 160)
-        : profileBackgroundOptionUrl(item, account);
+    const url =
+        type === "icon" ? profileIconOptionUrl(item, account, profile, 160) : profileBackgroundOptionUrl(item, account);
     return `<span class="cosmetic-option-media ${escapeHtml(type)}-media">${renderCosmeticImage(url, item.label, type)}</span>`;
 }
 
@@ -6410,11 +6926,12 @@ function selectCosmeticOption(type, id) {
         input.checked = !input.checked;
         enforceBadgeSelectionLimit(form, input);
     } else {
-        const fieldName = type === "icon"
-            ? "avatarSource"
-            : type === "background"
-                ? "profileBackground"
-                : type === "border"
+        const fieldName =
+            type === "icon"
+                ? "avatarSource"
+                : type === "background"
+                  ? "profileBackground"
+                  : type === "border"
                     ? "pfpBorder"
                     : "profileTitle";
         const input = form.elements[fieldName];
@@ -6452,14 +6969,20 @@ function updateAccountCustomizePreview(form) {
     const background = cleanProfileBackground(form.elements.profileBackground?.value, account, badgeState);
     const border = cleanPfpBorder(form.elements.pfpBorder?.value, account, badgeState);
     const title = cleanProfileTitle(form.elements.profileTitle?.value, account, badgeState);
-    const displayName = String(form.elements.displayName?.value || "").trim().replace(/\s+/g, " ") || accountDisplayName(account);
+    const displayName =
+        String(form.elements.displayName?.value || "")
+            .trim()
+            .replace(/\s+/g, " ") || accountDisplayName(account);
     const previewAccount = {
         ...account,
         display_name: displayName,
         avatar_source: avatarSource,
         profile_background: background,
         pfp_border: border,
-        profile_title: title
+        profile_title: title,
+        selected_badges: [...(form.querySelectorAll("input[name='selectedBadges']:checked") || [])]
+            .map((input) => String(input.value || "").trim())
+            .filter(Boolean)
     };
 
     const image = preview.querySelector("[data-account-preview-img]");
@@ -6474,6 +6997,7 @@ function updateAccountCustomizePreview(form) {
     setAvatarFrameImage(avatarFrame, previewAccount);
     setCosmeticTooltipData(avatarFrame, avatarCosmeticOwnershipTooltip(previewAccount));
     replaceClassPrefix(preview, "profile-bg-", profileBackgroundClass(previewAccount));
+    preview.dataset.accountPreviewBackground = background;
     setCosmeticTooltipData(preview, backgroundCosmeticOwnershipTooltip(previewAccount));
 
     const backgroundUrl = profileBackgroundImageUrl(previewAccount);
@@ -6487,8 +7011,16 @@ function updateAccountCustomizePreview(form) {
     if (name) name.textContent = displayName;
     const titleHost = preview.querySelector("[data-account-preview-title]");
     if (titleHost) titleHost.innerHTML = renderProfileTitle(previewAccount, { empty: true });
+    const badgeHost = preview.querySelector("[data-account-preview-badges]");
+    if (badgeHost) {
+        const selectedBadges = selectedAccountBadges(previewAccount, badgeState);
+        badgeHost.innerHTML = selectedBadges.length
+            ? selectedBadges.map((badge) => renderProfileBadge(badge)).join("")
+            : `<span class="profile-badge empty">No badges equipped</span>`;
+    }
     const meta = preview.querySelector("[data-account-preview-meta]");
-    if (meta) meta.textContent = `${avatarSourceLabel(avatarSource)} - ${backgroundLabel(background)} - ${pfpBorderLabel(border)} - ${profileTitleLabel(title)}`;
+    if (meta)
+        meta.textContent = `${avatarSourceLabel(avatarSource)} - ${backgroundLabel(background)} - ${pfpBorderLabel(border)} - ${profileTitleLabel(title)}`;
 
     updateCosmeticFieldButtons(form, previewAccount, linkedProfile, badgeState);
 }
@@ -6577,10 +7109,10 @@ function renderWeeklyMissionRow(profile, mission, claimedIds) {
     const action = claimed
         ? `<span class="mission-xp claimed">Claimed</span>`
         : progress.complete
-            ? `<button class="mission-claim-button" type="button" data-weekly-claim="${escapeHtml(mission.id)}" ${claiming || communityBanned || state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>${claiming ? "Claiming..." : `Claim ${formatNumber(mission.xp)} XP`}</button>`
-            : canSwap
-                ? `<button class="mission-swap-button" type="button" data-weekly-swap="${escapeHtml(mission.id)}" ${state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>Swap</button>`
-                : `<span class="mission-xp">+${formatNumber(mission.xp)} XP</span>`;
+          ? `<button class="mission-claim-button" type="button" data-weekly-claim="${escapeHtml(mission.id)}" ${claiming || communityBanned || state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>${claiming ? "Claiming..." : `Claim ${formatNumber(mission.xp)} XP`}</button>`
+          : canSwap
+            ? `<button class="mission-swap-button" type="button" data-weekly-swap="${escapeHtml(mission.id)}" ${state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>Swap</button>`
+            : `<span class="mission-xp">+${formatNumber(mission.xp)} XP</span>`;
     return `
         <article class="mission-row weekly-mission-row ${progress.complete ? "complete" : ""} ${mission.carried ? "carried" : ""} ${animating ? "rewarding" : ""}">
             <div>
@@ -6635,9 +7167,12 @@ async function syncWeeklyMissions() {
     if (missionState.syncing) return;
 
     const cycle = weeklyMissionCycle();
-    if (missionState.source === "local"
-        && missionState.row?.cycle_key === cycle.key
-        && !(missionState.row.awaiting_link && profile)) return;
+    if (
+        missionState.source === "local" &&
+        missionState.row?.cycle_key === cycle.key &&
+        !(missionState.row.awaiting_link && profile)
+    )
+        return;
     missionState.syncing = true;
     missionState.loading = !missionState.row || missionState.row.cycle_key !== cycle.key;
     renderAccountMissionViews();
@@ -6682,9 +7217,10 @@ function loadLocalWeeklyMissionRow(account, profile, cycle) {
         if (existing?.cycle_key === cycle.key && Array.isArray(existing.missions)) {
             return normalizeWeeklyMissionRow(existing);
         }
-        const previous = Object.values(parsed)
-            .filter((entry) => entry?.user_id === account.id && entry?.cycle_key < cycle.key)
-            .sort((a, b) => String(b.cycle_key).localeCompare(String(a.cycle_key)))[0] || null;
+        const previous =
+            Object.values(parsed)
+                .filter((entry) => entry?.user_id === account.id && entry?.cycle_key < cycle.key)
+                .sort((a, b) => String(b.cycle_key).localeCompare(String(a.cycle_key)))[0] || null;
         const freshMissions = generateWeeklyMissions(account, profile, cycle);
         const row = {
             user_id: account.id,
@@ -6726,7 +7262,8 @@ function renewWeeklyMissions(previousRow, freshMissions, profile, cycle) {
     const claimedIds = new Set(arrayField(previousRow.claimed_ids));
     return freshMissions.map((freshMission, index) => {
         const previous = previousRow.missions[index];
-        if (!previous || previous.difficulty !== freshMission.difficulty || claimedIds.has(previous.id)) return freshMission;
+        if (!previous || previous.difficulty !== freshMission.difficulty || claimedIds.has(previous.id))
+            return freshMission;
         const progress = weeklyMissionProgress(profile, previous);
         if (progress.value <= 0) return freshMission;
         return {
@@ -6741,8 +7278,15 @@ function renewWeeklyMissions(previousRow, freshMissions, profile, cycle) {
 async function claimWeeklyMission(missionId) {
     const missionState = state.weeklyMissions;
     const profile = linkedStatsProfile();
-    if (!missionId || isCurrentAccountCommunityBanned() || missionState.claimingId
-        || missionState.source !== "supabase" || !missionState.row || !profile) return;
+    if (
+        !missionId ||
+        isCurrentAccountCommunityBanned() ||
+        missionState.claimingId ||
+        missionState.source !== "supabase" ||
+        !missionState.row ||
+        !profile
+    )
+        return;
     const claimedIds = new Set(arrayField(missionState.row.claimed_ids));
     const mission = missionState.row.missions.find((entry) => entry.id === missionId);
     if (!mission || claimedIds.has(mission.id) || !weeklyMissionProgress(profile, mission).complete) return;
@@ -6779,22 +7323,19 @@ async function claimWeeklyMission(missionId) {
 function applyAccountXp(xp) {
     if (!state.authProfile) return;
     state.authProfile = { ...state.authProfile, xp };
-    state.accountProfiles = state.accountProfiles.map((account) => (
+    state.accountProfiles = state.accountProfiles.map((account) =>
         account.id === state.authProfile.id ? { ...account, xp } : account
-    ));
+    );
     rebuildAccountProfileIndex();
 }
 
 function applyAccountBadgeUnlocks(ids) {
     if (!state.authProfile) return;
-    const unlockedBadges = [...new Set([
-        ...arrayField(state.authProfile.unlocked_badges),
-        ...arrayField(ids)
-    ])];
+    const unlockedBadges = [...new Set([...arrayField(state.authProfile.unlocked_badges), ...arrayField(ids)])];
     state.authProfile = { ...state.authProfile, unlocked_badges: unlockedBadges };
-    state.accountProfiles = state.accountProfiles.map((account) => (
+    state.accountProfiles = state.accountProfiles.map((account) =>
         account.id === state.authProfile.id ? { ...account, unlocked_badges: unlockedBadges } : account
-    ));
+    );
     rebuildAccountProfileIndex();
 }
 
@@ -6847,8 +7388,14 @@ function renderWeeklyMissionSwapDialog() {
 async function submitWeeklyMissionSwap() {
     const missionState = state.weeklyMissions;
     const mission = missionState.row?.missions?.find((entry) => entry.id === missionState.swapMissionId);
-    if (isCurrentAccountCommunityBanned() || missionState.swapping || missionState.source !== "supabase"
-        || !mission?.carried || mission.swapUsed) return;
+    if (
+        isCurrentAccountCommunityBanned() ||
+        missionState.swapping ||
+        missionState.source !== "supabase" ||
+        !mission?.carried ||
+        mission.swapUsed
+    )
+        return;
 
     missionState.swapping = true;
     renderWeeklyMissionSwapDialog();
@@ -6912,7 +7459,8 @@ function pickWeeklyMissions(candidates, count, rng) {
 }
 
 function weeklyMissionCandidates(profile, difficulty, rng) {
-    const requiredCount = difficulty === "easy" ? WEEKLY_EASY_MISSION_COUNT : WEEKLY_MISSION_COUNT - WEEKLY_EASY_MISSION_COUNT;
+    const requiredCount =
+        difficulty === "easy" ? WEEKLY_EASY_MISSION_COUNT : WEEKLY_MISSION_COUNT - WEEKLY_EASY_MISSION_COUNT;
     const managed = state.weeklyMissions.templates
         .filter((template) => template.active && template.difficulty === difficulty)
         .map((template) => expandWeeklyMissionTemplate(template, profile, rng))
@@ -6920,20 +7468,22 @@ function weeklyMissionCandidates(profile, difficulty, rng) {
     const managedFamilies = new Set(managed.map((mission) => mission.family));
     if (state.weeklyMissions.templatesReady && managedFamilies.size >= requiredCount) return managed;
 
-    const fallback = fallbackWeeklyMissionCandidates(profile, difficulty, rng)
-        .filter((mission) => !managedFamilies.has(mission.family));
+    const fallback = fallbackWeeklyMissionCandidates(profile, difficulty, rng).filter(
+        (mission) => !managedFamilies.has(mission.family)
+    );
     return [...managed, ...fallback];
 }
 
 function expandWeeklyMissionTemplate(template, profile, rng) {
     const randomMode = randomChoice(MISSION_MODES, rng);
-    const selectedMode = template.mode === "random"
-        ? randomMode
-        : MISSION_MODES.find((entry) => entry.id === template.mode) || {
-            id: "overall",
-            label: "any mode",
-            short: "All"
-        };
+    const selectedMode =
+        template.mode === "random"
+            ? randomMode
+            : MISSION_MODES.find((entry) => entry.id === template.mode) || {
+                  id: "overall",
+                  label: "any mode",
+                  short: "All"
+              };
     let mode = selectedMode.id;
     let weaponId = "";
     let weaponLabel = "weapon";
@@ -6941,8 +7491,9 @@ function expandWeeklyMissionTemplate(template, profile, rng) {
 
     if (template.weaponScope === "exact_weapon") {
         weaponId = template.weaponId;
-        const weapon = weeklyWeaponEntries(profile, mode).find((entry) => entry.id === weaponId)
-            || weeklyWeaponEntries(profile, "overall").find((entry) => entry.id === weaponId);
+        const weapon =
+            weeklyWeaponEntries(profile, mode).find((entry) => entry.id === weaponId) ||
+            weeklyWeaponEntries(profile, "overall").find((entry) => entry.id === weaponId);
         weaponLabel = weapon?.label || labelFromIdentifier(weaponId);
     } else if (template.weaponScope === "random_weapon") {
         let weapons = weeklyEligibleWeapons(profile, mode);
@@ -6966,9 +7517,10 @@ function expandWeeklyMissionTemplate(template, profile, rng) {
         if (!category) return null;
     }
 
-    const resolvedMode = mode === "overall"
-        ? { id: "overall", label: "any mode", short: "All" }
-        : MISSION_MODES.find((entry) => entry.id === mode) || selectedMode;
+    const resolvedMode =
+        mode === "overall"
+            ? { id: "overall", label: "any mode", short: "All" }
+            : MISSION_MODES.find((entry) => entry.id === mode) || selectedMode;
     const tokens = {
         "{mode}": resolvedMode.label,
         "{mode_short}": resolvedMode.short,
@@ -7005,40 +7557,255 @@ function fallbackWeeklyMissionCandidates(profile, difficulty, rng) {
     const weapon = randomChoice(modeWeapons.length ? modeWeapons : weeklyEligibleWeapons(profile, "overall"), rng);
     const modeCategories = weeklyAvailableCategories(profile, mode.id);
     const categoryMode = modeCategories.length ? mode.id : "overall";
-    const category = randomChoice(modeCategories.length ? modeCategories : weeklyAvailableCategories(profile, "overall"), rng);
+    const category = randomChoice(
+        modeCategories.length ? modeCategories : weeklyAvailableCategories(profile, "overall"),
+        rng
+    );
     const isEasy = difficulty === "easy";
     const missions = isEasy
         ? [
-            weeklyMission("matches_any", difficulty, "Play the Field", "Play 2 tracked matches.", "games", 2, 300, { mode: "overall" }),
-            weeklyMission("matches_mode", difficulty, `${mode.short} Warm-up`, `Play 1 ${mode.label} match.`, "games", 1, 300, { mode: mode.id }),
-            weeklyMission("kills_any", difficulty, "On the Board", "Get 5 kills in any mode.", "kills", 5, 350, { mode: "overall" }),
-            weeklyMission("kills_mode", difficulty, `${mode.short} Eliminations`, `Get 4 kills in ${mode.label}.`, "kills", 4, 400, { mode: mode.id }),
-            weeklyMission("hits_mode", difficulty, `${mode.short} Pressure`, `Land 25 hits in ${mode.label}.`, "hits", 25, 350, { mode: mode.id }),
-            weeklyMission("headshots", difficulty, "Keep It High", "Land 5 headshots in any mode.", "headshots", 5, 400, { mode: "overall" }),
-            weeklyMission("headshot_kills", difficulty, "Clean Finish", "Get 2 headshot kills in any mode.", "headshotKills", 2, 450, { mode: "overall" }),
-            weeklyMission("playtime", difficulty, "Stay in the Fight", "Play for 15 tracked minutes.", "playtimeSeconds", 900, 350, { mode: "overall" }),
-            weeklyMission("utility", difficulty, "Utility Check", "Get 1 utility kill.", "utilityKills", 1, 500, { mode: "overall" }),
-            weapon ? weeklyMission("weapon_hits", difficulty, `${weapon.label} Practice`, `Land 15 hits with the ${weapon.label}.`, "hits", 15, 450, { mode: weaponMode, weaponId: weapon.id }) : null,
-            category ? weeklyMission("category_hits", difficulty, `${weeklyCategoryLabel(category)} Practice`, `Land 25 hits with ${weeklyCategoryLabel(category).toLowerCase()} weapons.`, "hits", 25, 450, { mode: categoryMode, category }) : null,
-            weeklyMission("other_mode_hits", difficulty, `${otherMode.short} Switch-up`, `Land 20 hits in ${otherMode.label}.`, "hits", 20, 375, { mode: otherMode.id })
-        ]
+              weeklyMission("matches_any", difficulty, "Play the Field", "Play 2 tracked matches.", "games", 2, 300, {
+                  mode: "overall"
+              }),
+              weeklyMission(
+                  "matches_mode",
+                  difficulty,
+                  `${mode.short} Warm-up`,
+                  `Play 1 ${mode.label} match.`,
+                  "games",
+                  1,
+                  300,
+                  { mode: mode.id }
+              ),
+              weeklyMission("kills_any", difficulty, "On the Board", "Get 5 kills in any mode.", "kills", 5, 350, {
+                  mode: "overall"
+              }),
+              weeklyMission(
+                  "kills_mode",
+                  difficulty,
+                  `${mode.short} Eliminations`,
+                  `Get 4 kills in ${mode.label}.`,
+                  "kills",
+                  4,
+                  400,
+                  { mode: mode.id }
+              ),
+              weeklyMission(
+                  "hits_mode",
+                  difficulty,
+                  `${mode.short} Pressure`,
+                  `Land 25 hits in ${mode.label}.`,
+                  "hits",
+                  25,
+                  350,
+                  { mode: mode.id }
+              ),
+              weeklyMission(
+                  "headshots",
+                  difficulty,
+                  "Keep It High",
+                  "Land 5 headshots in any mode.",
+                  "headshots",
+                  5,
+                  400,
+                  { mode: "overall" }
+              ),
+              weeklyMission(
+                  "headshot_kills",
+                  difficulty,
+                  "Clean Finish",
+                  "Get 2 headshot kills in any mode.",
+                  "headshotKills",
+                  2,
+                  450,
+                  { mode: "overall" }
+              ),
+              weeklyMission(
+                  "playtime",
+                  difficulty,
+                  "Stay in the Fight",
+                  "Play for 15 tracked minutes.",
+                  "playtimeSeconds",
+                  900,
+                  350,
+                  { mode: "overall" }
+              ),
+              weeklyMission("utility", difficulty, "Utility Check", "Get 1 utility kill.", "utilityKills", 1, 500, {
+                  mode: "overall"
+              }),
+              weapon
+                  ? weeklyMission(
+                        "weapon_hits",
+                        difficulty,
+                        `${weapon.label} Practice`,
+                        `Land 15 hits with the ${weapon.label}.`,
+                        "hits",
+                        15,
+                        450,
+                        { mode: weaponMode, weaponId: weapon.id }
+                    )
+                  : null,
+              category
+                  ? weeklyMission(
+                        "category_hits",
+                        difficulty,
+                        `${weeklyCategoryLabel(category)} Practice`,
+                        `Land 25 hits with ${weeklyCategoryLabel(category).toLowerCase()} weapons.`,
+                        "hits",
+                        25,
+                        450,
+                        { mode: categoryMode, category }
+                    )
+                  : null,
+              weeklyMission(
+                  "other_mode_hits",
+                  difficulty,
+                  `${otherMode.short} Switch-up`,
+                  `Land 20 hits in ${otherMode.label}.`,
+                  "hits",
+                  20,
+                  375,
+                  { mode: otherMode.id }
+              )
+          ]
         : [
-            weeklyMission("matches_mode_hard", difficulty, `${mode.short} Regular`, `Play 5 ${mode.label} matches.`, "games", 5, 900, { mode: mode.id }),
-            weeklyMission("kills_any_hard", difficulty, "Heavy Week", "Get 30 kills in any mode.", "kills", 30, 1000, { mode: "overall" }),
-            weeklyMission("kills_mode_hard", difficulty, `${mode.short} Specialist`, `Get 20 kills in ${mode.label}.`, "kills", 20, 1100, { mode: mode.id }),
-            weeklyMission("hits_hard", difficulty, "Suppressing Fire", "Land 125 hits in any mode.", "hits", 125, 900, { mode: "overall" }),
-            weeklyMission("headshots_hard", difficulty, "Above the Shoulders", "Land 25 headshots in any mode.", "headshots", 25, 1000, { mode: "overall" }),
-            weeklyMission("headshot_kills_hard", difficulty, "Precision Week", "Get 8 headshot kills in any mode.", "headshotKills", 8, 1100, { mode: "overall" }),
-            weeklyMission("win_mode", difficulty, `${mode.short} Victory`, `Win 1 ${mode.label} match.`, "wins", 1, 1200, { mode: mode.id }),
-            weeklyStatSupported(profile, mode.id, "mvp")
-                ? weeklyMission("mvp_mode", difficulty, `${mode.short} Standout`, `Earn MVP once in ${mode.label}.`, "mvp", 1, 1300, { mode: mode.id })
-                : null,
-            weeklyMission("playtime_hard", difficulty, "Full Session", "Play for 60 tracked minutes.", "playtimeSeconds", 3600, 900, { mode: "overall" }),
-            weeklyMission("utility_hard", difficulty, "Utility Expert", "Get 3 utility kills.", "utilityKills", 3, 1200, { mode: "overall" }),
-            weeklyMission("vehicle_hard", difficulty, "Anti-Vehicle", "Get 1 vehicle kill.", "vehicleKills", 1, 1400, { mode: "overall" }),
-            weapon ? weeklyMission("weapon_kills", difficulty, `${weapon.label} Mastery`, `Get 10 kills with the ${weapon.label}.`, "kills", 10, 1200, { mode: weaponMode, weaponId: weapon.id }) : null,
-            category ? weeklyMission("category_kills", difficulty, `${weeklyCategoryLabel(category)} Mastery`, `Get 15 kills with ${weeklyCategoryLabel(category).toLowerCase()} weapons.`, "kills", 15, 1200, { mode: categoryMode, category }) : null
-        ];
+              weeklyMission(
+                  "matches_mode_hard",
+                  difficulty,
+                  `${mode.short} Regular`,
+                  `Play 5 ${mode.label} matches.`,
+                  "games",
+                  5,
+                  900,
+                  { mode: mode.id }
+              ),
+              weeklyMission(
+                  "kills_any_hard",
+                  difficulty,
+                  "Heavy Week",
+                  "Get 30 kills in any mode.",
+                  "kills",
+                  30,
+                  1000,
+                  { mode: "overall" }
+              ),
+              weeklyMission(
+                  "kills_mode_hard",
+                  difficulty,
+                  `${mode.short} Specialist`,
+                  `Get 20 kills in ${mode.label}.`,
+                  "kills",
+                  20,
+                  1100,
+                  { mode: mode.id }
+              ),
+              weeklyMission(
+                  "hits_hard",
+                  difficulty,
+                  "Suppressing Fire",
+                  "Land 125 hits in any mode.",
+                  "hits",
+                  125,
+                  900,
+                  { mode: "overall" }
+              ),
+              weeklyMission(
+                  "headshots_hard",
+                  difficulty,
+                  "Above the Shoulders",
+                  "Land 25 headshots in any mode.",
+                  "headshots",
+                  25,
+                  1000,
+                  { mode: "overall" }
+              ),
+              weeklyMission(
+                  "headshot_kills_hard",
+                  difficulty,
+                  "Precision Week",
+                  "Get 8 headshot kills in any mode.",
+                  "headshotKills",
+                  8,
+                  1100,
+                  { mode: "overall" }
+              ),
+              weeklyMission(
+                  "win_mode",
+                  difficulty,
+                  `${mode.short} Victory`,
+                  `Win 1 ${mode.label} match.`,
+                  "wins",
+                  1,
+                  1200,
+                  { mode: mode.id }
+              ),
+              weeklyStatSupported(profile, mode.id, "mvp")
+                  ? weeklyMission(
+                        "mvp_mode",
+                        difficulty,
+                        `${mode.short} Standout`,
+                        `Earn MVP once in ${mode.label}.`,
+                        "mvp",
+                        1,
+                        1300,
+                        { mode: mode.id }
+                    )
+                  : null,
+              weeklyMission(
+                  "playtime_hard",
+                  difficulty,
+                  "Full Session",
+                  "Play for 60 tracked minutes.",
+                  "playtimeSeconds",
+                  3600,
+                  900,
+                  { mode: "overall" }
+              ),
+              weeklyMission(
+                  "utility_hard",
+                  difficulty,
+                  "Utility Expert",
+                  "Get 3 utility kills.",
+                  "utilityKills",
+                  3,
+                  1200,
+                  { mode: "overall" }
+              ),
+              weeklyMission(
+                  "vehicle_hard",
+                  difficulty,
+                  "Anti-Vehicle",
+                  "Get 1 vehicle kill.",
+                  "vehicleKills",
+                  1,
+                  1400,
+                  { mode: "overall" }
+              ),
+              weapon
+                  ? weeklyMission(
+                        "weapon_kills",
+                        difficulty,
+                        `${weapon.label} Mastery`,
+                        `Get 10 kills with the ${weapon.label}.`,
+                        "kills",
+                        10,
+                        1200,
+                        { mode: weaponMode, weaponId: weapon.id }
+                    )
+                  : null,
+              category
+                  ? weeklyMission(
+                        "category_kills",
+                        difficulty,
+                        `${weeklyCategoryLabel(category)} Mastery`,
+                        `Get 15 kills with ${weeklyCategoryLabel(category).toLowerCase()} weapons.`,
+                        "kills",
+                        15,
+                        1200,
+                        { mode: categoryMode, category }
+                    )
+                  : null
+          ];
     return missions.filter(Boolean);
 }
 
@@ -7058,11 +7825,12 @@ function weeklyMission(family, difficulty, label, description, metric, target, x
 }
 
 function weeklyStatSupported(profile, mode, metric) {
-    const stats = mode === "battleRoyale"
-        ? profile?.battleRoyale?.stats
-        : mode === "deathmatch"
-            ? profile?.deathmatch?.stats
-            : null;
+    const stats =
+        mode === "battleRoyale"
+            ? profile?.battleRoyale?.stats
+            : mode === "deathmatch"
+              ? profile?.deathmatch?.stats
+              : null;
     if (!stats) return false;
     if (metric === "mvp") {
         return ["mvp", "mvps", "mvpCount", "mvpAwards"].some((key) => Object.hasOwn(stats, key));
@@ -7095,11 +7863,12 @@ function weeklyMissionMetric(profile, mission) {
             return sum + number(normalizeStats(entry.stats)[mission.metric]);
         }, 0);
     }
-    const player = mission.mode === "battleRoyale"
-        ? normalizePlayer(profile.battleRoyale)
-        : mission.mode === "deathmatch"
-            ? normalizePlayer(profile.deathmatch)
-            : buildProfileOverall(profile);
+    const player =
+        mission.mode === "battleRoyale"
+            ? normalizePlayer(profile.battleRoyale)
+            : mission.mode === "deathmatch"
+              ? normalizePlayer(profile.deathmatch)
+              : buildProfileOverall(profile);
     return number(normalizeStats(player?.stats)[mission.metric]);
 }
 
@@ -7132,15 +7901,17 @@ function weeklyWeaponCategory(entry) {
 }
 
 function weeklyCategoryLabel(category) {
-    return {
-        rifle: "Rifle",
-        smg: "SMG",
-        pistol: "Pistol",
-        marksman: "Marksman",
-        shotgun: "Shotgun",
-        lmg: "LMG",
-        utility: "Utility"
-    }[category] || labelFromIdentifier(category);
+    return (
+        {
+            rifle: "Rifle",
+            smg: "SMG",
+            pistol: "Pistol",
+            marksman: "Marksman",
+            shotgun: "Shotgun",
+            lmg: "LMG",
+            utility: "Utility"
+        }[category] || labelFromIdentifier(category)
+    );
 }
 
 function seededRandom(seed) {
@@ -7150,7 +7921,7 @@ function seededRandom(seed) {
         value = Math.imul(value, 16777619);
     }
     return () => {
-        value += 0x6D2B79F5;
+        value += 0x6d2b79f5;
         let result = value;
         result = Math.imul(result ^ (result >>> 15), result | 1);
         result ^= result + Math.imul(result ^ (result >>> 7), result | 61);
@@ -7214,9 +7985,10 @@ function renderHomeLatestMatch() {
     const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
     const players = number(match.playerCount);
     const winner = matchWinnerText(match);
-    const score = match.mode === "deathmatch" && hasMatchScore(match)
-        ? `<span>Final score Red ${escapeHtml(String(match.redScore))} - ${escapeHtml(String(match.blueScore))} Blue</span>`
-        : "";
+    const score =
+        match.mode === "deathmatch" && hasMatchScore(match)
+            ? `<span>Final score Red ${escapeHtml(String(match.redScore))} - ${escapeHtml(String(match.blueScore))} Blue</span>`
+            : "";
 
     container.innerHTML = `
         <div class="latest-match-card">
@@ -7361,7 +8133,9 @@ function renderCommunityAdminPage() {
     const eventSummaries = summaries
         .filter((summary) => isFeaturedSlot(summary.slot))
         .sort((a, b) => dateValue(a.slot.startAt) - dateValue(b.slot.startAt) || b.score - a.score);
-    const confirmedCount = [...communitySummaries, ...eventSummaries].filter((summary) => isSlotConfirmed(playtest.id, summary.slot.id)).length;
+    const confirmedCount = [...communitySummaries, ...eventSummaries].filter((summary) =>
+        isSlotConfirmed(playtest.id, summary.slot.id)
+    ).length;
     const filters = adminCalendarFilters();
 
     board.innerHTML = `
@@ -7382,7 +8156,12 @@ function renderCommunityAdminPage() {
     `;
 }
 
-function renderCommunityAdminCalendar(playtest, communitySummaries, eventSummaries = [], filters = adminCalendarFilters()) {
+function renderCommunityAdminCalendar(
+    playtest,
+    communitySummaries,
+    eventSummaries = [],
+    filters = adminCalendarFilters()
+) {
     const monthDate = calendarMonthDate(playtest);
     const year = monthDate.getFullYear();
     const month = monthDate.getMonth();
@@ -7424,12 +8203,18 @@ function renderCommunityAdminCalendar(playtest, communitySummaries, eventSummari
                     <span>${escapeHtml(formatDateKeyWeekday(dayKey).slice(0, 3))}</span>
                 </div>
                 ${visibleSummaries.length ? renderAdminDayAvailabilityBar(dayKey, visibleSummaries) : ""}
-                ${visibleSummaries.length === 0
-                    ? `<small>${filters.community || filters.events ? "No shown dates" : "Layers hidden"}</small>`
-                    : [
-                        ...dayEventSummaries.map((summary) => renderAdminCalendarSlot(playtest, summary, "event")),
-                        ...dayCommunitySummaries.map((summary) => renderAdminCalendarSlot(playtest, summary, "community"))
-                    ].join("")}
+                ${
+                    visibleSummaries.length === 0
+                        ? `<small>${filters.community || filters.events ? "No shown dates" : "Layers hidden"}</small>`
+                        : [
+                              ...dayEventSummaries.map((summary) =>
+                                  renderAdminCalendarSlot(playtest, summary, "event")
+                              ),
+                              ...dayCommunitySummaries.map((summary) =>
+                                  renderAdminCalendarSlot(playtest, summary, "community")
+                              )
+                          ].join("")
+                }
             </article>
         `);
     }
@@ -7466,9 +8251,10 @@ function renderAdminCalendarLayerToggles(filters, communityCount, eventCount) {
 
     return `
         <div class="admin-layer-toggles" role="group" aria-label="Calendar layers">
-            ${options.map((option) => {
-                const active = Boolean(filters[option.id]);
-                return `
+            ${options
+                .map((option) => {
+                    const active = Boolean(filters[option.id]);
+                    return `
                     <button
                         type="button"
                         class="${active ? "active" : ""}"
@@ -7480,7 +8266,8 @@ function renderAdminCalendarLayerToggles(filters, communityCount, eventCount) {
                         <small>${option.count}</small>
                     </button>
                 `;
-            }).join("")}
+                })
+                .join("")}
         </div>
     `;
 }
@@ -7491,10 +8278,9 @@ function renderAdminCalendarEmptyNote(monthDate, filters, visibleCommunityCount,
     }
     if (visibleCommunityCount + visibleEventCount > 0) return "";
 
-    const visibleLayers = [
-        filters.community ? "community votes" : "",
-        filters.events ? "planned events" : ""
-    ].filter(Boolean).join(" or ");
+    const visibleLayers = [filters.community ? "community votes" : "", filters.events ? "planned events" : ""]
+        .filter(Boolean)
+        .join(" or ");
     return `<p class="mode-empty admin-month-empty">No ${escapeHtml(visibleLayers)} in ${escapeHtml(formatMonthLabel(monthDate))}.</p>`;
 }
 
@@ -7511,12 +8297,16 @@ function renderAdminDayAvailabilityBar(dayKey, daySummaries) {
     return `
         <div class="admin-day-availability" aria-label="${escapeHtml(peakText)}">
             <div class="admin-hour-bar">
-                ${segments.map((segment) => `
+                ${segments
+                    .map(
+                        (segment) => `
                     <span
                         class="admin-hour-segment hour-level-${segment.level}"
                         title="${escapeHtml(`${segment.label} - ${segment.nextLabel}: ${segment.count} ${segment.count === 1 ? "person" : "people"}`)}"
                     ></span>
-                `).join("")}
+                `
+                    )
+                    .join("")}
             </div>
             <div class="admin-hour-axis" aria-hidden="true">
                 <span>00</span>
@@ -7533,9 +8323,10 @@ function renderAdminDayAvailabilityBar(dayKey, daySummaries) {
 function adminDayAvailabilitySegments(dayKey, daySummaries) {
     return Array.from({ length: 24 }, (_, hour) => {
         const start = localDateFromKey(dayKey, minutesToTime(hour * 60)).getTime();
-        const end = hour === 23
-            ? localDateFromKey(nextLocalDateKey(dayKey), "00:00").getTime()
-            : localDateFromKey(dayKey, minutesToTime((hour + 1) * 60)).getTime();
+        const end =
+            hour === 23
+                ? localDateFromKey(nextLocalDateKey(dayKey), "00:00").getTime()
+                : localDateFromKey(dayKey, minutesToTime((hour + 1) * 60)).getTime();
         const voters = new Set();
 
         for (const summary of daySummaries) {
@@ -7561,9 +8352,8 @@ function renderAdminCalendarSlot(playtest, summary, layer) {
     const confirmed = isSlotConfirmed(playtest.id, summary.slot.id);
     const displaySlot = confirmedDisplaySlot(playtest.id, summary.slot);
     const slotLabel = `${formatSlotShortRange(displaySlot)} ${formatSlotTimeRange(displaySlot)}`;
-    const layerLabel = layer === "event"
-        ? (playtest.mainSlotId === summary.slot.id ? "Main event" : "My event")
-        : "Community vote";
+    const layerLabel =
+        layer === "event" ? (playtest.mainSlotId === summary.slot.id ? "Main event" : "My event") : "Community vote";
     const adminActions = isPlaytestAdmin()
         ? `
             <div class="date-admin-actions">
@@ -7626,18 +8416,20 @@ function renderPlaytestList(playtests, active) {
         <section class="playtest-side-block">
             <p class="panel-kicker">Featured Plans</p>
             <div class="playtest-list">
-                ${playtests.map((playtest) => {
-                    const summaries = summarizePlaytestSlots(playtest);
-                    const best = bestPlaytestSlots(summaries)[0];
-                    const selected = active?.id === playtest.id;
-                    return `
+                ${playtests
+                    .map((playtest) => {
+                        const summaries = summarizePlaytestSlots(playtest);
+                        const best = bestPlaytestSlots(summaries)[0];
+                        const selected = active?.id === playtest.id;
+                        return `
                         <button class="playtest-list-item ${selected ? "active" : ""}" type="button" data-playtest-select="${escapeHtml(playtest.id)}" aria-pressed="${selected ? "true" : "false"}" aria-label="${escapeHtml(`${playtest.title}${selected ? ", selected" : ""}`)}">
                             <span>${escapeHtml(playtestStatusLabel(playtest))}</span>
                             <strong>${escapeHtml(playtest.title)}</strong>
                             <small>${best ? `${escapeHtml(formatSlotShortRange(best.slot))} - Score ${best.score}` : "No slots"}</small>
                         </button>
                     `;
-                }).join("")}
+                    })
+                    .join("")}
             </div>
         </section>
     `;
@@ -7662,9 +8454,11 @@ function renderPlaytestIdentity() {
                 </div>
             </div>
             <div class="identity-actions">
-                ${loggedIn
-                    ? `<button type="button" data-auth-sign-out>Sign out</button>`
-                    : `<button type="button" data-auth-login ${state.authClient && state.authReady ? "" : "disabled"}>Login with Discord</button>`}
+                ${
+                    loggedIn
+                        ? `<button type="button" data-auth-sign-out>Sign out</button>`
+                        : `<button type="button" data-auth-login ${state.authClient && state.authReady ? "" : "disabled"}>Login with Discord</button>`
+                }
                 <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Open Discord</a>
             </div>
             ${state.authMessage ? `<p class="identity-status">${escapeHtml(state.authMessage)}</p>` : ""}
@@ -7686,12 +8480,14 @@ function renderPlaytestPreferences(playtest) {
             <p class="panel-kicker">Session Preference</p>
             <fieldset class="preference-field">
                 <legend>Mode</legend>
-                ${PLAYTEST_MODE_OPTIONS.map((mode) => `
+                ${PLAYTEST_MODE_OPTIONS.map(
+                    (mode) => `
                     <label>
                         <input type="radio" name="playtest-mode" value="${escapeHtml(mode)}" ${preference.modePreference === mode ? "checked" : ""}>
                         <span>${escapeHtml(mode)}</span>
                     </label>
-                `).join("")}
+                `
+                ).join("")}
             </fieldset>
         </section>
     `;
@@ -7758,7 +8554,10 @@ function renderPlaytestBoard(playtest) {
     if (!playtest) {
         const emptyText = state.playtests.remoteLoading
             ? "Loading the public playtest calendar..."
-            : state.playtests.remoteError || (isPlaytestAdmin() ? "Create one from the admin controls. It will be saved to the public Supabase calendar." : "No public playtest is available yet.");
+            : state.playtests.remoteError ||
+              (isPlaytestAdmin()
+                  ? "Create one from the admin controls. It will be saved to the public Supabase calendar."
+                  : "No public playtest is available yet.");
         board.innerHTML = `
             <section class="playtest-empty">
                 <h3>No playtest selected</h3>
@@ -7965,7 +8764,8 @@ function renderSelectedDateCard(selected, playtest, canVote) {
                 ${renderNotificationToggle(playtest.id, null, selected.dateKey, notifyDisabled, "Set availability first to enable confirmation notifications.")}
                 ${isPlaytestAdmin() ? renderConfirmationControls(playtest.id, null, selected.dateKey, isPast) : ""}
                 <div class="vote-row compact">
-                    ${PLAYTEST_STATUS_OPTIONS.map((option) => `
+                    ${PLAYTEST_STATUS_OPTIONS.map(
+                        (option) => `
                         <button
                             class="vote-button vote-${escapeHtml(option.id)}"
                             type="button"
@@ -7975,7 +8775,8 @@ function renderSelectedDateCard(selected, playtest, canVote) {
                             aria-pressed="false"
                             ${canVote && !isPast ? "" : "disabled"}
                         >${escapeHtml(option.label)}</button>
-                    `).join("")}
+                    `
+                    ).join("")}
                 </div>
             </article>
         `;
@@ -8069,8 +8870,8 @@ function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled, di
     const helperText = authPending
         ? "Checking Discord login..."
         : loginRequired
-            ? "Login with Discord required for notification to be toggled."
-            : disabledReason || `${count} Discord notification opt-in${count === 1 ? "" : "s"}`;
+          ? "Login with Discord required for notification to be toggled."
+          : disabledReason || `${count} Discord notification opt-in${count === 1 ? "" : "s"}`;
     return `
         <div class="notify-row">
             <label class="notify-toggle ${subscribed ? "active" : ""}">
@@ -8128,13 +8929,18 @@ function renderPreferenceSummary(summary, contextLabel) {
 function renderPreferenceBars(entries, emptyText) {
     if (entries.length === 0) return `<span class="muted-line">${escapeHtml(emptyText)}</span>`;
     const max = Math.max(PLAYTEST_INTEREST_MIN_SCALE, ...entries.map((entry) => entry.count));
-    return entries.slice(0, 4).map((entry) => `
+    return entries
+        .slice(0, 4)
+        .map(
+            (entry) => `
         <div class="preference-bar-row">
             <span>${escapeHtml(entry.label)}</span>
             <div><i style="width: ${Math.max(8, Math.round((entry.count / max) * 100))}%"></i></div>
             <strong>${entry.count}</strong>
         </div>
-    `).join("");
+    `
+        )
+        .join("");
 }
 
 function renderVoteTimeFields(slot, userVote, disabled) {
@@ -8188,12 +8994,14 @@ function renderPlaytestSlotCard(summary, playtest, canVote, summaries = []) {
             </div>
             <div class="availability-meter"><span style="width: ${fill}%"></span></div>
             <div class="vote-count-grid">
-                ${PLAYTEST_COUNT_ORDER.map((status) => `
+                ${PLAYTEST_COUNT_ORDER.map(
+                    (status) => `
                     <span class="count-${escapeHtml(status)}">
                         <strong>${status === "available" ? summary.availableTotal : summary.counts[status]}</strong>
                         ${escapeHtml(statusLabel(status))}
                     </span>
-                `).join("")}
+                `
+                ).join("")}
             </div>
             ${renderBestTimeSummary(summary)}
             ${renderVoteTimeFields(summary.slot, userVote, !slotCanVote)}
@@ -8230,9 +9038,12 @@ function renderVoteBreakdown(summary) {
                 return `
                     <section>
                         <h4>${escapeHtml(statusLabel(status))} (${status === "available" ? summary.counts.available : voters.length})</h4>
-                        ${voters.length === 0
-                            ? `<p class="mode-empty">No voters</p>`
-                            : `<ul>${voters.map((vote) => `
+                        ${
+                            voters.length === 0
+                                ? `<p class="mode-empty">No voters</p>`
+                                : `<ul>${voters
+                                      .map(
+                                          (vote) => `
                                 <li>
                                     <span>${escapeHtml(vote.username)}</span>
                                     <small title="${escapeHtml(formatFullLocalDate(vote.updatedAt))}">
@@ -8240,7 +9051,10 @@ function renderVoteBreakdown(summary) {
                                         <time datetime="${escapeHtml(vote.updatedAt || "")}">Updated ${escapeHtml(formatRelativeTime(vote.updatedAt))}</time>
                                     </small>
                                 </li>
-                            `).join("")}</ul>`}
+                            `
+                                      )
+                                      .join("")}</ul>`
+                        }
                     </section>
                 `;
             }).join("")}
@@ -8312,7 +9126,9 @@ function renderPlaytestHeatmap(ranked) {
             <p class="panel-kicker">Heatmap</p>
             <h4>Best availability</h4>
             <div class="heatmap-list">
-                ${visibleRows.map((summary) => `
+                ${visibleRows
+                    .map(
+                        (summary) => `
                     <div class="heatmap-row">
                         <div>
                             <strong>${escapeHtml(formatSlotWeekday(summary.slot.startAt))}</strong>
@@ -8321,7 +9137,9 @@ function renderPlaytestHeatmap(ranked) {
                         <div class="heatmap-bar"><i style="width: ${Math.max(6, Math.round(((summary.rankScore || summary.score) / maxScore) * 100))}%"></i></div>
                         <small>${summary.rankScore || summary.score}</small>
                     </div>
-                `).join("")}
+                `
+                    )
+                    .join("")}
             </div>
             ${ranked.length > 5 ? `<button class="heatmap-toggle" type="button" data-heatmap-toggle>${expanded ? "LESS" : "MORE"}</button>` : ""}
         </article>
@@ -8369,7 +9187,12 @@ function handlePlaytestClick(event) {
         const playtest = activePlaytest();
         if (!playtest || !canVoteOnPlaytest(playtest)) return;
         const slot = playtest.slots.find((entry) => entry.id === voteButton.dataset.slotId);
-        void setPlaytestVote(playtest.id, voteButton.dataset.slotId, voteButton.dataset.playtestVote, voteTimeRangeForButton(voteButton, slot));
+        void setPlaytestVote(
+            playtest.id,
+            voteButton.dataset.slotId,
+            voteButton.dataset.playtestVote,
+            voteTimeRangeForButton(voteButton, slot)
+        );
         return;
     }
 
@@ -8380,7 +9203,11 @@ function handlePlaytestClick(event) {
     }
 
     const calendarButton = event.target.closest("[data-calendar-date]");
-    if (calendarButton && !calendarButton.matches("[data-notify-toggle]") && !calendarButton.matches("[data-playtest-calendar-vote]")) {
+    if (
+        calendarButton &&
+        !calendarButton.matches("[data-notify-toggle]") &&
+        !calendarButton.matches("[data-playtest-calendar-vote]")
+    ) {
         const playtest = activePlaytest();
         if (!playtest) return;
         state.playtests.selectedCalendarDates[playtest.id] = calendarButton.dataset.calendarDate;
@@ -8520,7 +9347,11 @@ async function handleConfirmDateClick(confirmButton) {
     if (!playtest) return;
     let slotId = confirmButton.dataset.confirmSlot;
     if (!slotId) {
-        const slot = await ensureCommunitySlot(playtest.id, confirmButton.dataset.confirmDate, selectedCommunityTimeRange());
+        const slot = await ensureCommunitySlot(
+            playtest.id,
+            confirmButton.dataset.confirmDate,
+            selectedCommunityTimeRange()
+        );
         if (!slot) return;
         slotId = slot.id;
     }
@@ -8550,7 +9381,12 @@ async function handlePlaytestSubmit(event) {
 
     const slots = [
         { id: `${id}-main`, label: "Featured date", startAt: mainSlotAt, source: "featured" },
-        ...alternatives.map((startAt, index) => ({ id: `${id}-alt-${index + 1}`, label: `Featured date ${index + 2}`, startAt, source: "featured" }))
+        ...alternatives.map((startAt, index) => ({
+            id: `${id}-alt-${index + 1}`,
+            label: `Featured date ${index + 2}`,
+            startAt,
+            source: "featured"
+        }))
     ];
 
     const playtest = {
@@ -8774,9 +9610,8 @@ async function setPlaytestVote(playtestId, slotId, status, timeRange = null) {
 
     if (isRemotePlaytest(playtestId)) {
         try {
-            const { error } = await state.authClient
-                .from("availability")
-                .upsert({
+            const { error } = await state.authClient.from("availability").upsert(
+                {
                     playtest_id: playtestId,
                     slot_id: slotId,
                     user_id: PLAYTEST_VIEWER.userId,
@@ -8784,7 +9619,9 @@ async function setPlaytestVote(playtestId, slotId, status, timeRange = null) {
                     mode_preference: labelToDbModePreference(preference.modePreference),
                     available_start_datetime: state.playtests.votes[playtestId][slotId].availableStartAt,
                     available_end_datetime: state.playtests.votes[playtestId][slotId].availableEndAt
-                }, { onConflict: "playtest_id,slot_id,user_id" });
+                },
+                { onConflict: "playtest_id,slot_id,user_id" }
+            );
             if (error) throw error;
             state.authMessage = "";
             await loadRemotePlaytests({ silent: true, render: false });
@@ -8815,7 +9652,9 @@ function summarizePlaytestSlots(playtest) {
             maybe: votes.filter((vote) => vote.status === "maybe"),
             unavailable: votes.filter((vote) => vote.status === "unavailable")
         };
-        const counts = Object.fromEntries(Object.entries(votersByStatus).map(([status, voters]) => [status, voters.length]));
+        const counts = Object.fromEntries(
+            Object.entries(votersByStatus).map(([status, voters]) => [status, voters.length])
+        );
         const availableVoters = [...votersByStatus.available, ...votersByStatus.preferred];
         const score = counts.available * 3 + counts.preferred * 5 + counts.maybe;
         const bestTime = bestVoteOverlap(slot, votes);
@@ -8841,7 +9680,9 @@ function collectSlotVotes(playtest, slotId) {
     }
     const localVote = state.playtests.votes?.[playtest.id]?.[slotId];
     if (localVote?.status) byUser.set(PLAYTEST_VIEWER.userId, localVote);
-    return [...byUser.values()].sort((a, b) => statusSortValue(a.status) - statusSortValue(b.status) || a.username.localeCompare(b.username));
+    return [...byUser.values()].sort(
+        (a, b) => statusSortValue(a.status) - statusSortValue(b.status) || a.username.localeCompare(b.username)
+    );
 }
 
 function closeEmptyCommunitySlots() {
@@ -8867,8 +9708,7 @@ function closeEmptyCommunitySlots() {
 }
 
 function communitySlotHasParticipant(playtestId, slotId) {
-    return collectSlotVotes({ id: playtestId }, slotId)
-        .some((vote) => COMMUNITY_SLOT_ACTIVE_STATUSES.has(vote.status));
+    return collectSlotVotes({ id: playtestId }, slotId).some((vote) => COMMUNITY_SLOT_ACTIVE_STATUSES.has(vote.status));
 }
 
 function seedVotesForSlot(playtest, slotId) {
@@ -8895,9 +9735,7 @@ function seedVotesForSlot(playtest, slotId) {
 }
 
 function bestVoteOverlap(slot, votes) {
-    const intervals = votes
-        .map((vote) => voteAvailabilityInterval(slot, vote))
-        .filter(Boolean);
+    const intervals = votes.map((vote) => voteAvailabilityInterval(slot, vote)).filter(Boolean);
     if (intervals.length === 0) return null;
 
     const eventGroups = new Map();
@@ -8921,9 +9759,10 @@ function bestVoteOverlap(slot, votes) {
         const nextTime = times[index + 1];
         if (!nextTime || nextTime <= time) continue;
 
-        const score = active.available * statusWeight("available")
-            + active.preferred * statusWeight("preferred")
-            + active.maybe * statusWeight("maybe");
+        const score =
+            active.available * statusWeight("available") +
+            active.preferred * statusWeight("preferred") +
+            active.maybe * statusWeight("maybe");
         if (score <= 0) continue;
 
         const candidate = {
@@ -9030,13 +9869,12 @@ function playtestLockReason(playtest) {
 function activePlaytests() {
     const remotePlaytests = Array.isArray(state.playtests.remotePlaytests) ? state.playtests.remotePlaytests : [];
     const remoteIds = new Set(remotePlaytests.map((playtest) => playtest.id));
-    const localPlaytests = (Array.isArray(state.playtests.localPlaytests) ? state.playtests.localPlaytests : [])
-        .filter((playtest) => !remoteIds.has(playtest.id));
-    const playtests = [
-        ...remotePlaytests,
-        ...DEFAULT_PLAYTESTS,
-        ...localPlaytests
-    ].map(applyPlaytestOverride).filter((playtest) => !playtest.archived);
+    const localPlaytests = (Array.isArray(state.playtests.localPlaytests) ? state.playtests.localPlaytests : []).filter(
+        (playtest) => !remoteIds.has(playtest.id)
+    );
+    const playtests = [...remotePlaytests, ...DEFAULT_PLAYTESTS, ...localPlaytests]
+        .map(applyPlaytestOverride)
+        .filter((playtest) => !playtest.archived);
 
     if (!playtests.some((playtest) => playtest.id === state.playtests.activeId)) {
         state.playtests.activeId = playtests[0]?.id || "";
@@ -9064,8 +9902,7 @@ function isRemotePlaytest(playtestOrId) {
     const id = typeof playtestOrId === "string" ? playtestOrId : playtestOrId?.id;
     if (!id) return false;
     return Boolean(
-        playtestOrId?.remote
-        || (state.playtests.remotePlaytests || []).some((playtest) => playtest.id === id)
+        playtestOrId?.remote || (state.playtests.remotePlaytests || []).some((playtest) => playtest.id === id)
     );
 }
 
@@ -9091,7 +9928,11 @@ function playtestAuthLabel() {
 function nextEventSummary(playtest, summaries) {
     const now = Date.now();
     const confirmedFuture = summaries
-        .filter((summary) => isSlotConfirmed(playtest.id, summary.slot.id) && confirmedSlotStartValue(playtest.id, summary.slot) >= now)
+        .filter(
+            (summary) =>
+                isSlotConfirmed(playtest.id, summary.slot.id) &&
+                confirmedSlotStartValue(playtest.id, summary.slot) >= now
+        )
         .sort((a, b) => confirmedSlotStartValue(playtest.id, a.slot) - confirmedSlotStartValue(playtest.id, b.slot));
     return confirmedFuture[0] || null;
 }
@@ -9251,8 +10092,7 @@ async function createRemoteCommunitySlot(playtestId, selectedKey, timeRange = no
 
     const existing = activePlaytests()
         .find((playtest) => playtest.id === playtestId)
-        ?.slots
-        ?.find((slot) => dateKey(slot.startAt) === selectedKey);
+        ?.slots?.find((slot) => dateKey(slot.startAt) === selectedKey);
     if (existing) return existing;
 
     const normalizedRange = normalizeTimeRange(timeRange.startTime, timeRange.endTime);
@@ -9414,14 +10254,15 @@ async function toggleNotificationSubscription(playtestId, key) {
                     .eq("user_id", PLAYTEST_VIEWER.userId);
                 if (error) throw error;
             } else {
-                const { error } = await state.authClient
-                    .from("playtest_notification_subscriptions")
-                    .upsert({
+                const { error } = await state.authClient.from("playtest_notification_subscriptions").upsert(
+                    {
                         playtest_id: playtestId,
                         slot_id: key,
                         user_id: PLAYTEST_VIEWER.userId,
                         notify_on_confirmation: true
-                    }, { onConflict: "playtest_id,slot_id,user_id" });
+                    },
+                    { onConflict: "playtest_id,slot_id,user_id" }
+                );
                 if (error) throw error;
             }
             await loadRemotePlaytests({ silent: true, render: false });
@@ -9528,7 +10369,9 @@ async function deletePlaytestSlot(playtestId, slotId) {
     }
 
     if (slot.source === "community") {
-        state.playtests.communitySlots[playtestId] = (state.playtests.communitySlots?.[playtestId] || []).filter((entry) => entry.id !== slotId);
+        state.playtests.communitySlots[playtestId] = (state.playtests.communitySlots?.[playtestId] || []).filter(
+            (entry) => entry.id !== slotId
+        );
     } else {
         state.playtests.deletedSlots[playtestId] = state.playtests.deletedSlots[playtestId] || {};
         state.playtests.deletedSlots[playtestId][slotId] = {
@@ -9559,10 +10402,16 @@ function cleanupPlaytestSlotState(playtestId, slot) {
     if (state.playtests.selectedCalendarDates?.[playtestId] === dateKey(slot.startAt)) {
         delete state.playtests.selectedCalendarDates[playtestId];
     }
-    if (state.playtests.pendingConfirmation?.playtestId === playtestId && state.playtests.pendingConfirmation?.slotId === slotId) {
+    if (
+        state.playtests.pendingConfirmation?.playtestId === playtestId &&
+        state.playtests.pendingConfirmation?.slotId === slotId
+    ) {
         state.playtests.pendingConfirmation = null;
     }
-    if (state.playtests.pendingSlotDelete?.playtestId === playtestId && state.playtests.pendingSlotDelete?.slotId === slotId) {
+    if (
+        state.playtests.pendingSlotDelete?.playtestId === playtestId &&
+        state.playtests.pendingSlotDelete?.slotId === slotId
+    ) {
         state.playtests.pendingSlotDelete = null;
     }
     state.playtests.expandedSlotIds?.delete(slotId);
@@ -9684,7 +10533,9 @@ function localTimeKey(value) {
 }
 
 function parseTimeParts(value) {
-    const match = String(value || "").trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    const match = String(value || "")
+        .trim()
+        .match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
     if (!match) return null;
     return {
         hours: Number(match[1]),
@@ -9799,17 +10650,35 @@ function loadPlaytestState() {
             activeId: typeof parsed.activeId === "string" ? parsed.activeId : fallback.activeId,
             votes: parsed.votes && typeof parsed.votes === "object" ? parsed.votes : {},
             preferences: parsed.preferences && typeof parsed.preferences === "object" ? parsed.preferences : {},
-            localPlaytests: Array.isArray(parsed.localPlaytests) ? parsed.localPlaytests.map(sanitizeLocalPlaytest).filter(Boolean) : [],
-            communitySlots: parsed.communitySlots && typeof parsed.communitySlots === "object" ? sanitizeCommunitySlots(parsed.communitySlots) : {},
-            selectedCalendarDates: parsed.selectedCalendarDates && typeof parsed.selectedCalendarDates === "object" ? parsed.selectedCalendarDates : {},
+            localPlaytests: Array.isArray(parsed.localPlaytests)
+                ? parsed.localPlaytests.map(sanitizeLocalPlaytest).filter(Boolean)
+                : [],
+            communitySlots:
+                parsed.communitySlots && typeof parsed.communitySlots === "object"
+                    ? sanitizeCommunitySlots(parsed.communitySlots)
+                    : {},
+            selectedCalendarDates:
+                parsed.selectedCalendarDates && typeof parsed.selectedCalendarDates === "object"
+                    ? parsed.selectedCalendarDates
+                    : {},
             calendarMonthOffset: parsed.calendarMonthOffset === 1 ? 1 : 0,
             heatmapExpanded: Boolean(parsed.heatmapExpanded),
             adminCalendarFilters: sanitizeAdminCalendarFilters(parsed.adminCalendarFilters),
-            confirmedSlots: parsed.confirmedSlots && typeof parsed.confirmedSlots === "object" ? parsed.confirmedSlots : {},
-            notificationSubscriptions: parsed.notificationSubscriptions && typeof parsed.notificationSubscriptions === "object" ? parsed.notificationSubscriptions : {},
+            confirmedSlots:
+                parsed.confirmedSlots && typeof parsed.confirmedSlots === "object" ? parsed.confirmedSlots : {},
+            notificationSubscriptions:
+                parsed.notificationSubscriptions && typeof parsed.notificationSubscriptions === "object"
+                    ? parsed.notificationSubscriptions
+                    : {},
             adminVoteEvents: Array.isArray(parsed.adminVoteEvents) ? parsed.adminVoteEvents.slice(0, 40) : [],
-            overrides: parsed.overrides && typeof parsed.overrides === "object" ? sanitizePlaytestOverrides(parsed.overrides) : {},
-            deletedSlots: parsed.deletedSlots && typeof parsed.deletedSlots === "object" ? sanitizeDeletedSlots(parsed.deletedSlots) : {},
+            overrides:
+                parsed.overrides && typeof parsed.overrides === "object"
+                    ? sanitizePlaytestOverrides(parsed.overrides)
+                    : {},
+            deletedSlots:
+                parsed.deletedSlots && typeof parsed.deletedSlots === "object"
+                    ? sanitizeDeletedSlots(parsed.deletedSlots)
+                    : {},
             pendingSlotDelete: null,
             activeHelpTip: "",
             expandedSlotIds: new Set()
@@ -9878,12 +10747,14 @@ function emptyPlaytestState() {
 function sanitizeLocalPlaytest(playtest) {
     if (!playtest || typeof playtest !== "object" || typeof playtest.id !== "string") return null;
     const slots = Array.isArray(playtest.slots)
-        ? playtest.slots.filter((slot) => slot?.id && slot?.startAt).map((slot) => ({
-            id: String(slot.id),
-            label: String(slot.label || "Alternative"),
-            startAt: String(slot.startAt),
-            endAt: slot.endAt ? String(slot.endAt) : ""
-        }))
+        ? playtest.slots
+              .filter((slot) => slot?.id && slot?.startAt)
+              .map((slot) => ({
+                  id: String(slot.id),
+                  label: String(slot.label || "Alternative"),
+                  startAt: String(slot.startAt),
+                  endAt: slot.endAt ? String(slot.endAt) : ""
+              }))
         : [];
     if (slots.length === 0) return null;
     return {
@@ -9899,18 +10770,22 @@ function sanitizeLocalPlaytest(playtest) {
 }
 
 function sanitizeCommunitySlots(value) {
-    return Object.fromEntries(Object.entries(value).map(([playtestId, slots]) => [
-        playtestId,
-        Array.isArray(slots)
-            ? slots.filter((slot) => slot?.id && slot?.startAt).map((slot) => ({
-                id: String(slot.id),
-                label: "Community date",
-                startAt: String(slot.startAt),
-                endAt: slot.endAt ? String(slot.endAt) : "",
-                source: "community"
-            }))
-            : []
-    ]));
+    return Object.fromEntries(
+        Object.entries(value).map(([playtestId, slots]) => [
+            playtestId,
+            Array.isArray(slots)
+                ? slots
+                      .filter((slot) => slot?.id && slot?.startAt)
+                      .map((slot) => ({
+                          id: String(slot.id),
+                          label: "Community date",
+                          startAt: String(slot.startAt),
+                          endAt: slot.endAt ? String(slot.endAt) : "",
+                          source: "community"
+                      }))
+                : []
+        ])
+    );
 }
 
 function sanitizeAdminCalendarFilters(value) {
@@ -9923,26 +10798,32 @@ function sanitizeAdminCalendarFilters(value) {
 
 function sanitizePlaytestOverrides(value) {
     const defaultIds = new Set(DEFAULT_PLAYTESTS.map((playtest) => playtest.id));
-    return Object.fromEntries(Object.entries(value).map(([playtestId, override]) => {
-        const safeOverride = override && typeof override === "object" ? { ...override } : {};
-        if (defaultIds.has(playtestId)) delete safeOverride.archived;
-        return [playtestId, safeOverride];
-    }));
+    return Object.fromEntries(
+        Object.entries(value).map(([playtestId, override]) => {
+            const safeOverride = override && typeof override === "object" ? { ...override } : {};
+            if (defaultIds.has(playtestId)) delete safeOverride.archived;
+            return [playtestId, safeOverride];
+        })
+    );
 }
 
 function sanitizeDeletedSlots(value) {
-    return Object.fromEntries(Object.entries(value).map(([playtestId, slots]) => [
-        playtestId,
-        slots && typeof slots === "object"
-            ? Object.fromEntries(Object.entries(slots).map(([slotId, entry]) => [
-                slotId,
-                {
-                    deletedAt: String(entry?.deletedAt || new Date().toISOString()),
-                    deletedBy: String(entry?.deletedBy || PLAYTEST_VIEWER.userId)
-                }
-            ]))
-            : {}
-    ]));
+    return Object.fromEntries(
+        Object.entries(value).map(([playtestId, slots]) => [
+            playtestId,
+            slots && typeof slots === "object"
+                ? Object.fromEntries(
+                      Object.entries(slots).map(([slotId, entry]) => [
+                          slotId,
+                          {
+                              deletedAt: String(entry?.deletedAt || new Date().toISOString()),
+                              deletedBy: String(entry?.deletedBy || PLAYTEST_VIEWER.userId)
+                          }
+                      ])
+                  )
+                : {}
+        ])
+    );
 }
 
 function parsePlaytestDateInput(value) {
@@ -9954,7 +10835,7 @@ function parsePlaytestDateInput(value) {
 }
 
 function seedUpdatedAt(index) {
-    const minutes = 4 + (number(index) * 7) % 84;
+    const minutes = 4 + ((number(index) * 7) % 84);
     return new Date(Date.now() - minutes * 60000).toISOString();
 }
 
@@ -9986,7 +10867,15 @@ function formatSlotTime(value) {
 }
 
 function formatSlotShort(value) {
-    return formatLocalDate(value, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZoneName: "short" });
+    return formatLocalDate(value, {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZoneName: "short"
+    });
 }
 
 function formatSlotTimeRange(slot) {
@@ -10130,7 +11019,10 @@ function renderLiveStatus() {
     if (!status || isExportStale()) {
         online.textContent = "Offline";
         serverStatus.textContent = "Server offline";
-        if (detail) detail.textContent = state.data?.generatedAt ? `Last export ${formatCompactDate(state.data.generatedAt)}` : "No live export yet";
+        if (detail)
+            detail.textContent = state.data?.generatedAt
+                ? `Last export ${formatCompactDate(state.data.generatedAt)}`
+                : "No live export yet";
         return;
     }
 
@@ -10210,14 +11102,18 @@ function renderModeTabs() {
             render();
         });
         button.classList.add("tab-pill");
-        button.setAttribute("aria-label", `${PUBLIC_MODE_LABELS[modeId]} mode${state.mode === modeId ? ", selected" : ""}`);
+        button.setAttribute(
+            "aria-label",
+            `${PUBLIC_MODE_LABELS[modeId]} mode${state.mode === modeId ? ", selected" : ""}`
+        );
         container.appendChild(button);
     }
-    const title = state.mainView === "players"
-        ? `${PUBLIC_MODE_LABELS[state.mode]} ranking`
-        : state.mainView === "weapons"
-            ? `${PUBLIC_MODE_LABELS[state.mode]} weapon stats`
-            : "Deathmatch map stats";
+    const title =
+        state.mainView === "players"
+            ? `${PUBLIC_MODE_LABELS[state.mode]} ranking`
+            : state.mainView === "weapons"
+              ? `${PUBLIC_MODE_LABELS[state.mode]} weapon stats`
+              : "Deathmatch map stats";
     document.getElementById("leaderboard-title").textContent = title;
 }
 
@@ -10230,17 +11126,19 @@ function renderSortHeaders() {
         const label = SORT_LABELS[button.dataset.sort] || button.textContent.trim();
         button.classList.toggle("active", active);
         button.setAttribute("aria-pressed", active ? "true" : "false");
-        button.setAttribute("aria-label", active
-            ? `${label}, sorted ${currentDirection}. Activate to sort ${nextDirection}.`
-            : `${label}, not sorted. Activate to sort descending.`);
+        button.setAttribute(
+            "aria-label",
+            active
+                ? `${label}, sorted ${currentDirection}. Activate to sort ${nextDirection}.`
+                : `${label}, not sorted. Activate to sort descending.`
+        );
         const header = button.closest("th");
         if (header) header.setAttribute("aria-sort", active ? currentDirection : "none");
     });
 
     document.querySelectorAll("[data-sort-indicator]").forEach((indicator) => {
-        indicator.textContent = indicator.dataset.sortIndicator === state.sort
-            ? (state.sortDirection === "desc" ? "v" : "^")
-            : "";
+        indicator.textContent =
+            indicator.dataset.sortIndicator === state.sort ? (state.sortDirection === "desc" ? "v" : "^") : "";
         indicator.setAttribute("aria-hidden", "true");
     });
 }
@@ -10249,11 +11147,8 @@ function renderSummary() {
     const count = document.getElementById("leaderboard-count");
     const rows = currentLeaderboardRows();
     const search = document.getElementById("player-search");
-    search.placeholder = state.mainView === "weapons"
-        ? "Weapon name"
-        : state.mainView === "maps"
-            ? "Map name"
-            : "Player name";
+    search.placeholder =
+        state.mainView === "weapons" ? "Weapon name" : state.mainView === "maps" ? "Map name" : "Player name";
 
     if (state.mainView === "weapons") {
         const noun = rows.length === 1 ? "weapon" : "weapons";
@@ -10294,7 +11189,10 @@ function renderTable() {
 
     empty.classList.add("hidden");
     wrap.classList.remove("hidden");
-    wrap.setAttribute("aria-label", `${document.getElementById("leaderboard-title").textContent} table with sortable columns`);
+    wrap.setAttribute(
+        "aria-label",
+        `${document.getElementById("leaderboard-title").textContent} table with sortable columns`
+    );
     window.requestAnimationFrame(() => {
         wrap.classList.toggle("table-scrollable", wrap.scrollWidth > wrap.clientWidth + 4);
     });
@@ -10465,16 +11363,28 @@ function renderPagination(totalRows, totalPages) {
     const right = document.createElement("div");
     right.className = "tab-row";
 
-    right.appendChild(createPageButton("Prev", state.page > 1, () => {
-        state.page -= 1;
-        render();
-    }, "Previous leaderboard page"));
+    right.appendChild(
+        createPageButton(
+            "Prev",
+            state.page > 1,
+            () => {
+                state.page -= 1;
+                render();
+            },
+            "Previous leaderboard page"
+        )
+    );
 
     for (const page of pageWindow(totalPages, state.page, 5)) {
-        const button = createPageButton(String(page), true, () => {
-            state.page = page;
-            render();
-        }, `Go to leaderboard page ${page}`);
+        const button = createPageButton(
+            String(page),
+            true,
+            () => {
+                state.page = page;
+                render();
+            },
+            `Go to leaderboard page ${page}`
+        );
         if (page === state.page) {
             button.classList.add("active");
             button.setAttribute("aria-current", "page");
@@ -10483,10 +11393,17 @@ function renderPagination(totalRows, totalPages) {
         right.appendChild(button);
     }
 
-    right.appendChild(createPageButton("Next", state.page < totalPages, () => {
-        state.page += 1;
-        render();
-    }, "Next leaderboard page"));
+    right.appendChild(
+        createPageButton(
+            "Next",
+            state.page < totalPages,
+            () => {
+                state.page += 1;
+                render();
+            },
+            "Next leaderboard page"
+        )
+    );
 
     container.appendChild(left);
     container.appendChild(right);
@@ -10502,14 +11419,21 @@ async function submitAccountForm(form) {
         const selectedBadges = draft.selectedBadges.filter((id) => badgeState.unlockedIds.has(id)).slice(0, 5);
         const customBackgroundUrl = state.authProfile?.custom_background_url || "";
 
-        const badgeStateAfterUpload = accountBadgeState({
-            ...state.authProfile,
-            custom_background_url: customBackgroundUrl
-        }, linkedProfile);
+        const badgeStateAfterUpload = accountBadgeState(
+            {
+                ...state.authProfile,
+                custom_background_url: customBackgroundUrl
+            },
+            linkedProfile
+        );
         const payload = {
             display_name: cleanDisplayName(draft.displayName),
             avatar_source: draft.avatarSource,
-            profile_background: cleanProfileBackground(draft.profileBackground, { ...state.authProfile, custom_background_url: customBackgroundUrl }, badgeStateAfterUpload),
+            profile_background: cleanProfileBackground(
+                draft.profileBackground,
+                { ...state.authProfile, custom_background_url: customBackgroundUrl },
+                badgeStateAfterUpload
+            ),
             pfp_border: cleanPfpBorder(draft.pfpBorder, state.authProfile, badgeState),
             selected_badges: selectedBadges,
             ...(state.authCosmeticInventoryExtended
@@ -10569,22 +11493,35 @@ function verifySavedProfile(saved, payload) {
     const checks = [
         ["display name", saved.display_name || "", payload.display_name || ""],
         ["profile picture", cleanAvatarSource(saved.avatar_source), cleanAvatarSource(payload.avatar_source)],
-        ["background", cleanProfileBackground(saved.profile_background, saved), cleanProfileBackground(payload.profile_background, saved)],
+        [
+            "background",
+            cleanProfileBackground(saved.profile_background, saved),
+            cleanProfileBackground(payload.profile_background, saved)
+        ],
         ["PFP border", cleanPfpBorder(saved.pfp_border, saved), cleanPfpBorder(payload.pfp_border, saved)]
     ];
     if (Object.hasOwn(payload, "profile_title")) {
-        checks.push(["title", cleanProfileTitle(saved.profile_title, saved), cleanProfileTitle(payload.profile_title, saved)]);
+        checks.push([
+            "title",
+            cleanProfileTitle(saved.profile_title, saved),
+            cleanProfileTitle(payload.profile_title, saved)
+        ]);
     }
 
     const selectedSaved = arrayField(saved.selected_badges).sort().join(",");
     const selectedWanted = arrayField(payload.selected_badges).sort().join(",");
     checks.push(["badges", selectedSaved, selectedWanted]);
-    if (payload.minecraft_player_id) checks.push(["Minecraft player id", saved.minecraft_player_id || "", payload.minecraft_player_id]);
-    if (payload.minecraft_player_name) checks.push(["Minecraft player name", saved.minecraft_player_name || "", payload.minecraft_player_name]);
+    if (payload.minecraft_player_id)
+        checks.push(["Minecraft player id", saved.minecraft_player_id || "", payload.minecraft_player_id]);
+    if (payload.minecraft_player_name)
+        checks.push(["Minecraft player name", saved.minecraft_player_name || "", payload.minecraft_player_name]);
 
     const mismatches = checks
         .filter(([, actual, expected]) => String(actual) !== String(expected))
-        .map(([label, actual, expected]) => `${label} saved as "${actual || "empty"}" instead of "${expected || "empty"}"`);
+        .map(
+            ([label, actual, expected]) =>
+                `${label} saved as "${actual || "empty"}" instead of "${expected || "empty"}"`
+        );
 
     if (mismatches.length) {
         throw new Error(`Supabase did not save the profile change: ${mismatches.join("; ")}.`);
@@ -10623,9 +11560,9 @@ function accountLinkedStatsProfile(account) {
 
 function accountProfileForPlayer(player, profile) {
     if (!state.accountProfileIndex?.ready) rebuildAccountProfileIndex();
-    const playerIds = new Set([player?.playerId, profile?.playerId]
-        .map((id) => String(id || "").trim())
-        .filter(Boolean));
+    const playerIds = new Set(
+        [player?.playerId, profile?.playerId].map((id) => String(id || "").trim()).filter(Boolean)
+    );
     const nameKey = normalizePlayerName(player?.name || profile?.name || "");
     for (const playerId of playerIds) {
         const account = state.accountProfileIndex.byPlayerId.get(playerId);
@@ -10731,12 +11668,10 @@ function accountAvatarUrl(account, profile, size = 64) {
 }
 
 function accountMinecraftName(account, profile) {
-    return String(
-        account?.minecraft_player_name
-        || profile?.name
-        || account?.display_name
-        || DEFAULT_SKIN_NAME
-    ).trim() || DEFAULT_SKIN_NAME;
+    return (
+        String(account?.minecraft_player_name || profile?.name || account?.display_name || DEFAULT_SKIN_NAME).trim() ||
+        DEFAULT_SKIN_NAME
+    );
 }
 
 function avatarFrameClass(account) {
@@ -10796,12 +11731,22 @@ function profileBackgroundImageUrl(account) {
 }
 
 function safeCssUrl(value) {
-    return String(value || "").replace(/['"\\<>]/g, "");
+    const cleaned = String(value || "")
+        .trim()
+        .replace(/['"\\<>]/g, "");
+    if (!cleaned) return "";
+    try {
+        const url = new URL(cleaned, document.baseURI);
+        return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+    } catch (_error) {
+        return "";
+    }
 }
 
 function cosmeticCatalogItem(type, id) {
     if (type === "icon") {
-        if (id === "custom") return { id: "custom", label: "Uploaded icon", category: "Legacy", rarity: "common", unlock: "custom" };
+        if (id === "custom")
+            return { id: "custom", label: "Uploaded icon", category: "Legacy", rarity: "common", unlock: "custom" };
         return cosmeticCatalogCollection("icon").find((entry) => entry.id === id) || null;
     }
     if (type === "background") return cosmeticCatalogCollection("background").find((entry) => entry.id === id) || null;
@@ -10829,7 +11774,7 @@ function cosmeticOwnershipStats(type, id) {
     const result = {
         owned,
         total: accounts.length,
-        percent: accounts.length ? owned / accounts.length * 100 : 0
+        percent: accounts.length ? (owned / accounts.length) * 100 : 0
     };
     state.cosmeticOwnershipCache.set(key, result);
     return result;
@@ -10919,7 +11864,10 @@ function renderProfileTitle(account, options = {}) {
     return renderTitleCosmetic(title, options);
 }
 
-function renderTitleCosmetic(title, { empty = false, compact = false, large = false, interactive = true, focusable = true } = {}) {
+function renderTitleCosmetic(
+    title,
+    { empty = false, compact = false, large = false, interactive = true, focusable = true } = {}
+) {
     const rarity = cleanRarity(title?.rarity);
     const text = String(title?.text || (empty ? "No title equipped" : "")).trim();
     if (!text) return "";
@@ -10929,7 +11877,9 @@ function renderTitleCosmetic(title, { empty = false, compact = false, large = fa
         title?.id === "none" ? "empty" : "",
         compact ? "compact" : "",
         large ? "large" : ""
-    ].filter(Boolean).join(" ");
+    ]
+        .filter(Boolean)
+        .join(" ");
     const interactionAttributes = interactive
         ? `${focusable ? 'tabindex="0" ' : ""}${cosmeticOwnershipDataAttributes("title", title?.id || "none", title?.label || text, "Profile title")}`
         : "";
@@ -10978,7 +11928,10 @@ function cleanRarity(value) {
 }
 
 function badgeInitials(label) {
-    const words = String(label || "Badge").trim().split(/\s+/).filter(Boolean);
+    const words = String(label || "Badge")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
     if (words.length >= 2) return `${words[0][0] || ""}${words[1][0] || ""}`.toUpperCase();
     return (words[0] || "B").slice(0, 2).toUpperCase();
 }
@@ -10993,14 +11946,15 @@ function accountBadgeState(account, profile) {
     const derived = normalizeDerived(overall?.derived, stats);
     const context = { account, linked, profile: linkedProfile, overall, br, dm, stats, derived };
     const awardedIds = profileAwardedBadgeIds(linkedProfile);
-    if (account?.id && account.id === state.authProfile?.id
-        && arrayField(state.weeklyMissions.row?.claimed_ids).length >= WEEKLY_MISSION_COUNT) {
+    if (
+        account?.id &&
+        account.id === state.authProfile?.id &&
+        arrayField(state.weeklyMissions.row?.claimed_ids).length >= WEEKLY_MISSION_COUNT
+    ) {
         awardedIds.add("perfect_week");
     }
     const unlockedIds = new Set(
-        BADGE_CATALOG
-            .filter((badge) => badgeUnlockedFromContext(badge, context, awardedIds))
-            .map((badge) => badge.id)
+        BADGE_CATALOG.filter((badge) => badgeUnlockedFromContext(badge, context, awardedIds)).map((badge) => badge.id)
     );
     for (const id of arrayField(account?.unlocked_badges)) {
         unlockedIds.add(id);
@@ -11028,38 +11982,35 @@ function selectedAccountBadges(account, badgeStateOrUnlockedIds) {
         ? badgeStateOrUnlockedIds
         : { unlockedIds: badgeStateOrUnlockedIds, context: null };
     const selectedIds = selectedAccountBadgeIds(account, badgeState.unlockedIds);
-    return BADGE_CATALOG
-        .filter((badge) => selectedIds.has(badge.id))
-        .map((badge) => badgeDisplay(badge, badgeState.context, true));
+    return BADGE_CATALOG.filter((badge) => selectedIds.has(badge.id)).map((badge) =>
+        badgeDisplay(badge, badgeState.context, true)
+    );
 }
 
 function badgeDisplay(badge, context, unlocked = null) {
     const awardedIds = profileAwardedBadgeIds(context?.profile);
-    const isUnlocked = unlocked === null
-        ? badgeUnlockedFromContext(badge, context, awardedIds)
-        : Boolean(unlocked);
+    const isUnlocked = unlocked === null ? badgeUnlockedFromContext(badge, context, awardedIds) : Boolean(unlocked);
     const tierState = badgeTierState(badge, context);
     const displayTier = tierState?.currentTier || badge?.tiers?.[0] || null;
     const tierLevel = badgeTierLevel(badge?.tiers, tierState?.currentIndex);
-    const finalTierReached = Boolean(
-        tierState
-        && tierState.currentIndex === badge.tiers.length - 1
-    );
-    const value = finalTierReached && badge.liveValueAtFinalTier
-        ? badgeMetricValue(badge.metric, context)
-        : null;
+    const finalTierReached = Boolean(tierState && tierState.currentIndex === badge.tiers.length - 1);
+    const value = finalTierReached && badge.liveValueAtFinalTier ? badgeMetricValue(badge.metric, context) : null;
     return {
         ...badge,
-        ...(displayTier ? {
-            label: displayTier.name,
-            rarity: displayTier.rarity,
-            description: displayTier.description || badge.description,
-            iconKey: displayTier.iconKey || ""
-        } : {}),
-        ...(tierLevel ? {
-            tierLevel: tierLevel.level,
-            tierCount: tierLevel.total
-        } : {}),
+        ...(displayTier
+            ? {
+                  label: displayTier.name,
+                  rarity: displayTier.rarity,
+                  description: displayTier.description || badge.description,
+                  iconKey: displayTier.iconKey || ""
+              }
+            : {}),
+        ...(tierLevel
+            ? {
+                  tierLevel: tierLevel.level,
+                  tierCount: tierLevel.total
+              }
+            : {}),
         ...(value === null ? {} : { value }),
         progressState: badgeProgressState(badge, context, isUnlocked, tierState)
     };
@@ -11145,8 +12096,10 @@ function badgeUnlockedFromContext(badge, context, awardedIds = profileAwardedBad
     if (badge.badgeType === "special") {
         if (badge.specialRule === "admin") return isAdminProfile(context?.account);
         if (badge.specialRule === "owner") {
-            return context?.account?.profile_title === "owner"
-                || arrayField(context?.account?.unlocked_titles).includes("owner");
+            return (
+                context?.account?.profile_title === "owner" ||
+                arrayField(context?.account?.unlocked_titles).includes("owner")
+            );
         }
         return false;
     }
@@ -11180,9 +12133,7 @@ function badgeTierState(badge, context) {
 function badgeRequirementSnapshot(badge, tier, context) {
     const requirement = tier?.requirement;
     if (requirement?.type === "dmMaps") {
-        const maps = Array.isArray(context?.dm?.details?.deathmatchMaps)
-            ? context.dm.details.deathmatchMaps
-            : [];
+        const maps = Array.isArray(context?.dm?.details?.deathmatchMaps) ? context.dm.details.deathmatchMaps : [];
         const qualifying = maps.filter((entry) => {
             const stats = normalizeStats(entry?.stats);
             return number(stats[requirement.stat]) >= number(requirement.targetPerMap);
@@ -11217,15 +12168,16 @@ function badgeRequirementSnapshot(badge, tier, context) {
 
 function badgeMetricValue(metric, context) {
     if (!metric) return 0;
-    const source = metric.scope === "battleRoyale"
-        ? context?.br?.stats
-        : metric.scope === "deathmatch"
-            ? context?.dm?.stats
-            : metric.scope === "account"
+    const source =
+        metric.scope === "battleRoyale"
+            ? context?.br?.stats
+            : metric.scope === "deathmatch"
+              ? context?.dm?.stats
+              : metric.scope === "account"
                 ? context?.account
                 : metric.scope === "profile"
-                    ? context?.profile
-                    : context?.stats;
+                  ? context?.profile
+                  : context?.stats;
 
     const camelStat = String(metric.stat || "").replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
     let value = number(source?.[metric.stat] ?? source?.[camelStat]);
@@ -11246,25 +12198,30 @@ function badgeProgressState(badge, context, unlocked, tierState = badgeTierState
     }
 
     if (requirement.type === "tiered" && tierState) {
-        const progressSnapshot = tierState.nextSnapshot || tierState.currentSnapshot || {
-            actual: 0,
-            target: 1,
-            unit: badge.unit || ""
-        };
+        const progressSnapshot = tierState.nextSnapshot ||
+            tierState.currentSnapshot || {
+                actual: 0,
+                target: 1,
+                unit: badge.unit || ""
+            };
         const percent = tierState.nextTier
-            ? Math.min(100, Math.max(0, progressSnapshot.actual / Math.max(1, progressSnapshot.target) * 100))
+            ? Math.min(100, Math.max(0, (progressSnapshot.actual / Math.max(1, progressSnapshot.target)) * 100))
             : 100;
         const status = [];
         if (tierState.currentTier) {
             status.push(`${tierState.currentTier.name} - ${RARITY_LABELS[cleanRarity(tierState.currentTier.rarity)]}`);
         } else if (tierState.nextTier) {
-            status.push(`${formatBadgeValue(progressSnapshot.actual)} / ${formatBadgeValue(progressSnapshot.target)} ${progressSnapshot.unit}`.trim());
+            status.push(
+                `${formatBadgeValue(progressSnapshot.actual)} / ${formatBadgeValue(progressSnapshot.target)} ${progressSnapshot.unit}`.trim()
+            );
         }
 
         const personalBest = badgePersonalBestText(badge, context, unlocked);
         if (personalBest) status.push(personalBest);
         if (tierState.nextTier) {
-            status.push(`Next tier: ${tierState.nextTier.name} at ${formatBadgeValue(progressSnapshot.target)} ${progressSnapshot.unit}`.trim());
+            status.push(
+                `Next tier: ${tierState.nextTier.name} at ${formatBadgeValue(progressSnapshot.target)} ${progressSnapshot.unit}`.trim()
+            );
         } else if (badge.liveValueAtFinalTier && tierState.currentSnapshot) {
             status.push(`${formatBadgeValue(badgeMetricValue(badge.metric, context))} ${badge.unit}`.trim());
         }
@@ -11277,9 +12234,7 @@ function badgeProgressState(badge, context, unlocked, tierState = badgeTierState
     }
 
     if (requirement.type === "achievement" || requirement.type === "special") {
-        const status = [
-            unlocked ? "Unlocked" : `Locked: ${badge.description}`
-        ];
+        const status = [unlocked ? "Unlocked" : `Locked: ${badge.description}`];
         const personalBest = badgePersonalBestText(badge, context, unlocked);
         if (personalBest) status.push(personalBest);
         return {
@@ -11305,17 +12260,16 @@ function badgeProgressState(badge, context, unlocked, tierState = badgeTierState
         };
     }
 
-    const stats = requirement.scope === "battleRoyale"
-        ? normalizeStats(context?.br?.stats)
-        : requirement.scope === "deathmatch"
-            ? normalizeStats(context?.dm?.stats)
-            : normalizeStats(context?.stats);
+    const stats =
+        requirement.scope === "battleRoyale"
+            ? normalizeStats(context?.br?.stats)
+            : requirement.scope === "deathmatch"
+              ? normalizeStats(context?.dm?.stats)
+              : normalizeStats(context?.stats);
     const actual = number(stats[requirement.stat]);
     const target = number(requirement.target);
-    const shown = unlocked
-        ? Math.max(actual, target)
-        : Math.min(actual, target);
-    const percent = target > 0 ? Math.min(100, Math.max(0, actual / target * 100)) : 100;
+    const shown = unlocked ? Math.max(actual, target) : Math.min(actual, target);
+    const percent = target > 0 ? Math.min(100, Math.max(0, (actual / target) * 100)) : 100;
     return {
         complete: unlocked,
         percent: unlocked ? 100 : percent,
@@ -11392,7 +12346,8 @@ function showBadgeProgressTooltip(host) {
     tooltip.querySelector("[data-badge-tooltip-description]").hidden = !description;
     tooltip.querySelector("[data-badge-tooltip-status]").textContent = status;
     tooltip.querySelector("[data-badge-tooltip-status]").hidden = !hasProgress || !status;
-    tooltip.querySelector("[data-badge-tooltip-bar]").style.width = `${Math.min(100, Math.max(0, number(host.dataset.badgeProgressPercent)))}%`;
+    tooltip.querySelector("[data-badge-tooltip-bar]").style.width =
+        `${Math.min(100, Math.max(0, number(host.dataset.badgeProgressPercent)))}%`;
     tooltip.querySelector("[data-badge-tooltip-progress]").hidden = !hasProgress;
     tooltip.querySelector("[data-cosmetic-tooltip-ownership]").textContent = ownership;
     tooltip.querySelector("[data-cosmetic-tooltip-ownership]").hidden = !ownership;
@@ -11517,7 +12472,9 @@ function arrayField(value) {
 }
 
 function cleanDisplayName(value) {
-    const text = String(value || "").trim().replace(/\s+/g, " ");
+    const text = String(value || "")
+        .trim()
+        .replace(/\s+/g, " ");
     return text.slice(0, 32) || accountDisplayName(state.authProfile);
 }
 
@@ -11530,9 +12487,22 @@ function cleanAvatarSource(value) {
 function cleanProfileIcon(value, account = null, badgeState = null) {
     const source = cleanAvatarSource(value);
     if (!account) return source;
-    if (profileIconUnlocked(source, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account)))) return source;
+    if (
+        profileIconUnlocked(
+            source,
+            account,
+            badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))
+        )
+    )
+        return source;
     const saved = cleanAvatarSource(account?.avatar_source);
-    return profileIconUnlocked(saved, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? saved : "minecraft";
+    return profileIconUnlocked(
+        saved,
+        account,
+        badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))
+    )
+        ? saved
+        : "minecraft";
 }
 
 function profileIconUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
@@ -11547,7 +12517,11 @@ function profileIconUnlocked(id, account, badgeState = accountBadgeState(account
     return badgeState.unlockedIds?.has(option.unlock) || false;
 }
 
-function profileBackgroundUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
+function profileBackgroundUnlocked(
+    id,
+    account,
+    badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))
+) {
     if (id === "custom") return Boolean(account?.custom_background_url);
     const managedOwnership = managedCosmeticOwnership("background", id, account);
     if (managedOwnership !== null) return managedOwnership;
@@ -11572,7 +12546,11 @@ function pfpBorderUnlocked(id, account, badgeState = accountBadgeState(account, 
     return badgeState.unlockedIds?.has(option.unlock) || false;
 }
 
-function profileTitleUnlocked(id, account, badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))) {
+function profileTitleUnlocked(
+    id,
+    account,
+    badgeState = accountBadgeState(account, accountLinkedStatsProfile(account))
+) {
     const managedOwnership = managedCosmeticOwnership("title", id, account);
     if (managedOwnership !== null) return managedOwnership;
     if (id === "none") return true;
@@ -11585,8 +12563,10 @@ function profileTitleUnlocked(id, account, badgeState = accountBadgeState(accoun
 }
 
 function profileCosmeticInventoryHas(account, type, id) {
-    return Array.isArray(account?.cosmetic_inventory)
-        && account.cosmetic_inventory.some((item) => item?.type === type && item?.id === id);
+    return (
+        Array.isArray(account?.cosmetic_inventory) &&
+        account.cosmetic_inventory.some((item) => item?.type === type && item?.id === id)
+    );
 }
 
 function managedCosmeticOwnership(type, id, account) {
@@ -11601,31 +12581,54 @@ function cleanProfileBackground(value, account = null, badgeState = null) {
     const id = String(value || "").trim();
     const valid = cosmeticCatalogCollection("background").some((option) => option.id === id) ? id : "default";
     if (!account) return valid;
-    return profileBackgroundUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "default";
+    return profileBackgroundUnlocked(
+        valid,
+        account,
+        badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))
+    )
+        ? valid
+        : "default";
 }
 
 function cleanPfpBorder(value, account = null, badgeState = null) {
     const id = String(value || "").trim();
     const valid = cosmeticCatalogCollection("border").some((option) => option.id === id) ? id : "none";
     if (!account) return valid;
-    return pfpBorderUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "none";
+    return pfpBorderUnlocked(
+        valid,
+        account,
+        badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))
+    )
+        ? valid
+        : "none";
 }
 
 function cleanProfileTitle(value, account = null, badgeState = null) {
     const id = String(value || "").trim();
     const valid = cosmeticCatalogCollection("title").some((option) => option.id === id) ? id : "none";
     if (!account) return valid;
-    return profileTitleUnlocked(valid, account, badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))) ? valid : "none";
+    return profileTitleUnlocked(
+        valid,
+        account,
+        badgeState || accountBadgeState(account, accountLinkedStatsProfile(account))
+    )
+        ? valid
+        : "none";
 }
 
 function normalizePlayerName(name) {
-    return String(name || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+    return String(name || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "");
 }
 
 function renderProfilePreview() {
     const container = document.getElementById("profile-body");
     const profile = profileById(state.selectedId);
-    document.getElementById("profile-title").textContent = profile ? playerDisplayName(profile, profile) : "Select a player";
+    document.getElementById("profile-title").textContent = profile
+        ? playerDisplayName(profile, profile)
+        : "Select a player";
 
     if (!profile) {
         container.innerHTML = `<div class="profile-placeholder"><p>Pick a player row to inspect their stats.</p></div>`;
@@ -11716,12 +12719,14 @@ function renderPlayerProfileHero(profile) {
 function renderPlayerTabs() {
     return `
         <nav class="player-tabs" aria-label="Player sections">
-            ${Object.entries(PLAYER_TABS).map(([id, label]) => {
-                const active = state.playerTab === id;
-                return `
+            ${Object.entries(PLAYER_TABS)
+                .map(([id, label]) => {
+                    const active = state.playerTab === id;
+                    return `
                     <button class="tab-pill ${active ? "active" : ""}" type="button" data-player-tab="${escapeHtml(id)}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(`${label} player section${active ? ", selected" : ""}`)}">${escapeHtml(label)}</button>
                 `;
-            }).join("")}
+                })
+                .join("")}
         </nav>
     `;
 }
@@ -11830,7 +12835,10 @@ function renderMapsTab(profile) {
 function renderWeaponsTab(profile) {
     const br = normalizePlayer(profile.battleRoyale).details?.weapons || [];
     const dm = normalizePlayer(profile.deathmatch).details?.weapons || [];
-    if (!br.length && !dm.length) return renderEmptyDetail("No weapon stats yet. Weapon tables start filling in after the updated server jar records new hits and kills.");
+    if (!br.length && !dm.length)
+        return renderEmptyDetail(
+            "No weapon stats yet. Weapon tables start filling in after the updated server jar records new hits and kills."
+        );
     const sort = PROFILE_WEAPON_SORTS[state.profileWeaponSort] ? state.profileWeaponSort : "kills";
     const direction = state.profileWeaponSortDirection === "asc" ? "asc" : "desc";
     return `
@@ -11848,12 +12856,14 @@ function renderHistoryTab(profile) {
                 <span>Local time: ${escapeHtml(viewerTimeZoneLabel())}</span>
             </div>
             <div class="history-filters">
-                ${Object.entries(PUBLIC_MODE_LABELS).map(([id, label]) => {
-                    const active = state.historyFilter === id;
-                    return `
+                ${Object.entries(PUBLIC_MODE_LABELS)
+                    .map(([id, label]) => {
+                        const active = state.historyFilter === id;
+                        return `
                         <button class="tab-pill ${active ? "active" : ""}" type="button" data-history-filter="${escapeHtml(id)}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(`${label} match history${active ? ", selected" : ""}`)}">${escapeHtml(label)}</button>
                     `;
-                }).join("")}
+                    })
+                    .join("")}
             </div>
             ${renderHistoryList(filteredHistory(profile, state.historyFilter), { expandable: true })}
         </section>
@@ -11874,11 +12884,17 @@ function renderMatchHistoryRow(match, { expandable }) {
     const resultClass = match.won ? "win" : "loss";
     const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
     const expanded = state.expandedMatchIds.has(match.matchId);
-    const placement = match.mode === "battleRoyale" && match.placement ? `<span>${escapeHtml(formatPlacement(match.placement))} place</span>` : "";
-    const finalScore = match.mode === "deathmatch" && hasMatchScore(match)
-        ? `<span>Final score Red ${escapeHtml(String(match.redScore))} - ${escapeHtml(String(match.blueScore))} Blue</span>`
-        : "";
-    const buttonAttrs = expandable ? `button type="button" data-match-toggle="${escapeHtml(match.matchId)}"` : "article";
+    const placement =
+        match.mode === "battleRoyale" && match.placement
+            ? `<span>${escapeHtml(formatPlacement(match.placement))} place</span>`
+            : "";
+    const finalScore =
+        match.mode === "deathmatch" && hasMatchScore(match)
+            ? `<span>Final score Red ${escapeHtml(String(match.redScore))} - ${escapeHtml(String(match.blueScore))} Blue</span>`
+            : "";
+    const buttonAttrs = expandable
+        ? `button type="button" data-match-toggle="${escapeHtml(match.matchId)}"`
+        : "article";
     const closeTag = expandable ? "button" : "article";
 
     return `
@@ -11970,13 +12986,17 @@ function renderModeBlock(label, payload, options = {}) {
             <div class="profile-stats">
                 ${statItems.map(([statLabel, value]) => renderProfileStat(statLabel, value)).join("")}
             </div>
-            ${compact ? "" : `
+            ${
+                compact
+                    ? ""
+                    : `
                 <ul class="profile-rank-list">
                     <li>Rank by Wins: ${player.ranks.wins || "-"}</li>
                     <li>Rank by Kills: ${player.ranks.kills || "-"}</li>
                     <li>Rank by Games: ${player.ranks.games || "-"}</li>
                 </ul>
-            `}
+            `
+            }
         </section>
     `;
 }
@@ -12038,9 +13058,11 @@ function renderProfileWeaponSortButton(sort) {
     const nextDirection = active && direction === "desc" ? "ascending" : "descending";
     const label = PROFILE_WEAPON_SORTS[sort] || sort;
     return `
-        <button class="sort-header weapon-sort-header ${active ? "active" : ""}" type="button" data-profile-weapon-sort="${safeSort}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(active
-            ? `${label}, sorted ${currentDirection}. Activate to sort ${nextDirection}.`
-            : `${label}, not sorted. Activate to sort descending.`)}">
+        <button class="sort-header weapon-sort-header ${active ? "active" : ""}" type="button" data-profile-weapon-sort="${safeSort}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(
+            active
+                ? `${label}, sorted ${currentDirection}. Activate to sort ${nextDirection}.`
+                : `${label}, not sorted. Activate to sort descending.`
+        )}">
             ${escapeHtml(label)} <span aria-hidden="true">${active ? (direction === "desc" ? "v" : "^") : ""}</span>
         </button>
     `;
@@ -12126,10 +13148,7 @@ function currentLeaderboardRows() {
 function rowSearchText(row) {
     const profile = row.playerId ? profileById(row.playerId) : null;
     const displayName = row.playerId ? playerDisplayName(row, profile) : "";
-    return [row.name, row.label, row.id, displayName]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+    return [row.name, row.label, row.id, displayName].filter(Boolean).join(" ").toLowerCase();
 }
 
 function currentMode() {
@@ -12274,7 +13293,7 @@ function derivedFromStats(stats) {
         winRate: games > 0 ? round2(number(stats?.wins) / games) : 0,
         avgKills: games > 0 ? round2(kills / games) : 0,
         avgDeaths: games > 0 ? round2(deaths / games) : 0,
-        kdRatio: deaths > 0 ? round2(kills / deaths) : (kills > 0 ? kills : 0),
+        kdRatio: deaths > 0 ? round2(kills / deaths) : kills > 0 ? kills : 0,
         avgPlaytimeSeconds: games > 0 ? round2(number(stats?.playtimeSeconds) / games) : 0,
         headshotRate: hits > 0 ? round2(number(stats?.headshots) / hits) : 0
     };
@@ -12307,11 +13326,12 @@ function combinedWeapons(profile) {
 function aggregateWeapons(profiles, mode) {
     const merged = new Map();
     for (const profile of profiles) {
-        const sources = mode === "battleRoyale"
-            ? [profile.battleRoyale?.details?.weapons || []]
-            : mode === "deathmatch"
-                ? [profile.deathmatch?.details?.weapons || []]
-                : [profile.battleRoyale?.details?.weapons || [], profile.deathmatch?.details?.weapons || []];
+        const sources =
+            mode === "battleRoyale"
+                ? [profile.battleRoyale?.details?.weapons || []]
+                : mode === "deathmatch"
+                  ? [profile.deathmatch?.details?.weapons || []]
+                  : [profile.battleRoyale?.details?.weapons || [], profile.deathmatch?.details?.weapons || []];
 
         for (const entries of sources) {
             for (const entry of entries) {
@@ -12341,7 +13361,9 @@ function normalizeWeaponEntry(entry) {
     const id = String(entry.id || entry.label || "").trim();
     if (!id) return null;
     const lowerId = id.toLowerCase();
-    const lowerLabel = String(entry.label || "").trim().toLowerCase();
+    const lowerLabel = String(entry.label || "")
+        .trim()
+        .toLowerCase();
     if (lowerId.endsWith(":bullet") || lowerLabel === "bullet") return null;
     return {
         ...entry,
@@ -12361,8 +13383,17 @@ function weaponLabel(entry) {
 }
 
 function labelFromIdentifier(value) {
-    const tail = String(value || "Unknown").split(":").pop().replaceAll("-", "_");
-    return tail.split("_").filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ") || "Unknown";
+    const tail = String(value || "Unknown")
+        .split(":")
+        .pop()
+        .replaceAll("-", "_");
+    return (
+        tail
+            .split("_")
+            .filter(Boolean)
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(" ") || "Unknown"
+    );
 }
 
 function aggregateDeathmatchMaps(profiles) {
@@ -12546,7 +13577,9 @@ function formatPercent(value) {
 }
 
 function formatNumber(value) {
-    return Number(value || 0).toFixed(2).replace(/\.00$/, "");
+    return Number(value || 0)
+        .toFixed(2)
+        .replace(/\.00$/, "");
 }
 
 function formatPlacement(value) {
@@ -12555,20 +13588,26 @@ function formatPlacement(value) {
     const lastTwo = place % 100;
     if (lastTwo >= 11 && lastTwo <= 13) return `${place}th`;
     switch (place % 10) {
-        case 1: return `${place}st`;
-        case 2: return `${place}nd`;
-        case 3: return `${place}rd`;
-        default: return `${place}th`;
+        case 1:
+            return `${place}st`;
+        case 2:
+            return `${place}nd`;
+        case 3:
+            return `${place}rd`;
+        default:
+            return `${place}th`;
     }
 }
 
 function hasMatchScore(match) {
-    return match?.redScore !== null
-        && match?.redScore !== undefined
-        && match?.blueScore !== null
-        && match?.blueScore !== undefined
-        && Number.isFinite(Number(match.redScore))
-        && Number.isFinite(Number(match.blueScore));
+    return (
+        match?.redScore !== null &&
+        match?.redScore !== undefined &&
+        match?.blueScore !== null &&
+        match?.blueScore !== undefined &&
+        Number.isFinite(Number(match.redScore)) &&
+        Number.isFinite(Number(match.blueScore))
+    );
 }
 
 function formatDuration(seconds) {
@@ -12657,6 +13696,6 @@ function escapeHtml(value) {
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
-        .replaceAll("\"", "&quot;")
+        .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
 }

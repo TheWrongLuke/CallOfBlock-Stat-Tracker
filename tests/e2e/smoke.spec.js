@@ -59,12 +59,13 @@ const adminSupabaseStub = `
         banned_from_voting: false,
         minecraft_player_name: "AdminMC",
         created_at: "2026-07-01T12:00:00Z",
+        xp: 12500,
         selected_badges: [],
         unlocked_badges: [],
-        unlocked_backgrounds: [],
-        unlocked_pfp_borders: [],
+        unlocked_backgrounds: ["night"],
+        unlocked_pfp_borders: ["green"],
         unlocked_icons: [],
-        unlocked_titles: []
+        unlocked_titles: ["owner"]
     };
     const member = {
         id: "223e4567-e89b-42d3-a456-426614174111",
@@ -769,4 +770,43 @@ test("equipped badges remain selected after saving the profile", async ({ page }
 
     await page.locator('[data-cosmetic-picker-open="badges"]').click();
     await expect(page.locator('[data-cosmetic-option="admin"]')).toHaveAttribute("aria-pressed", "true");
+});
+
+test("profile editing preview reflects the complete unsaved cosmetic draft", async ({ page }) => {
+    await openAdminApp(page, "#account");
+    const form = page.locator("[data-account-form]");
+    const preview = page.locator("[data-account-preview]");
+    await expect(form).toBeVisible();
+    await expect(preview.locator(".account-level-pill")).toContainText("LVL 2");
+
+    await form.locator("[name='displayName']").fill("Draft Operator");
+    await expect(preview.locator("[data-account-preview-name]")).toHaveText("Draft Operator");
+
+    await page.locator('[data-cosmetic-picker-open="icon"]').click();
+    await page.locator('[data-cosmetic-option="default"]').click();
+    await page.locator("[data-cosmetic-picker-close]").click();
+    await expect(preview.locator("[data-account-preview-img]")).toHaveAttribute("src", /assets\/branding\/icon\.png/);
+
+    await page.locator('[data-cosmetic-picker-open="background"]').click();
+    await page.locator('[data-cosmetic-option="night"]').click();
+    await page.locator("[data-cosmetic-picker-close]").click();
+    await expect(preview).toHaveAttribute("data-account-preview-background", "night");
+    const backgroundImage = await preview.evaluate((element) => getComputedStyle(element).backgroundImage);
+    expect(backgroundImage).toContain("/assets/profile-backgrounds/night-ops.png");
+    expect(backgroundImage).not.toContain("/assets/css/assets/");
+
+    await page.locator('[data-cosmetic-picker-open="border"]').click();
+    await page.locator('[data-cosmetic-option="green"]').click();
+    await page.locator("[data-cosmetic-picker-close]").click();
+    await expect(preview.locator("[data-account-preview-avatar]")).toHaveClass(/avatar-frame-image/);
+
+    await page.locator('[data-cosmetic-picker-open="title"]').click();
+    await page.locator('[data-cosmetic-option="owner"]').click();
+    await page.locator("[data-cosmetic-picker-close]").click();
+    await expect(preview.locator("[data-account-preview-title]")).toContainText("Owner");
+
+    await page.locator('[data-cosmetic-picker-open="badges"]').click();
+    await page.locator('[data-cosmetic-option="admin"]').click();
+    await page.locator("[data-cosmetic-picker-close]").click();
+    await expect(preview.locator("[data-account-preview-badges] .badge-admin")).toBeVisible();
 });
