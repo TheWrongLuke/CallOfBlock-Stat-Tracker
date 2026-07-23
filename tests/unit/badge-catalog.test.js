@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ACE_STREAK_TIMING_SECONDS, BADGE_CATALOG, BADGE_TYPE_COUNTS } from "../../src/config/badges.js";
+import {
+    ACE_STREAK_TIMING_SECONDS,
+    BADGE_CATALOG,
+    BADGE_TYPE_COUNTS,
+    badgeTierLevel
+} from "../../src/config/badges.js";
 
 describe("badge catalog", () => {
     it("contains the complete 64-badge structure with stable IDs", () => {
@@ -23,6 +28,17 @@ describe("badge catalog", () => {
             { rarity: "mythic", name: "Ace of Aces", target: 10 }
         ]);
         expect(ace.personalBest.metric.stat).toBe("bestAceStreak");
+    });
+
+    it("derives levels from each badge's actual upgrade path", () => {
+        const wins = BADGE_CATALOG.find((badge) => badge.id === "br_wins_counter");
+        const ace = BADGE_CATALOG.find((badge) => badge.id === "ace_counter");
+
+        expect(badgeTierLevel(wins.tiers, 0)).toEqual({ level: 1, total: 5 });
+        expect(badgeTierLevel(wins.tiers, 3)).toEqual({ level: 4, total: 5 });
+        expect(badgeTierLevel(ace.tiers, 0)).toEqual({ level: 1, total: 3 });
+        expect(badgeTierLevel(ace.tiers, 2)).toEqual({ level: 3, total: 3 });
+        expect(badgeTierLevel([{ rarity: "mythic" }], 0)).toBeNull();
     });
 
     it("keeps all four Deathmatch map-mastery tiers based on four qualifying maps", () => {

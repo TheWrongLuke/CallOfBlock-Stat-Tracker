@@ -69,6 +69,16 @@ function specialBadge(id, label, rarity, description, specialRule = "") {
     };
 }
 
+export function badgeTierLevel(tiers, currentIndex = -1) {
+    const total = Array.isArray(tiers) ? tiers.length : 0;
+    if (total < 2) return null;
+    const resolvedIndex = Number.isInteger(currentIndex) ? currentIndex : -1;
+    return {
+        level: Math.min(total, Math.max(1, resolvedIndex + 1)),
+        total
+    };
+}
+
 const LIVE_COUNTER_BADGES = [
     tieredBadge({
         id: "br_kills_counter",

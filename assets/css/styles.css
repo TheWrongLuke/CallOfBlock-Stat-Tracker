@@ -6623,6 +6623,25 @@ img.identity-avatar {
     outline: none;
 }
 
+.badge-tier-level {
+    flex: 0 0 auto;
+    border: 1px solid color-mix(in srgb, var(--rarity-color) 52%, transparent);
+    border-radius: 4px;
+    padding: 1px 4px;
+    background: color-mix(in srgb, var(--rarity-color) 14%, rgba(3, 6, 10, 0.88));
+    color: color-mix(in srgb, var(--rarity-color) 76%, #ffffff);
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 0.52rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.profile-badge .badge-tier-level {
+    margin-left: 1px;
+}
+
 .profile-title-cosmetic {
     --rarity-color: #a8b3c2;
     max-width: 100%;
@@ -8512,34 +8531,41 @@ body.cosmetic-picker-open {
 }
 
 .cosmetic-option {
-    --rarity-color: #a8b3c2;
     min-width: 0;
     display: grid;
     grid-template-rows: auto minmax(42px, auto);
     gap: 9px;
     position: relative;
     overflow: hidden;
-    border: 1px solid var(--line);
-    border-top: 2px solid var(--rarity-color);
+    border: 2px solid color-mix(in srgb, var(--rarity-color) 64%, var(--line));
     border-radius: 8px;
     padding: 9px;
-    background: rgba(255, 255, 255, 0.035);
+    background: color-mix(in srgb, var(--rarity-color) 9%, rgba(12, 19, 29, 0.96));
     color: var(--text);
     cursor: pointer;
     font: inherit;
     text-align: left;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 14%, transparent);
+    transition:
+        border-color 160ms ease,
+        background-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
 }
 
 .cosmetic-option:hover,
 .cosmetic-option:focus-visible {
     border-color: var(--rarity-color);
+    background: color-mix(in srgb, var(--rarity-color) 14%, rgba(12, 19, 29, 0.96));
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 24%, transparent),
+        0 0 0 2px color-mix(in srgb, var(--rarity-color) 16%, transparent);
     outline: none;
 }
 
 .cosmetic-option.owned {
-    border-color: color-mix(in srgb, var(--rarity-color) 56%, var(--line));
-    background: color-mix(in srgb, var(--rarity-color) 8%, rgba(16, 24, 36, 0.9));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 22%, transparent);
+    border-color: color-mix(in srgb, var(--rarity-color) 84%, #ffffff);
+    background: color-mix(in srgb, var(--rarity-color) 13%, rgba(12, 19, 29, 0.96));
 }
 
 .cosmetic-option.owned .cosmetic-option-copy > small span:last-child {
@@ -8549,37 +8575,6 @@ body.cosmetic-picker-open {
 
 .cosmetic-option.selected {
     border-color: var(--rarity-color);
-    background: rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 0 0 1px var(--rarity-color);
-}
-
-.cosmetic-option[data-cosmetic-type="badges"] {
-    border: 2px solid color-mix(in srgb, var(--rarity-color) 64%, var(--line));
-    background: color-mix(in srgb, var(--rarity-color) 9%, rgba(12, 19, 29, 0.96));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 14%, transparent);
-    transition:
-        border-color 160ms ease,
-        background-color 160ms ease,
-        box-shadow 160ms ease,
-        transform 160ms ease;
-}
-
-.cosmetic-option[data-cosmetic-type="badges"]:hover,
-.cosmetic-option[data-cosmetic-type="badges"]:focus-visible {
-    border-color: var(--rarity-color);
-    background: color-mix(in srgb, var(--rarity-color) 14%, rgba(12, 19, 29, 0.96));
-    box-shadow:
-        inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 24%, transparent),
-        0 0 0 2px color-mix(in srgb, var(--rarity-color) 16%, transparent);
-}
-
-.cosmetic-option[data-cosmetic-type="badges"].owned {
-    border-color: color-mix(in srgb, var(--rarity-color) 84%, #ffffff);
-    background: color-mix(in srgb, var(--rarity-color) 13%, rgba(12, 19, 29, 0.96));
-}
-
-.cosmetic-option[data-cosmetic-type="badges"].selected {
-    border-color: var(--rarity-color);
     box-shadow:
         inset 0 0 0 1px var(--rarity-color),
         0 0 0 2px color-mix(in srgb, var(--rarity-color) 24%, transparent);
@@ -8587,17 +8582,15 @@ body.cosmetic-picker-open {
 
 .cosmetic-option.unowned,
 .cosmetic-option[aria-disabled="true"] {
-    opacity: 0.46;
-}
-
-.cosmetic-option[data-cosmetic-type="badges"].unowned {
     opacity: 1;
     border-color: color-mix(in srgb, var(--rarity-color) 42%, var(--line));
     background: color-mix(in srgb, var(--rarity-color) 5%, rgba(12, 19, 29, 0.96));
 }
 
-.cosmetic-option[data-cosmetic-type="badges"].unowned .cosmetic-option-media,
-.cosmetic-option[data-cosmetic-type="badges"].unowned .cosmetic-option-copy {
+.cosmetic-option.unowned .cosmetic-option-media,
+.cosmetic-option.unowned .cosmetic-option-copy,
+.cosmetic-option[aria-disabled="true"] .cosmetic-option-media,
+.cosmetic-option[aria-disabled="true"] .cosmetic-option-copy {
     opacity: 0.5;
 }
 
@@ -8640,6 +8633,20 @@ body.cosmetic-picker-open {
     width: min(78px, 72%);
     height: auto;
     aspect-ratio: 1;
+}
+
+.cosmetic-option-media.badge-media {
+    position: relative;
+}
+
+.cosmetic-option-media.badge-media > .badge-tier-level.media {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    z-index: 2;
+    padding: 3px 5px;
+    background: color-mix(in srgb, var(--rarity-color) 18%, rgba(3, 6, 10, 0.94));
+    font-size: 0.62rem;
 }
 
 .cosmetic-option-avatar {

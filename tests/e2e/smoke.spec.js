@@ -205,9 +205,19 @@ const adminSupabaseStub = `
                     signOut: async () => ({ error: null })
                 },
                 from: (table) => builder(table),
-                rpc: async (name) => {
+                rpc: async (name, args = {}) => {
                     if (name === "sync_discord_profile_v2" && window.__profileSyncDelayMs) {
                         await new Promise((resolve) => setTimeout(resolve, window.__profileSyncDelayMs));
+                    }
+                    if (name === "save_profile_customization_v2") {
+                        Object.assign(profile, {
+                            display_name: args.p_display_name,
+                            avatar_source: args.p_avatar_source,
+                            profile_background: args.p_profile_background,
+                            pfp_border: args.p_pfp_border,
+                            profile_title: args.p_profile_title,
+                            selected_badges: [...(args.p_selected_badges || [])]
+                        });
                     }
                     return {
                         data: name === "sync_discord_profile_v2" || name === "save_profile_customization_v2"
@@ -234,8 +244,8 @@ const memberSupabaseStub = adminSupabaseStub
     .replace("is_owner: true", "is_owner: false");
 
 const giftSupabaseStub = adminSupabaseStub.replace(
-    'rpc: async (name) => {\n                    if (name === "sync_discord_profile_v2"',
-    `rpc: async (name, args) => {
+    'rpc: async (name, args = {}) => {\n                    if (name === "sync_discord_profile_v2"',
+    `rpc: async (name, args = {}) => {
                     window.__giftNotification = window.__giftNotification || {
                         id: "323e4567-e89b-42d3-a456-426614174222",
                         notification_type: "cosmetic_gift",
@@ -699,27 +709,64 @@ test("personal cosmetics remember the Show unowned preference after reload", asy
     await expect(page.locator("[data-cosmetic-show-unowned]")).toBeChecked();
 });
 
-test("badge rarity colors frame the entire cosmetic card", async ({ page }) => {
+test("rarity colors frame every personalization card", async ({ page }) => {
+    await openAdminApp(page, "#account");
+    await expect(page.locator("[data-account-form]")).toBeVisible();
+
+    for (const type of ["icon", "background", "border", "title", "badges"]) {
+        await page.locator(`[data-cosmetic-picker-open="${type}"]`).click();
+        const showUnowned = page.locator("[data-cosmetic-show-unowned]");
+        if (!(await showUnowned.isChecked())) await showUnowned.check();
+
+        const card = page.locator(`.cosmetic-option[data-cosmetic-type="${type}"]`).first();
+        await expect(card).toBeVisible();
+        const cardStyle = await card.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return {
+                borderTop: style.borderTopColor,
+                borderRight: style.borderRightColor,
+                borderBottom: style.borderBottomColor,
+                borderLeft: style.borderLeftColor,
+                opacity: style.opacity
+            };
+        });
+
+        expect(
+            new Set([cardStyle.borderTop, cardStyle.borderRight, cardStyle.borderBottom, cardStyle.borderLeft]).size
+        ).toBe(1);
+        expect(cardStyle.opacity).toBe("1");
+        await page.locator("[data-cosmetic-picker-close]").click();
+    }
+
+    await page.locator('[data-cosmetic-picker-open="badges"]').click();
+    await expect(page.locator('[data-badge-id="br_wins_counter"] .badge-tier-level')).toHaveText("LVL 1/5");
+    await expect(page.locator('[data-badge-id="ace_counter"] .badge-tier-level')).toHaveText("LVL 1/3");
+
+    const rarityBorders = await page.locator(".cosmetic-collection").evaluate((collection) => {
+        const border = (selector) => getComputedStyle(collection.querySelector(selector)).borderTopColor;
+        return {
+            common: border(".cosmetic-option.rarity-common"),
+            mythic: border(".cosmetic-option.rarity-mythic")
+        };
+    });
+    expect(rarityBorders.common).not.toBe(rarityBorders.mythic);
+});
+
+test("equipped badges remain selected after saving the profile", async ({ page }) => {
     await openAdminApp(page, "#account");
     await expect(page.locator("[data-account-form]")).toBeVisible();
     await page.locator('[data-cosmetic-picker-open="badges"]').click();
-    await page.locator("[data-cosmetic-show-unowned]").check();
 
-    const badgeCard = page.locator('.cosmetic-option[data-cosmetic-type="badges"]').first();
-    await expect(badgeCard).toBeVisible();
-    const cardStyle = await badgeCard.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-            borderTop: style.borderTopColor,
-            borderRight: style.borderRightColor,
-            borderBottom: style.borderBottomColor,
-            borderLeft: style.borderLeftColor,
-            opacity: style.opacity
-        };
-    });
+    const adminBadge = page.locator('[data-cosmetic-option="admin"]');
+    await expect(adminBadge).toHaveAttribute("data-cosmetic-owned", "true");
+    await adminBadge.click();
+    await expect(adminBadge).toHaveAttribute("aria-pressed", "true");
+    await page.locator("[data-cosmetic-picker-close]").click();
 
-    expect(
-        new Set([cardStyle.borderTop, cardStyle.borderRight, cardStyle.borderBottom, cardStyle.borderLeft]).size
-    ).toBe(1);
-    expect(cardStyle.opacity).toBe("1");
+    await page.locator('[data-account-form] button[type="submit"]').click();
+    await expect(page.getByText("Profile saved.", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-cosmetic-field-label='badges']")).toHaveText("1 / 5 equipped");
+
+    await page.locator('[data-cosmetic-picker-open="badges"]').click();
+    await expect(page.locator('[data-cosmetic-option="admin"]')).toHaveAttribute("aria-pressed", "true");
 });

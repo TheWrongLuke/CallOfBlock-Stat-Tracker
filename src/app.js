@@ -20,7 +20,7 @@ import {
     cosmeticCanAppearInShop,
     progressionOptionLabel
 } from "./config/progression.js";
-import { BADGE_CATALOG } from "./config/badges.js";
+import { BADGE_CATALOG, badgeTierLevel } from "./config/badges.js";
 import {
     TICKET_SUBMIT_COOLDOWN_MS,
     USER_CLOSABLE_TICKET_STATUSES,
@@ -6323,7 +6323,7 @@ function renderCosmeticOption(type, item, account, profile, badgeState, selected
 
 function renderCosmeticOptionMedia(type, item, account, profile) {
     if (type === "badges") {
-        return `<span class="cosmetic-option-media badge-media">${renderBadgeIcon(item)}</span>`;
+        return `<span class="cosmetic-option-media badge-media">${renderBadgeIcon(item)}${renderBadgeTierLevel(item, "media")}</span>`;
     }
     if (type === "border") {
         const avatarUrl = accountAvatarUrl(account, profile, 96);
@@ -10938,7 +10938,7 @@ function renderTitleCosmetic(title, { empty = false, compact = false, large = fa
 
 function renderProfileBadge(badge) {
     const rarity = cleanRarity(badge?.rarity);
-    return `<span class="profile-badge badge-${escapeHtml(badge.id)} rarity-${rarity}" tabindex="0" aria-label="${escapeHtml(badgeProgressAriaLabel(badge))}" ${badgeProgressDataAttributes(badge)} ${cosmeticOwnershipDataAttributes("badges", badge.id, badge.label, badge.description || "Profile badge")}>${renderBadgeIcon(badge)}<span>${escapeHtml(badge.label)}</span></span>`;
+    return `<span class="profile-badge badge-${escapeHtml(badge.id)} rarity-${rarity}" tabindex="0" aria-label="${escapeHtml(badgeProgressAriaLabel(badge))}" ${badgeProgressDataAttributes(badge)} ${cosmeticOwnershipDataAttributes("badges", badge.id, badge.label, badge.description || "Profile badge")}>${renderBadgeIcon(badge)}<span>${escapeHtml(badge.label)}</span>${renderBadgeTierLevel(badge)}</span>`;
 }
 
 function renderBadgeIcon(badge) {
@@ -10952,6 +10952,20 @@ function renderBadgeIcon(badge) {
             ${value ? `<span class="badge-icon-value">${escapeHtml(value)}</span>` : ""}
         </span>
     `;
+}
+
+function badgeTierLevelText(badge) {
+    const level = number(badge?.tierLevel);
+    const total = number(badge?.tierCount);
+    if (level < 1 || total < 2) return "";
+    return `LVL ${Math.min(level, total)}/${total}`;
+}
+
+function renderBadgeTierLevel(badge, context = "") {
+    const text = badgeTierLevelText(badge);
+    if (!text) return "";
+    const contextClass = context ? ` ${context}` : "";
+    return `<small class="badge-tier-level${contextClass}">${escapeHtml(text)}</small>`;
 }
 
 function badgeIconUrl(badge) {
@@ -11026,6 +11040,7 @@ function badgeDisplay(badge, context, unlocked = null) {
         : Boolean(unlocked);
     const tierState = badgeTierState(badge, context);
     const displayTier = tierState?.currentTier || badge?.tiers?.[0] || null;
+    const tierLevel = badgeTierLevel(badge?.tiers, tierState?.currentIndex);
     const finalTierReached = Boolean(
         tierState
         && tierState.currentIndex === badge.tiers.length - 1
@@ -11040,6 +11055,10 @@ function badgeDisplay(badge, context, unlocked = null) {
             rarity: displayTier.rarity,
             description: displayTier.description || badge.description,
             iconKey: displayTier.iconKey || ""
+        } : {}),
+        ...(tierLevel ? {
+            tierLevel: tierLevel.level,
+            tierCount: tierLevel.total
         } : {}),
         ...(value === null ? {} : { value }),
         progressState: badgeProgressState(badge, context, isUnlocked, tierState)
@@ -11323,6 +11342,8 @@ function formatBadgeValue(value) {
 function badgeProgressAriaLabel(badge) {
     const progress = badge?.progressState;
     const parts = [badge?.label || "Badge", badge?.description || ""];
+    const tierLevel = badgeTierLevelText(badge);
+    if (tierLevel) parts.push(tierLevel.replace("LVL", "Level"));
     if (progress?.status) parts.push(`Progress: ${progress.status}`);
     if (progress?.complete) parts.push("Unlocked");
     return parts.filter(Boolean).join(". ");
