@@ -2576,10 +2576,14 @@ a[aria-disabled="true"] {
 .notification-bell-button {
     position: relative;
     width: 44px;
+    height: 44px;
     min-width: 44px;
-    display: inline-grid;
-    place-items: center;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0;
+    line-height: 0;
 }
 
 .notification-bell-button.has-unread {
@@ -2588,9 +2592,10 @@ a[aria-disabled="true"] {
 }
 
 .notification-bell-symbol {
-    font-family: Arial, sans-serif;
-    font-size: 1rem;
-    filter: grayscale(1);
+    display: block;
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
 }
 
 .notification-bell-button > strong {

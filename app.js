@@ -20,6 +20,7 @@ import {
     cosmeticCanAppearInShop,
     progressionOptionLabel
 } from "./src/config/progression.js";
+import { BADGE_CATALOG } from "./src/config/badges.js";
 import {
     TICKET_SUBMIT_COOLDOWN_MS,
     USER_CLOSABLE_TICKET_STATUSES,
@@ -154,6 +155,7 @@ const PROFILE_ACCOUNT_COLUMNS = [
     "unlocked_titles"
 ];
 const PROFILE_SELECT_COLUMNS = `${PROFILE_BASE_COLUMNS}, ${PROFILE_ACCOUNT_COLUMNS.join(", ")}`;
+const PROFILE_PROGRESSION_COLUMNS = `${PROFILE_SELECT_COLUMNS}, weekly_missions_completed, hard_missions_completed`;
 const PROFILE_SELECT_COLUMNS_LEGACY = `${PROFILE_BASE_COLUMNS}, ${PROFILE_ACCOUNT_COLUMNS_LEGACY.join(", ")}`;
 const PUBLIC_PROFILE_TABLE = "public_profiles";
 const PUBLIC_PROFILE_COLUMNS_LEGACY = [
@@ -181,6 +183,7 @@ const PUBLIC_PROFILE_SELECT_COLUMNS = [
     "unlocked_icons",
     "unlocked_titles"
 ].join(", ");
+const PUBLIC_PROFILE_PROGRESSION_COLUMNS = `${PUBLIC_PROFILE_SELECT_COLUMNS}, weekly_missions_completed, hard_missions_completed`;
 const PUBLIC_PROFILE_SELECT_COLUMNS_LEGACY = PUBLIC_PROFILE_COLUMNS_LEGACY.join(", ");
 const PLAYTEST_SELECT_COLUMNS = "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
 const PLAYTEST_SLOT_SELECT_COLUMNS = "id, playtest_id, start_datetime, end_datetime, label, is_main, source, confirmed_at, confirmed_by, created_at";
@@ -272,28 +275,6 @@ const WEEKLY_WEAPON_CATEGORY_VALUES = new Set(WEEKLY_MISSION_WEAPON_CATEGORIES.m
 // matching Stripe Price are registered. Achievement cosmetics are never used
 // as store fallbacks.
 const STORE_OFFLINE_ITEMS = [];
-const BADGE_CATALOG = [
-    { id: "linked", label: "Linked", rarity: "common", description: "Discord and Minecraft account paired.", progress: { type: "linked" }, test: ({ linked }) => linked },
-    { id: "first_win", label: "First Win", rarity: "common", description: "Win at least one match.", progress: { scope: "overall", stat: "wins", target: 1, unit: "win" }, test: ({ stats }) => stats.wins >= 1 },
-    { id: "br_winner", label: "BR Survivor", rarity: "common", description: "Win a Battle Royale game.", progress: { scope: "battleRoyale", stat: "wins", target: 1, unit: "BR win" }, test: ({ br }) => br.stats.wins >= 1 },
-    { id: "dm_winner", label: "DM Victor", rarity: "common", description: "Win a Deathmatch game.", progress: { scope: "deathmatch", stat: "wins", target: 1, unit: "DM win" }, test: ({ dm }) => dm.stats.wins >= 1 },
-    { id: "br_wins_10", label: "BR 10 Wins", rarity: "rare", description: "Win 10 Battle Royale games.", progress: { scope: "battleRoyale", stat: "wins", target: 10, unit: "BR wins" }, test: ({ br }) => br.stats.wins >= 10 },
-    { id: "br_wins_50", label: "BR 50 Wins", rarity: "epic", description: "Win 50 Battle Royale games.", progress: { scope: "battleRoyale", stat: "wins", target: 50, unit: "BR wins" }, test: ({ br }) => br.stats.wins >= 50 },
-    { id: "br_wins_live", label: "BR Wins", rarity: "legendary", description: "Dynamic badge unlocked at 100 Battle Royale wins.", dynamic: { mode: "battleRoyale", stat: "wins" }, progress: { scope: "battleRoyale", stat: "wins", target: 100, unit: "BR wins", live: true }, test: ({ br }) => br.stats.wins >= 100 },
-    { id: "dm_wins_10", label: "DM 10 Wins", rarity: "rare", description: "Win 10 Deathmatch games.", progress: { scope: "deathmatch", stat: "wins", target: 10, unit: "DM wins" }, test: ({ dm }) => dm.stats.wins >= 10 },
-    { id: "dm_wins_50", label: "DM 50 Wins", rarity: "epic", description: "Win 50 Deathmatch games.", progress: { scope: "deathmatch", stat: "wins", target: 50, unit: "DM wins" }, test: ({ dm }) => dm.stats.wins >= 50 },
-    { id: "dm_wins_live", label: "DM Wins", rarity: "legendary", description: "Dynamic badge unlocked at 100 Deathmatch wins.", dynamic: { mode: "deathmatch", stat: "wins" }, progress: { scope: "deathmatch", stat: "wins", target: 100, unit: "DM wins", live: true }, test: ({ dm }) => dm.stats.wins >= 100 },
-    { id: "br_kills_1000", label: "BR 1K Kills", rarity: "epic", description: "Score 1,000 Battle Royale kills.", progress: { scope: "battleRoyale", stat: "kills", target: 1000, unit: "BR kills" }, test: ({ br }) => br.stats.kills >= 1000 },
-    { id: "br_kills_10000", label: "BR 10K Kills", rarity: "mythic", description: "Score 10,000 Battle Royale kills.", progress: { scope: "battleRoyale", stat: "kills", target: 10000, unit: "BR kills" }, test: ({ br }) => br.stats.kills >= 10000 },
-    { id: "dm_kills_1000", label: "DM 1K Kills", rarity: "epic", description: "Score 1,000 Deathmatch kills.", progress: { scope: "deathmatch", stat: "kills", target: 1000, unit: "DM kills" }, test: ({ dm }) => dm.stats.kills >= 1000 },
-    { id: "dm_kills_10000", label: "DM 10K Kills", rarity: "mythic", description: "Score 10,000 Deathmatch kills.", progress: { scope: "deathmatch", stat: "kills", target: 10000, unit: "DM kills" }, test: ({ dm }) => dm.stats.kills >= 10000 },
-    { id: "br_mvp_10", label: "BR MVP 10", rarity: "rare", description: "Earn MVP 10 times in Battle Royale.", progress: { scope: "battleRoyale", stat: "mvp", target: 10, unit: "BR MVP awards" }, test: ({ br }) => br.stats.mvp >= 10 },
-    { id: "br_mvp_100", label: "BR MVP 100", rarity: "legendary", description: "Earn MVP 100 times in Battle Royale.", progress: { scope: "battleRoyale", stat: "mvp", target: 100, unit: "BR MVP awards" }, test: ({ br }) => br.stats.mvp >= 100 },
-    { id: "dm_mvp_10", label: "DM MVP 10", rarity: "rare", description: "Earn MVP 10 times in Deathmatch.", progress: { scope: "deathmatch", stat: "mvp", target: 10, unit: "DM MVP awards" }, test: ({ dm }) => dm.stats.mvp >= 10 },
-    { id: "dm_mvp_100", label: "DM MVP 100", rarity: "legendary", description: "Earn MVP 100 times in Deathmatch.", progress: { scope: "deathmatch", stat: "mvp", target: 100, unit: "DM MVP awards" }, test: ({ dm }) => dm.stats.mvp >= 100 },
-    { id: "sharpshooter", label: "Sharpshooter", rarity: "epic", description: "Reach 35% headshot rate with at least 20 hits.", progress: { type: "sharpshooter", rateTarget: 35, hitsTarget: 20 }, test: ({ stats, derived }) => meetsSharpshooterRequirement(stats, derived) },
-    { id: "veteran", label: "Veteran", rarity: "rare", description: "Play 25 games.", progress: { scope: "overall", stat: "games", target: 25, unit: "games" }, test: ({ stats }) => stats.games >= 25 }
-];
 const DEFAULT_PLAYTEST_VIEWER = {
     userId: "local-preview-user",
     username: "You",
@@ -2112,6 +2093,13 @@ async function syncPlaytestProfile(user) {
 }
 
 async function selectOwnProfile(userId) {
+    const progressionResult = await state.authClient
+        .from("profiles")
+        .select(PROFILE_PROGRESSION_COLUMNS)
+        .eq("id", userId)
+        .maybeSingle();
+    if (!progressionResult.error) return { ...progressionResult, extended: true, cosmeticsExtended: true };
+
     const extendedResult = await state.authClient
         .from("profiles")
         .select(PROFILE_SELECT_COLUMNS)
@@ -2489,6 +2477,8 @@ async function fetchPublicProfiles({ userIds = null, limit = 0 } = {}) {
         return query;
     };
 
+    const progressionViewResult = await run(PUBLIC_PROFILE_TABLE, PUBLIC_PROFILE_PROGRESSION_COLUMNS);
+    if (!progressionViewResult.error) return { ...progressionViewResult, cosmeticsExtended: true };
     const viewResult = await run(PUBLIC_PROFILE_TABLE, PUBLIC_PROFILE_SELECT_COLUMNS);
     if (!viewResult.error) return { ...viewResult, cosmeticsExtended: true };
     const legacyViewResult = await run(PUBLIC_PROFILE_TABLE, PUBLIC_PROFILE_SELECT_COLUMNS_LEGACY);
@@ -2788,7 +2778,23 @@ function exportSignature(data) {
             })
         )).join(";");
         const last = (profile.recentMatches || [])[0]?.endedAt || "";
-        return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.hits}:${br.headshots}:${br.headshotKills}:${br.mvp}:${br.playtimeSeconds}:${br.utilityKills}:${br.vehicleKills}:${dm.games}:${dm.kills}:${dm.wins}:${dm.hits}:${dm.headshots}:${dm.headshotKills}:${dm.mvp}:${dm.playtimeSeconds}:${dm.utilityKills}:${dm.vehicleKills}:${profile.recentMatches?.length || 0}:${last}:${weaponParts}`;
+        const badgeStats = [br, dm].map((stats) => [
+            stats.aces,
+            stats.bestAceStreak,
+            stats.bestRapidStreak,
+            stats.flawlessWins,
+            stats.bestFlawlessWinKills,
+            stats.longestWinStreak,
+            stats.longestKillDistance,
+            stats.closestKillDistance,
+            stats.greatestHeightAdvantage,
+            stats.bestOneMagazineKills,
+            stats.largestComebackDeficit,
+            stats.lowestWinningHealth,
+            stats.maxZoneDamageInWin
+        ].join(":")).join(":");
+        const achievements = [...profileAwardedBadgeIds(profile)].sort().join(".");
+        return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.hits}:${br.headshots}:${br.headshotKills}:${br.mvp}:${br.playtimeSeconds}:${br.utilityKills}:${br.vehicleKills}:${dm.games}:${dm.kills}:${dm.wins}:${dm.hits}:${dm.headshots}:${dm.headshotKills}:${dm.mvp}:${dm.playtimeSeconds}:${dm.utilityKills}:${dm.vehicleKills}:${badgeStats}:${achievements}:${profile.recentMatches?.length || 0}:${last}:${weaponParts}`;
     }).join(",");
     const live = data.liveStatus || {};
     const livePart = `${live.onlinePlayers ?? ""}:${live.state ?? ""}:${live.mode ?? ""}:${live.mapId ?? ""}:${live.redScore ?? ""}:${live.blueScore ?? ""}:${live.matchPlayers ?? ""}:${live.alivePlayers ?? ""}:${live.teamMode ?? ""}`;
@@ -3034,7 +3040,10 @@ function renderAccountWidget() {
     const unread = state.notifications.items.filter((item) => !item.readAt).length;
     container.innerHTML = `
         <button class="notification-bell-button ${unread ? "has-unread" : ""}" type="button" data-notification-panel-open aria-label="${escapeHtml(`Open notifications${unread ? `, ${unread} unread` : ""}`)}" aria-expanded="${state.accountPanelOpen && state.accountPanelView === "notifications" ? "true" : "false"}">
-            <span class="notification-bell-symbol" aria-hidden="true">&#128276;</span>
+            <svg class="notification-bell-symbol" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.268 21a2 2 0 0 0 3.464 0"></path>
+                <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path>
+            </svg>
             ${unread ? `<strong>${escapeHtml(unread > 99 ? "99+" : unread)}</strong>` : ""}
         </button>
         <button class="account-pill" type="button" data-account-panel-open aria-label="${escapeHtml(`Open profile panel for ${name}`)}" aria-expanded="${state.accountPanelOpen && state.accountPanelView === "profile" ? "true" : "false"}">
@@ -4292,6 +4301,22 @@ function normalizeBuiltInAdminCosmetic(type, item, index) {
 }
 
 function inferredCosmeticRule(unlockId) {
+    const legacyRules = {
+        linked: { mode: "overall", metric: "account_linked", target: 1 },
+        first_win: { mode: "overall", metric: "wins", target: 1 },
+        br_winner: { mode: "battle_royale", metric: "wins", target: 1 },
+        dm_winner: { mode: "deathmatch", metric: "wins", target: 1 },
+        br_wins_live: { mode: "battle_royale", metric: "wins", target: 100 },
+        dm_wins_live: { mode: "deathmatch", metric: "wins", target: 100 },
+        br_kills_10000: { mode: "battle_royale", metric: "kills", target: 10000 },
+        dm_kills_10000: { mode: "deathmatch", metric: "kills", target: 10000 },
+        veteran: { mode: "overall", metric: "games", target: 25 },
+        sharpshooter: { mode: "overall", metric: "headshot_rate", target: 35 }
+    };
+    if (legacyRules[unlockId]) {
+        return { ...legacyRules[unlockId], active: true, sort_order: 0 };
+    }
+
     const badge = BADGE_CATALOG.find((entry) => entry.id === unlockId);
     if (!badge?.progress) return null;
     if (badge.progress.type === "linked") {
@@ -4299,6 +4324,20 @@ function inferredCosmeticRule(unlockId) {
     }
     if (badge.progress.type === "sharpshooter") {
         return { mode: "overall", metric: "headshot_rate", target: badge.progress.rateTarget || 35, active: true, sort_order: 0 };
+    }
+    if (badge.progress.type === "tiered" && badge.metric?.stat && badge.tiers?.[0]) {
+        const mode = badge.metric.scope === "battleRoyale"
+            ? "battle_royale"
+            : badge.metric.scope === "deathmatch"
+                ? "deathmatch"
+                : "overall";
+        return {
+            mode,
+            metric: badge.metric.stat,
+            target: badge.tiers[0].target,
+            active: true,
+            sort_order: 0
+        };
     }
     if (!badge.progress.stat || !badge.progress.target) return null;
     const mode = badge.progress.scope === "battleRoyale"
@@ -6089,12 +6128,15 @@ function renderCosmeticPicker(preserveScroll = false) {
     const items = cosmeticPickerItems(type, account).map((item) => {
         const owned = cosmeticItemOwned(type, item, account, badgeState);
         const selected = cosmeticOptionSelected(type, item.id, draft, selectedIds);
+        const displayItem = type === "badges" ? badgeDisplay(item, badgeState.context, owned) : item;
         return {
             ...item,
-            rarity: cleanRarity(item.rarity),
+            label: displayItem.label,
+            description: displayItem.description,
+            rarity: cleanRarity(displayItem.rarity),
             owned,
             selected,
-            displayItem: type === "badges" ? badgeDisplay(item, badgeState.context, owned) : item
+            displayItem
         };
     });
     const visibleItems = items.filter((item) => state.cosmeticPicker.showUnowned || item.owned || item.selected);
@@ -6705,6 +6747,12 @@ async function claimWeeklyMission(missionId) {
         if (error) throw error;
         missionState.row.claimed_ids = arrayField(data?.claimed_ids || [...claimedIds, mission.id]);
         applyAccountXp(number(data?.xp));
+        if (arrayField(data?.unlocked_badges).length) {
+            applyAccountBadgeUnlocks(data.unlocked_badges);
+        }
+        if (missionState.row.claimed_ids.length >= WEEKLY_MISSION_COUNT) {
+            applyAccountBadgeUnlocks(["perfect_week"]);
+        }
         missionState.message = "";
         missionState.animatingId = mission.id;
         window.setTimeout(() => {
@@ -6726,6 +6774,19 @@ function applyAccountXp(xp) {
     state.authProfile = { ...state.authProfile, xp };
     state.accountProfiles = state.accountProfiles.map((account) => (
         account.id === state.authProfile.id ? { ...account, xp } : account
+    ));
+    rebuildAccountProfileIndex();
+}
+
+function applyAccountBadgeUnlocks(ids) {
+    if (!state.authProfile) return;
+    const unlockedBadges = [...new Set([
+        ...arrayField(state.authProfile.unlocked_badges),
+        ...arrayField(ids)
+    ])];
+    state.authProfile = { ...state.authProfile, unlocked_badges: unlockedBadges };
+    state.accountProfiles = state.accountProfiles.map((account) => (
+        account.id === state.authProfile.id ? { ...account, unlocked_badges: unlockedBadges } : account
     ));
     rebuildAccountProfileIndex();
 }
@@ -10910,13 +10971,34 @@ function accountBadgeState(account, profile) {
     const stats = normalizeStats(overall?.stats);
     const derived = normalizeDerived(overall?.derived, stats);
     const context = { account, linked, profile: linkedProfile, overall, br, dm, stats, derived };
-    const unlockedIds = new Set(BADGE_CATALOG.filter((badge) => badge.test(context)).map((badge) => badge.id));
-    for (const id of arrayField(account?.unlocked_badges)) unlockedIds.add(id);
+    const awardedIds = profileAwardedBadgeIds(linkedProfile);
+    if (account?.id && account.id === state.authProfile?.id
+        && arrayField(state.weeklyMissions.row?.claimed_ids).length >= WEEKLY_MISSION_COUNT) {
+        awardedIds.add("perfect_week");
+    }
+    const unlockedIds = new Set(
+        BADGE_CATALOG
+            .filter((badge) => badgeUnlockedFromContext(badge, context, awardedIds))
+            .map((badge) => badge.id)
+    );
+    for (const id of arrayField(account?.unlocked_badges)) {
+        unlockedIds.add(id);
+        const canonicalId = LEGACY_BADGE_ID_ALIASES[id];
+        if (canonicalId) unlockedIds.add(canonicalId);
+    }
+    for (const id of awardedIds) {
+        unlockedIds.add(id);
+        const canonicalId = LEGACY_BADGE_ID_ALIASES[id];
+        if (canonicalId) unlockedIds.add(canonicalId);
+    }
+    for (const id of legacyCosmeticUnlockIds(context)) unlockedIds.add(id);
     return { unlockedIds, context };
 }
 
 function selectedAccountBadgeIds(account, unlockedIds) {
-    const selected = arrayField(account?.selected_badges).filter((id) => unlockedIds.has(id));
+    const selected = arrayField(account?.selected_badges)
+        .map((id) => LEGACY_BADGE_ID_ALIASES[id] || id)
+        .filter((id) => unlockedIds.has(id));
     return new Set(selected.slice(0, 5));
 }
 
@@ -10931,20 +11013,30 @@ function selectedAccountBadges(account, badgeStateOrUnlockedIds) {
 }
 
 function badgeDisplay(badge, context, unlocked = null) {
-    const value = badgeDynamicValue(badge, context);
-    const isUnlocked = unlocked === null ? Boolean(context && badge.test(context)) : Boolean(unlocked);
+    const awardedIds = profileAwardedBadgeIds(context?.profile);
+    const isUnlocked = unlocked === null
+        ? badgeUnlockedFromContext(badge, context, awardedIds)
+        : Boolean(unlocked);
+    const tierState = badgeTierState(badge, context);
+    const displayTier = tierState?.currentTier || badge?.tiers?.[0] || null;
+    const finalTierReached = Boolean(
+        tierState
+        && tierState.currentIndex === badge.tiers.length - 1
+    );
+    const value = finalTierReached && badge.liveValueAtFinalTier
+        ? badgeMetricValue(badge.metric, context)
+        : null;
     return {
         ...badge,
+        ...(displayTier ? {
+            label: displayTier.name,
+            rarity: displayTier.rarity,
+            description: displayTier.description || badge.description,
+            iconKey: displayTier.iconKey || ""
+        } : {}),
         ...(value === null ? {} : { value }),
-        progressState: badgeProgressState(badge, context, isUnlocked)
+        progressState: badgeProgressState(badge, context, isUnlocked, tierState)
     };
-}
-
-function badgeDynamicValue(badge, context) {
-    if (!badge?.dynamic) return null;
-    const mode = badge.dynamic.mode === "battleRoyale" ? context?.br : context?.dm;
-    const stats = normalizeStats(mode?.stats);
-    return number(stats[badge.dynamic.stat]);
 }
 
 function compactBadgeNumber(value) {
@@ -10954,7 +11046,168 @@ function compactBadgeNumber(value) {
     return formatNumber(numeric);
 }
 
-function badgeProgressState(badge, context, unlocked) {
+const LEGACY_BADGE_ID_ALIASES = Object.freeze({
+    br_winner: "br_wins_counter",
+    br_wins_10: "br_wins_counter",
+    br_wins_50: "br_wins_counter",
+    br_wins_live: "br_wins_counter",
+    dm_winner: "dm_wins_counter",
+    dm_wins_10: "dm_wins_counter",
+    dm_wins_50: "dm_wins_counter",
+    dm_wins_live: "dm_wins_counter",
+    br_kills_1000: "br_kills_counter",
+    br_kills_10000: "br_kills_counter",
+    dm_kills_1000: "dm_kills_counter",
+    dm_kills_10000: "dm_kills_counter",
+    br_mvp_10: "br_mvp_counter",
+    br_mvp_100: "br_mvp_counter",
+    dm_mvp_10: "dm_mvp_counter",
+    dm_mvp_100: "dm_mvp_counter",
+    sharpshooter: "headshot_kills_counter"
+});
+
+function legacyCosmeticUnlockIds(context) {
+    const ids = new Set();
+    if (context?.linked) ids.add("linked");
+    if (number(context?.stats?.wins) >= 1) ids.add("first_win");
+    if (number(context?.br?.stats?.wins) >= 1) ids.add("br_winner");
+    if (number(context?.dm?.stats?.wins) >= 1) ids.add("dm_winner");
+    if (number(context?.br?.stats?.wins) >= 10) ids.add("br_wins_10");
+    if (number(context?.br?.stats?.wins) >= 50) ids.add("br_wins_50");
+    if (number(context?.br?.stats?.wins) >= 100) ids.add("br_wins_live");
+    if (number(context?.dm?.stats?.wins) >= 10) ids.add("dm_wins_10");
+    if (number(context?.dm?.stats?.wins) >= 50) ids.add("dm_wins_50");
+    if (number(context?.dm?.stats?.wins) >= 100) ids.add("dm_wins_live");
+    if (number(context?.br?.stats?.kills) >= 1000) ids.add("br_kills_1000");
+    if (number(context?.br?.stats?.kills) >= 10000) ids.add("br_kills_10000");
+    if (number(context?.dm?.stats?.kills) >= 1000) ids.add("dm_kills_1000");
+    if (number(context?.dm?.stats?.kills) >= 10000) ids.add("dm_kills_10000");
+    if (number(context?.br?.stats?.mvp) >= 10) ids.add("br_mvp_10");
+    if (number(context?.br?.stats?.mvp) >= 100) ids.add("br_mvp_100");
+    if (number(context?.dm?.stats?.mvp) >= 10) ids.add("dm_mvp_10");
+    if (number(context?.dm?.stats?.mvp) >= 100) ids.add("dm_mvp_100");
+    if (number(context?.stats?.games) >= 25) ids.add("veteran");
+    if (meetsSharpshooterRequirement(context?.stats, context?.derived)) ids.add("sharpshooter");
+    return ids;
+}
+
+function profileAwardedBadgeIds(profile) {
+    const ids = new Set();
+    const sources = [
+        profile?.unlockedBadges,
+        profile?.unlocked_badges,
+        profile?.achievementIds,
+        profile?.achievement_ids,
+        profile?.achievements,
+        profile?.badges?.unlockedIds,
+        profile?.badges?.unlocked_ids,
+        profile?.badgeProgress?.unlockedIds,
+        profile?.badgeProgress?.unlocked_ids
+    ];
+    for (const source of sources) {
+        for (const entry of Array.isArray(source) ? source : []) {
+            const id = typeof entry === "string" ? entry : entry?.id;
+            if (id) ids.add(String(id));
+        }
+    }
+    return ids;
+}
+
+function badgeUnlockedFromContext(badge, context, awardedIds = profileAwardedBadgeIds(context?.profile)) {
+    if (!badge) return false;
+    if (awardedIds.has(badge.id)) return true;
+    if (badge.badgeType === "special") {
+        if (badge.specialRule === "admin") return isAdminProfile(context?.account);
+        if (badge.specialRule === "owner") {
+            return context?.account?.profile_title === "owner"
+                || arrayField(context?.account?.unlocked_titles).includes("owner");
+        }
+        return false;
+    }
+    if (badge.badgeType === "permanent") return false;
+    return badgeTierState(badge, context)?.currentIndex >= 0;
+}
+
+function badgeTierState(badge, context) {
+    if (!badge?.tiers?.length) return null;
+    let currentIndex = -1;
+    let currentSnapshot = null;
+    for (let index = 0; index < badge.tiers.length; index += 1) {
+        const snapshot = badgeRequirementSnapshot(badge, badge.tiers[index], context);
+        if (snapshot.actual >= snapshot.target) {
+            currentIndex = index;
+            currentSnapshot = snapshot;
+        }
+    }
+    const nextIndex = Math.min(badge.tiers.length - 1, currentIndex + 1);
+    const nextTier = currentIndex >= badge.tiers.length - 1 ? null : badge.tiers[nextIndex];
+    const nextSnapshot = nextTier ? badgeRequirementSnapshot(badge, nextTier, context) : currentSnapshot;
+    return {
+        currentIndex,
+        currentTier: currentIndex >= 0 ? badge.tiers[currentIndex] : null,
+        currentSnapshot,
+        nextTier,
+        nextSnapshot
+    };
+}
+
+function badgeRequirementSnapshot(badge, tier, context) {
+    const requirement = tier?.requirement;
+    if (requirement?.type === "dmMaps") {
+        const maps = Array.isArray(context?.dm?.details?.deathmatchMaps)
+            ? context.dm.details.deathmatchMaps
+            : [];
+        const qualifying = maps.filter((entry) => {
+            const stats = normalizeStats(entry?.stats);
+            return number(stats[requirement.stat]) >= number(requirement.targetPerMap);
+        }).length;
+        return {
+            actual: qualifying,
+            target: number(requirement.mapCount),
+            unit: "DM maps"
+        };
+    }
+    if (requirement?.type === "placement") {
+        const placements = context?.br?.details?.battleRoyalePlacement || {};
+        return {
+            actual: number(placements[requirement.stat]),
+            target: number(requirement.target),
+            unit: "placements"
+        };
+    }
+    if (requirement?.type === "flag") {
+        return {
+            actual: badgeMetricValue(requirement, context),
+            target: number(requirement.target),
+            unit: requirement.unit || badge.unit || ""
+        };
+    }
+    return {
+        actual: badgeMetricValue(badge.metric, context),
+        target: number(tier?.target),
+        unit: badge.unit || ""
+    };
+}
+
+function badgeMetricValue(metric, context) {
+    if (!metric) return 0;
+    const source = metric.scope === "battleRoyale"
+        ? context?.br?.stats
+        : metric.scope === "deathmatch"
+            ? context?.dm?.stats
+            : metric.scope === "account"
+                ? context?.account
+                : metric.scope === "profile"
+                    ? context?.profile
+                    : context?.stats;
+
+    const camelStat = String(metric.stat || "").replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    let value = number(source?.[metric.stat] ?? source?.[camelStat]);
+    if (metric.transform === "hours") value /= 3600;
+    return value;
+}
+
+function badgeProgressState(badge, context, unlocked, tierState = badgeTierState(badge, context)) {
     const requirement = badge?.progress;
     if (!requirement) return null;
 
@@ -10963,6 +11216,50 @@ function badgeProgressState(badge, context, unlocked) {
             complete: unlocked,
             percent: unlocked ? 100 : 0,
             status: unlocked ? "Discord and Minecraft linked" : "Discord and Minecraft not linked"
+        };
+    }
+
+    if (requirement.type === "tiered" && tierState) {
+        const progressSnapshot = tierState.nextSnapshot || tierState.currentSnapshot || {
+            actual: 0,
+            target: 1,
+            unit: badge.unit || ""
+        };
+        const percent = tierState.nextTier
+            ? Math.min(100, Math.max(0, progressSnapshot.actual / Math.max(1, progressSnapshot.target) * 100))
+            : 100;
+        const status = [];
+        if (tierState.currentTier) {
+            status.push(`${tierState.currentTier.name} - ${RARITY_LABELS[cleanRarity(tierState.currentTier.rarity)]}`);
+        } else if (tierState.nextTier) {
+            status.push(`${formatBadgeValue(progressSnapshot.actual)} / ${formatBadgeValue(progressSnapshot.target)} ${progressSnapshot.unit}`.trim());
+        }
+
+        const personalBest = badgePersonalBestText(badge, context, unlocked);
+        if (personalBest) status.push(personalBest);
+        if (tierState.nextTier) {
+            status.push(`Next tier: ${tierState.nextTier.name} at ${formatBadgeValue(progressSnapshot.target)} ${progressSnapshot.unit}`.trim());
+        } else if (badge.liveValueAtFinalTier && tierState.currentSnapshot) {
+            status.push(`${formatBadgeValue(badgeMetricValue(badge.metric, context))} ${badge.unit}`.trim());
+        }
+
+        return {
+            complete: unlocked,
+            percent,
+            status: status.join("; ")
+        };
+    }
+
+    if (requirement.type === "achievement" || requirement.type === "special") {
+        const status = [
+            unlocked ? "Unlocked" : `Locked: ${badge.description}`
+        ];
+        const personalBest = badgePersonalBestText(badge, context, unlocked);
+        if (personalBest) status.push(personalBest);
+        return {
+            complete: unlocked,
+            percent: unlocked ? 100 : 0,
+            status: status.join("; ")
         };
     }
 
@@ -10998,6 +11295,22 @@ function badgeProgressState(badge, context, unlocked) {
         percent: unlocked ? 100 : percent,
         status: `${formatNumber(shown)} / ${formatNumber(target)} ${requirement.unit}`
     };
+}
+
+function badgePersonalBestText(badge, context, unlocked) {
+    const personalBest = badge?.personalBest;
+    if (!personalBest?.metric) return "";
+    const value = badgeMetricValue(personalBest.metric, context);
+    if (value <= 0 && !(personalBest.metric.zeroIsValue && unlocked)) return "";
+    const formatted = Number.isInteger(personalBest.decimals)
+        ? number(value).toFixed(personalBest.decimals)
+        : formatBadgeValue(value);
+    return `${personalBest.label}: ${formatted}${personalBest.unit ? ` ${personalBest.unit}` : ""}`;
+}
+
+function formatBadgeValue(value) {
+    const numeric = number(value);
+    return Number.isInteger(numeric) ? formatNumber(numeric) : String(round2(numeric));
 }
 
 function badgeProgressAriaLabel(badge) {
@@ -11833,6 +12146,19 @@ function combineStats(...statsList) {
         total.topMatchKills = Math.max(total.topMatchKills, next.topMatchKills);
         total.utilityKills += next.utilityKills;
         total.vehicleKills += next.vehicleKills;
+        total.aces += next.aces;
+        total.bestAceStreak = Math.max(total.bestAceStreak, next.bestAceStreak);
+        total.bestRapidStreak = Math.max(total.bestRapidStreak, next.bestRapidStreak);
+        total.flawlessWins += next.flawlessWins;
+        total.bestFlawlessWinKills = Math.max(total.bestFlawlessWinKills, next.bestFlawlessWinKills);
+        total.longestWinStreak = Math.max(total.longestWinStreak, next.longestWinStreak);
+        total.longestKillDistance = Math.max(total.longestKillDistance, next.longestKillDistance);
+        total.closestKillDistance = minimumPositive(total.closestKillDistance, next.closestKillDistance);
+        total.greatestHeightAdvantage = Math.max(total.greatestHeightAdvantage, next.greatestHeightAdvantage);
+        total.bestOneMagazineKills = Math.max(total.bestOneMagazineKills, next.bestOneMagazineKills);
+        total.largestComebackDeficit = Math.max(total.largestComebackDeficit, next.largestComebackDeficit);
+        total.lowestWinningHealth = minimumPositive(total.lowestWinningHealth, next.lowestWinningHealth);
+        total.maxZoneDamageInWin = Math.max(total.maxZoneDamageInWin, next.maxZoneDamageInWin);
         return total;
     }, normalizeStats(null));
 }
@@ -11874,8 +12200,29 @@ function normalizeStats(stats) {
         bestKillStreak: number(stats?.bestKillStreak),
         topMatchKills: number(stats?.topMatchKills),
         utilityKills: number(stats?.utilityKills),
-        vehicleKills: number(stats?.vehicleKills)
+        vehicleKills: number(stats?.vehicleKills),
+        aces: number(stats?.aces),
+        bestAceStreak: number(stats?.bestAceStreak),
+        bestRapidStreak: number(stats?.bestRapidStreak),
+        flawlessWins: number(stats?.flawlessWins),
+        bestFlawlessWinKills: number(stats?.bestFlawlessWinKills),
+        longestWinStreak: number(stats?.longestWinStreak),
+        longestKillDistance: number(stats?.longestKillDistance),
+        closestKillDistance: number(stats?.closestKillDistance),
+        greatestHeightAdvantage: number(stats?.greatestHeightAdvantage),
+        bestOneMagazineKills: number(stats?.bestOneMagazineKills),
+        largestComebackDeficit: number(stats?.largestComebackDeficit),
+        lowestWinningHealth: number(stats?.lowestWinningHealth),
+        maxZoneDamageInWin: number(stats?.maxZoneDamageInWin)
     };
+}
+
+function minimumPositive(current, next) {
+    const currentValue = number(current);
+    const nextValue = number(next);
+    if (nextValue <= 0) return currentValue;
+    if (currentValue <= 0) return nextValue;
+    return Math.min(currentValue, nextValue);
 }
 
 function normalizeDerived(derived, stats) {

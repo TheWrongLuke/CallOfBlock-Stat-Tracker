@@ -633,7 +633,21 @@ test("a cosmetic gift opens once and remains manageable in the private notificat
     await page.locator(".notification-gift-dialog [data-notification-gift-close]").last().click();
     await expect(giftDialog).toBeHidden();
 
-    await page.locator("[data-notification-panel-open]").click();
+    const bellButton = page.locator("[data-notification-panel-open]");
+    await expect(bellButton.locator("svg.notification-bell-symbol")).toBeVisible();
+    const bellOffset = await bellButton.evaluate((button) => {
+        const icon = button.querySelector(".notification-bell-symbol");
+        const buttonBox = button.getBoundingClientRect();
+        const iconBox = icon.getBoundingClientRect();
+        return {
+            x: Math.abs(iconBox.left + iconBox.width / 2 - (buttonBox.left + buttonBox.width / 2)),
+            y: Math.abs(iconBox.top + iconBox.height / 2 - (buttonBox.top + buttonBox.height / 2))
+        };
+    });
+    expect(bellOffset.x).toBeLessThanOrEqual(0.5);
+    expect(bellOffset.y).toBeLessThanOrEqual(0.5);
+
+    await bellButton.click();
     await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
     await page.locator('[data-notification-toggle="323e4567-e89b-42d3-a456-426614174222"]').click();
     await expect(page.locator('[data-notification-claim="323e4567-e89b-42d3-a456-426614174222"]')).toBeVisible();
