@@ -14,6 +14,7 @@ const argumentsMap = new Map(
 );
 const root = path.resolve(projectRoot, argumentsMap.get("--root") || ".");
 const port = Number(argumentsMap.get("--port") || 4173);
+const publicRoot = path.join(root, "public");
 
 const contentTypes = {
     ".css": "text/css; charset=utf-8",
@@ -31,14 +32,30 @@ const contentTypes = {
     ".xml": "application/xml; charset=utf-8"
 };
 
+async function isFile(filePath) {
+    try {
+        return (await stat(filePath)).isFile();
+    } catch (_error) {
+        return false;
+    }
+}
+
 const server = createServer(async (request, response) => {
     try {
         const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
         const requestedPath = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
-        const filePath = path.resolve(root, `.${requestedPath}`);
-        if (filePath !== root && !filePath.startsWith(`${root}${path.sep}`)) {
+        const requestedFilePath = path.resolve(root, `.${requestedPath}`);
+        if (requestedFilePath !== root && !requestedFilePath.startsWith(`${root}${path.sep}`)) {
             response.writeHead(403).end("Forbidden");
             return;
+        }
+        let filePath = requestedFilePath;
+        if (!(await isFile(filePath))) {
+            const publicFilePath = path.resolve(publicRoot, `.${requestedPath}`);
+            if (publicFilePath !== publicRoot && !publicFilePath.startsWith(`${publicRoot}${path.sep}`)) {
+                throw new Error("Invalid public path");
+            }
+            filePath = publicFilePath;
         }
         const fileStat = await stat(filePath);
         if (!fileStat.isFile()) throw new Error("Not a file");

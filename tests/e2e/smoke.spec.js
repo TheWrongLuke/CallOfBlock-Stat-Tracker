@@ -110,7 +110,7 @@ const adminSupabaseStub = `
                 description: "Use the linked Minecraft skin.",
                 category: "Default",
                 rarity: "common",
-                image_url: "./Icon.png",
+                image_url: "./assets/branding/icon.png",
                 title_text: null,
                 border_inset: 0,
                 active: true,
@@ -697,4 +697,29 @@ test("personal cosmetics remember the Show unowned preference after reload", asy
     await expect(page.locator("[data-account-form]")).toBeVisible();
     await page.locator('[data-cosmetic-picker-open="background"]').click();
     await expect(page.locator("[data-cosmetic-show-unowned]")).toBeChecked();
+});
+
+test("badge rarity colors frame the entire cosmetic card", async ({ page }) => {
+    await openAdminApp(page, "#account");
+    await expect(page.locator("[data-account-form]")).toBeVisible();
+    await page.locator('[data-cosmetic-picker-open="badges"]').click();
+    await page.locator("[data-cosmetic-show-unowned]").check();
+
+    const badgeCard = page.locator('.cosmetic-option[data-cosmetic-type="badges"]').first();
+    await expect(badgeCard).toBeVisible();
+    const cardStyle = await badgeCard.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return {
+            borderTop: style.borderTopColor,
+            borderRight: style.borderRightColor,
+            borderBottom: style.borderBottomColor,
+            borderLeft: style.borderLeftColor,
+            opacity: style.opacity
+        };
+    });
+
+    expect(
+        new Set([cardStyle.borderTop, cardStyle.borderRight, cardStyle.borderBottom, cardStyle.borderLeft]).size
+    ).toBe(1);
+    expect(cardStyle.opacity).toBe("1");
 });

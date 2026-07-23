@@ -5,8 +5,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$destination = Join-Path $PSScriptRoot "data\stats.json"
-$workspaceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
+$destination = Join-Path $projectRoot "data\stats.json"
+$workspaceRoot = [System.IO.Path]::GetFullPath((Join-Path $projectRoot ".."))
 $defaultServerRoot = Join-Path $workspaceRoot "Minecraft Servers\servers\Call of Block"
 if ([string]::IsNullOrWhiteSpace($ServerRoot)) {
     $ServerRoot = $defaultServerRoot
@@ -37,7 +38,7 @@ function Get-ExistingExportPath {
 
 function Find-LatestExportPath {
     $roots = @(
-        (Join-Path $PSScriptRoot ".."),
+        $projectRoot,
         (Join-Path $env:USERPROFILE "Desktop"),
         $env:USERPROFILE
     ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique

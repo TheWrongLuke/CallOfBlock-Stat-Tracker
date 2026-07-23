@@ -1,13 +1,13 @@
-import { createFeedbackApi } from "./src/api/feedback.js";
-import { createNotificationApi } from "./src/api/notifications.js";
-import { saveProfileCustomization, syncDiscordProfile } from "./src/api/profile.js";
-import { createProgressionAdminApi } from "./src/api/progression.js";
+import { createFeedbackApi } from "./api/feedback.js";
+import { createNotificationApi } from "./api/notifications.js";
+import { saveProfileCustomization, syncDiscordProfile } from "./api/profile.js";
+import { createProgressionAdminApi } from "./api/progression.js";
 import {
     claimWeeklyMissionReward,
     ensureWeeklyMissions,
     swapWeeklyMission
-} from "./src/api/weekly-missions.js";
-import { canOpenAdminRoute, isAdminProfile } from "./src/auth/permissions.js";
+} from "./api/weekly-missions.js";
+import { canOpenAdminRoute, isAdminProfile } from "./auth/permissions.js";
 import {
     COSMETIC_ACQUISITION_TYPES,
     PROGRESSION_METRICS,
@@ -19,8 +19,8 @@ import {
     WEEKLY_MISSION_WEAPON_SCOPES,
     cosmeticCanAppearInShop,
     progressionOptionLabel
-} from "./src/config/progression.js";
-import { BADGE_CATALOG } from "./src/config/badges.js";
+} from "./config/progression.js";
+import { BADGE_CATALOG } from "./config/badges.js";
 import {
     TICKET_SUBMIT_COOLDOWN_MS,
     USER_CLOSABLE_TICKET_STATUSES,
@@ -30,12 +30,12 @@ import {
     ticketSeverityLabel,
     ticketSeverityRank,
     ticketStatusLabel
-} from "./src/config/feedback.js";
-import { validateReplyInput, validateTicketInput } from "./src/utils/feedback-validation.js";
+} from "./config/feedback.js";
+import { validateReplyInput, validateTicketInput } from "./utils/feedback-validation.js";
 import {
     headshotRatePercent,
     meetsSharpshooterRequirement
-} from "./src/utils/cosmetic-progress.js";
+} from "./utils/cosmetic-progress.js";
 import {
     createFeedbackAttachmentView,
     createFeedbackTicketId,
@@ -43,25 +43,25 @@ import {
     removeFeedbackAttachment,
     uploadFeedbackAttachment,
     validateFeedbackAttachment
-} from "./src/services/feedback-attachments.js";
-import { createFeedbackDraftSession } from "./src/services/feedback-draft-session.js";
+} from "./services/feedback-attachments.js";
+import { createFeedbackDraftSession } from "./services/feedback-draft-session.js";
 import {
     loadAdminTicketPreferences,
     saveAdminTicketPreferences
-} from "./src/services/admin-ticket-preferences.js";
+} from "./services/admin-ticket-preferences.js";
 import {
     loadCosmeticPickerPreferences,
     saveCosmeticPickerPreferences
-} from "./src/services/cosmetic-picker-preferences.js";
-import { claimCanonicalProgressionCosmetics } from "./src/services/progression-claims.js";
+} from "./services/cosmetic-picker-preferences.js";
+import { claimCanonicalProgressionCosmetics } from "./services/progression-claims.js";
 import {
     renderAdminDocumentationContent,
     renderAdminTicketsContent,
     renderFeedbackContent,
     renderTicketDetailContent
-} from "./src/views/feedback.js";
-import { renderProgressionAdminContent } from "./src/views/progression.js";
-import { renderGiftNotificationPopup, renderNotificationInbox } from "./src/views/notifications.js";
+} from "./views/feedback.js";
+import { renderProgressionAdminContent } from "./views/progression.js";
+import { renderGiftNotificationPopup, renderNotificationInbox } from "./views/notifications.js";
 
 const MODE_LABELS = {
     overall: "Overall",
@@ -215,7 +215,14 @@ function storeCatalogEntries(type) {
 
 const COSMETIC_CATEGORY_ORDER = ["Default", "Store", "Game Modes", "Milestones", "Personal", "Legacy"];
 const PROFILE_ICONS = [
-    { id: "default", label: "Call of Block", category: "Default", rarity: "common", image: "./Icon.png", unlock: "default" },
+    {
+        id: "default",
+        label: "Call of Block",
+        category: "Default",
+        rarity: "common",
+        image: "./assets/branding/icon.png",
+        unlock: "default"
+    },
     { id: "discord", label: "Discord picture", category: "Default", rarity: "common", source: "discord", unlock: "default" },
     { id: "minecraft", label: "Minecraft skin", category: "Default", rarity: "common", source: "minecraft", unlock: "default" },
     ...storeCatalogEntries("icon")

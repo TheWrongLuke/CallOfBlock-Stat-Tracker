@@ -7,7 +7,7 @@ export default [
     },
     js.configs.recommended,
     {
-        files: ["app.js", "src/**/*.js", "tests/e2e/**/*.js"],
+        files: ["src/**/*.js", "tests/e2e/**/*.js"],
         languageOptions: {
             ecmaVersion: "latest",
             sourceType: "module",
@@ -21,7 +21,7 @@ export default [
         }
     },
     {
-        files: ["scripts/**/*.mjs", "*.config.js", "tests/unit/**/*.js"],
+        files: ["scripts/**/*.mjs", "config/*.config.js", "tests/unit/**/*.js"],
         languageOptions: {
             ecmaVersion: "latest",
             sourceType: "module",

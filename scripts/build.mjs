@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDirectory, "..");
 const output = path.join(root, "dist");
-const config = JSON.parse(await readFile(path.join(root, "site.config.json"), "utf8"));
+const config = JSON.parse(await readFile(path.join(root, "config", "site.config.json"), "utf8"));
 const publicSiteUrl = String(process.env.COB_PUBLIC_SITE_URL || config.publicSiteUrl).replace(/\/+$/, "/");
 
 if (path.dirname(output) !== root || path.basename(output) !== "dist") {
@@ -15,20 +15,14 @@ if (path.dirname(output) !== root || path.basename(output) !== "dist") {
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
-const files = [
-    "index.html",
-    "app.js",
-    "styles.css",
-    "api-config.js",
-    "store-catalog.js",
-    "Icon.png",
-    "robots.txt",
-    "sitemap.xml",
-    "site.webmanifest"
-];
+const files = ["index.html"];
+const publicFiles = ["robots.txt", "sitemap.xml", "site.webmanifest"];
 const directories = ["assets", "data", "src"];
 
 for (const file of files) await cp(path.join(root, file), path.join(output, file));
+for (const file of publicFiles) {
+    await cp(path.join(root, "public", file), path.join(output, file));
+}
 for (const directory of directories) {
     await cp(path.join(root, directory), path.join(output, directory), { recursive: true });
 }
@@ -48,7 +42,7 @@ html = html
     );
 await writeFile(indexPath, html, "utf8");
 
-const apiConfigPath = path.join(output, "api-config.js");
+const apiConfigPath = path.join(output, "src", "config", "api-config.js");
 let apiConfig = await readFile(apiConfigPath, "utf8");
 apiConfig = apiConfig.replace(
     /window\.COB_PUBLIC_SITE_URL\s*=\s*"[^"]*";/,

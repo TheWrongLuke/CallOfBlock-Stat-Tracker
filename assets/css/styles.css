@@ -6596,19 +6596,25 @@ img.identity-avatar {
 }
 
 .profile-badge {
+    --rarity-color: #a8b3c2;
     display: inline-flex;
     align-items: center;
     gap: 6px;
     min-height: 28px;
-    border: 1px solid rgba(255, 203, 107, 0.24);
+    border: 1px solid color-mix(in srgb, var(--rarity-color) 62%, transparent);
     border-radius: 999px;
     padding: 4px 8px;
-    background: rgba(255, 203, 107, 0.1);
-    color: rgba(255, 233, 190, 0.92);
+    background: color-mix(in srgb, var(--rarity-color) 13%, rgba(7, 13, 21, 0.88));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 12%, transparent);
+    color: color-mix(in srgb, var(--rarity-color) 58%, #ffffff);
     font-family: "Chakra Petch", sans-serif;
     font-size: 0.7rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
+    transition:
+        border-color 160ms ease,
+        background-color 160ms ease,
+        box-shadow 160ms ease;
 }
 
 .profile-badge[data-badge-progress] {
@@ -6662,8 +6668,10 @@ img.identity-avatar {
 }
 
 .profile-badge[data-badge-progress]:focus-visible {
-    border-color: rgba(255, 203, 107, 0.7);
-    box-shadow: 0 0 0 2px rgba(255, 203, 107, 0.16);
+    border-color: var(--rarity-color);
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 20%, transparent),
+        0 0 0 2px color-mix(in srgb, var(--rarity-color) 24%, transparent);
 }
 
 .badge-progress-tooltip {
@@ -8545,9 +8553,52 @@ body.cosmetic-picker-open {
     box-shadow: inset 0 0 0 1px var(--rarity-color);
 }
 
+.cosmetic-option[data-cosmetic-type="badges"] {
+    border: 2px solid color-mix(in srgb, var(--rarity-color) 64%, var(--line));
+    background: color-mix(in srgb, var(--rarity-color) 9%, rgba(12, 19, 29, 0.96));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 14%, transparent);
+    transition:
+        border-color 160ms ease,
+        background-color 160ms ease,
+        box-shadow 160ms ease,
+        transform 160ms ease;
+}
+
+.cosmetic-option[data-cosmetic-type="badges"]:hover,
+.cosmetic-option[data-cosmetic-type="badges"]:focus-visible {
+    border-color: var(--rarity-color);
+    background: color-mix(in srgb, var(--rarity-color) 14%, rgba(12, 19, 29, 0.96));
+    box-shadow:
+        inset 0 0 0 1px color-mix(in srgb, var(--rarity-color) 24%, transparent),
+        0 0 0 2px color-mix(in srgb, var(--rarity-color) 16%, transparent);
+}
+
+.cosmetic-option[data-cosmetic-type="badges"].owned {
+    border-color: color-mix(in srgb, var(--rarity-color) 84%, #ffffff);
+    background: color-mix(in srgb, var(--rarity-color) 13%, rgba(12, 19, 29, 0.96));
+}
+
+.cosmetic-option[data-cosmetic-type="badges"].selected {
+    border-color: var(--rarity-color);
+    box-shadow:
+        inset 0 0 0 1px var(--rarity-color),
+        0 0 0 2px color-mix(in srgb, var(--rarity-color) 24%, transparent);
+}
+
 .cosmetic-option.unowned,
 .cosmetic-option[aria-disabled="true"] {
     opacity: 0.46;
+}
+
+.cosmetic-option[data-cosmetic-type="badges"].unowned {
+    opacity: 1;
+    border-color: color-mix(in srgb, var(--rarity-color) 42%, var(--line));
+    background: color-mix(in srgb, var(--rarity-color) 5%, rgba(12, 19, 29, 0.96));
+}
+
+.cosmetic-option[data-cosmetic-type="badges"].unowned .cosmetic-option-media,
+.cosmetic-option[data-cosmetic-type="badges"].unowned .cosmetic-option-copy {
+    opacity: 0.5;
 }
 
 .cosmetic-option.unowned .cosmetic-option-media {
