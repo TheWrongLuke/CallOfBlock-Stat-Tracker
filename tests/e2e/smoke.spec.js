@@ -98,11 +98,13 @@ const adminSupabaseStub = `
         created_at: "2026-07-01T12:00:00Z",
         updated_at: "2026-07-01T12:00:00Z"
     };
+    const badgeOverrides = [];
 
     function resultFor(table, calls) {
         const single = calls.some(([method]) => method === "single" || method === "maybeSingle");
         if (table === "profiles") return { data: single ? profile : [profile], error: null };
         if (table === "public_profiles") return { data: [profile], error: null };
+        if (table === "badge_catalog_overrides") return { data: badgeOverrides.map((entry) => ({ ...entry })), error: null };
         if (table === "cosmetic_catalog_items") return {
             data: [{
                 cosmetic_type: "icon",
@@ -219,6 +221,17 @@ const adminSupabaseStub = `
                             profile_title: args.p_profile_title,
                             selected_badges: [...(args.p_selected_badges || [])]
                         });
+                    }
+                    if (name === "admin_save_badge_catalog_override") {
+                        const saved = {
+                            ...args.p_badge,
+                            created_at: "2026-07-24T12:00:00Z",
+                            updated_at: new Date().toISOString()
+                        };
+                        const existingIndex = badgeOverrides.findIndex((entry) => entry.badge_id === saved.badge_id);
+                        if (existingIndex >= 0) badgeOverrides.splice(existingIndex, 1, saved);
+                        else badgeOverrides.push(saved);
+                        return { data: [saved], error: null };
                     }
                     return {
                         data: name === "sync_discord_profile_v2" || name === "save_profile_customization_v2"
@@ -555,6 +568,43 @@ test("new cosmetic fields follow type, ownership, and store limits", async ({ pa
     await expect(form.locator("[data-progression-store-fields]")).toBeHidden();
     await expect(form.locator("input[name='availableFrom']")).not.toHaveAttribute("required", "");
     await expect(form.locator("input[name='supplyLimit']")).not.toHaveAttribute("required", "");
+});
+
+test("an administrator can edit badge levels and animated icons in one persistent modal", async ({ page }) => {
+    await openAdminApp(page);
+    await page.locator('[data-progression-section="badges"]').click();
+    const badgeCard = page.locator('[data-badge-editor-open="br_wins_counter"]');
+    await expect(badgeCard).toBeVisible();
+    await badgeCard.click();
+
+    const dialog = page.locator(".badge-editor-dialog");
+    const form = dialog.locator("[data-badge-editor-form]");
+    await expect(dialog).toBeVisible();
+    await expect(form.locator("[data-badge-tier]")).toHaveCount(5);
+    await expect(form.locator('input[name="tierTarget_0"]')).toHaveValue("1");
+    await expect(form.locator('input[name="tierAsset_0"]')).toHaveAttribute("accept", /image\/gif/);
+
+    await page.locator("[data-badge-editor-backdrop]").evaluate((backdrop) => {
+        backdrop.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+
+    await form.locator('input[name="badgeLabel"]').fill("Battle Winner");
+    await form.locator('input[name="tierName_0"]').fill("First Crown");
+    await form.locator('input[name="tierTarget_0"]').fill("2");
+    await form.locator('input[name="tierIconUrl_4"]').fill("https://cdn.example.com/apex-winner.gif");
+    await form.getByRole("button", { name: "Save badge and levels" }).click();
+
+    await expect(page.getByText("Battle Winner and 5 levels were saved.")).toBeVisible();
+    await expect(dialog.locator('input[name="badgeLabel"]')).toHaveValue("Battle Winner");
+    await expect(dialog.locator('input[name="tierName_0"]')).toHaveValue("First Crown");
+    await expect(dialog.locator('input[name="tierTarget_0"]')).toHaveValue("2");
+    await expect(dialog.locator('input[name="tierIconUrl_4"]')).toHaveValue("https://cdn.example.com/apex-winner.gif");
+
+    await page.locator("[data-badge-editor-close]").click();
+    await expect(dialog).toBeHidden();
+    await expect(badgeCard).toContainText("Battle Winner");
 });
 
 test("an administrator can open the weekly mission editor and only close it with X", async ({ page }) => {

@@ -180,6 +180,33 @@ describe("progression admin view", () => {
         expect(html).not.toContain("data-progression-grant-form");
     });
 
+    it("switches the protected workspace to the badge editor", () => {
+        const html = renderProgressionAdminContent({
+            ...baseProps,
+            ready: false,
+            section: "badges",
+            badge: {
+                ready: true,
+                badges: [
+                    {
+                        id: "owner",
+                        badgeType: "special",
+                        label: "Owner",
+                        rarity: "mythic",
+                        description: "Owner badge",
+                        icon: "./assets/badges/default.png"
+                    }
+                ],
+                filters: { search: "", type: "all" }
+            }
+        });
+
+        expect(html).toContain('data-progression-section="badges"');
+        expect(html).toContain('data-badge-editor-open="owner"');
+        expect(html).toContain("All badges");
+        expect(html).not.toContain("data-progression-cosmetic-new");
+    });
+
     it("switches the protected workspace to Player Manager", () => {
         const html = renderProgressionAdminContent({
             ...baseProps,

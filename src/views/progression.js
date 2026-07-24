@@ -5,6 +5,7 @@ import {
     progressionOptionLabel
 } from "../config/progression.js";
 import { escapeHtml } from "../utils/sanitization.js";
+import { renderBadgeAdminContent } from "./badge-admin.js";
 import { renderPlayerManagerContent } from "./player-manager.js";
 import { renderWeeklyMissionAdminContent } from "./weekly-mission-admin.js";
 
@@ -25,6 +26,7 @@ export function renderProgressionAdminContent({
     creating = false,
     filters = {},
     section = "cosmetics",
+    badge = {},
     weekly = {},
     player = {},
     message,
@@ -35,6 +37,9 @@ export function renderProgressionAdminContent({
     const sectionTabs = renderManagerTabs(section);
     if (section === "weekly") {
         return `${sectionTabs}${renderWeeklyMissionAdminContent(weekly)}`;
+    }
+    if (section === "badges") {
+        return `${sectionTabs}${renderBadgeAdminContent(badge)}`;
     }
     if (section === "players") {
         return `${sectionTabs}${renderPlayerManagerContent(player)}`;
@@ -85,6 +90,7 @@ function renderManagerTabs(section) {
     return `
         <nav class="progression-manager-tabs" aria-label="Progression manager sections">
             <button type="button" data-progression-section="cosmetics" aria-current="${section === "cosmetics" ? "page" : "false"}">Cosmetics</button>
+            <button type="button" data-progression-section="badges" aria-current="${section === "badges" ? "page" : "false"}">Badges</button>
             <button type="button" data-progression-section="weekly" aria-current="${section === "weekly" ? "page" : "false"}">Weekly missions</button>
             <button type="button" data-progression-section="players" aria-current="${section === "players" ? "page" : "false"}">Player Manager</button>
         </nav>

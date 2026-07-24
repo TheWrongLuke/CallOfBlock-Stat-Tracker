@@ -1148,6 +1148,166 @@
     gap: 10px;
 }
 
+.badge-admin-toolbar {
+    grid-template-columns: minmax(240px, 1fr) minmax(170px, 240px);
+}
+
+.badge-admin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+}
+
+.badge-admin-card {
+    --rarity-color: #a8b3c2;
+    min-width: 0;
+    display: grid;
+    grid-template-rows: 116px 1fr;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--rarity-color) 58%, var(--line));
+    border-radius: 7px;
+    padding: 0;
+    background: color-mix(in srgb, var(--rarity-color) 7%, rgba(13, 20, 30, 0.9));
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    transition:
+        border-color 150ms ease,
+        background 150ms ease,
+        transform 150ms ease;
+}
+
+.badge-admin-card:hover,
+.badge-admin-card:focus-visible {
+    border-color: var(--rarity-color);
+    background: color-mix(in srgb, var(--rarity-color) 12%, rgba(13, 20, 30, 0.94));
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.badge-admin-card-icon {
+    min-width: 0;
+    display: grid;
+    place-items: center;
+    border-bottom: 1px solid color-mix(in srgb, var(--rarity-color) 38%, transparent);
+    background: #080d14;
+}
+
+.badge-admin-card-icon img {
+    width: 82px;
+    height: 82px;
+    object-fit: contain;
+}
+
+.badge-admin-card-copy {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 4px;
+    padding: 11px;
+}
+
+.badge-admin-card-copy strong,
+.badge-admin-card-copy span,
+.badge-admin-card-copy small {
+    overflow-wrap: anywhere;
+}
+
+.badge-admin-card-copy span,
+.badge-admin-card-copy small {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
+.badge-editor-header-preview,
+.badge-editor-asset-preview,
+.badge-editor-tier-icon {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--rarity-color, #a8b3c2) 48%, var(--line));
+    border-radius: 6px;
+    background: #080d14;
+}
+
+.badge-editor-header-preview img,
+.badge-editor-asset-preview img,
+.badge-editor-tier-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.badge-editor-identity {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    align-items: start;
+    gap: 16px;
+}
+
+.badge-editor-asset-preview {
+    position: sticky;
+    top: 0;
+    width: 180px;
+    aspect-ratio: 1;
+}
+
+.badge-editor-tier-list {
+    display: grid;
+    gap: 12px;
+}
+
+.badge-editor-tier {
+    --rarity-color: #a8b3c2;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--rarity-color) 58%, var(--line));
+    border-radius: 7px;
+    background: color-mix(in srgb, var(--rarity-color) 5%, rgba(8, 13, 20, 0.78));
+}
+
+.badge-editor-tier > header {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    align-items: center;
+    gap: 11px;
+    border-bottom: 1px solid color-mix(in srgb, var(--rarity-color) 30%, transparent);
+    padding: 11px;
+    background: color-mix(in srgb, var(--rarity-color) 8%, #101a26);
+}
+
+.badge-editor-tier > header > div:last-child {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.badge-editor-tier > header strong,
+.badge-editor-tier > header span,
+.badge-editor-tier > header small {
+    overflow-wrap: anywhere;
+}
+
+.badge-editor-tier > header span,
+.badge-editor-tier > header small {
+    color: var(--rarity-color);
+    font-size: 0.7rem;
+}
+
+.badge-editor-tier-icon {
+    width: 58px;
+    height: 58px;
+}
+
+.badge-editor-tier > .progression-editor-fields {
+    padding: 12px;
+}
+
+.badge-editor-no-levels {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.55;
+}
+
 .weekly-template-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -1966,6 +2126,14 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .badge-admin-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .badge-admin-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .weekly-template-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -2031,6 +2199,20 @@
         height: 56px;
     }
 
+    .badge-editor-header-preview {
+        width: 56px;
+        height: 56px;
+    }
+
+    .badge-editor-identity {
+        grid-template-columns: 92px minmax(0, 1fr);
+        gap: 11px;
+    }
+
+    .badge-editor-asset-preview {
+        width: 92px;
+    }
+
     .weekly-template-dialog-header {
         grid-template-columns: 48px minmax(0, 1fr) 38px;
     }
@@ -2061,6 +2243,7 @@
 
 @media (max-width: 430px) {
     .progression-catalog-grid,
+    .badge-admin-grid,
     .weekly-template-grid,
     .player-collection-grid {
         grid-template-columns: 1fr;

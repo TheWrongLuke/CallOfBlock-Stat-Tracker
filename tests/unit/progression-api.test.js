@@ -62,6 +62,29 @@ describe("progression admin API", () => {
         });
     });
 
+    it("loads public badge overrides and saves them through the protected admin RPC", async () => {
+        const order = vi.fn().mockResolvedValue({ data: [], error: null });
+        const select = vi.fn(() => ({ order }));
+        const from = vi.fn(() => ({ select }));
+        const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
+        const api = createProgressionAdminApi({ from, rpc });
+        const badge = {
+            badge_id: "br_wins_counter",
+            label: "Battle Winner",
+            description: "",
+            icon_url: null,
+            tiers: []
+        };
+
+        await api.listBadgeOverrides();
+        await api.saveBadgeOverride(badge);
+
+        expect(from).toHaveBeenCalledWith("badge_catalog_overrides");
+        expect(select).toHaveBeenCalledWith("badge_id, label, description, icon_url, tiers, created_at, updated_at");
+        expect(order).toHaveBeenCalledWith("badge_id");
+        expect(rpc).toHaveBeenCalledWith("admin_save_badge_catalog_override", { p_badge: badge });
+    });
+
     it("uses protected RPCs for Player Manager mutations", async () => {
         const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
         const api = createProgressionAdminApi({ rpc });

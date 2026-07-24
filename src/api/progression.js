@@ -3,6 +3,7 @@ const RULE_COLUMNS =
 const INVENTORY_COLUMNS = "profile_id, cosmetic_type, cosmetic_id, source, grant_note, granted_by, acquired_at";
 const WEEKLY_TEMPLATE_COLUMNS =
     "id, family, difficulty, label, description, metric, target, xp, mode, weapon_scope, weapon_id, weapon_category, active, sort_order, created_at, updated_at";
+const BADGE_OVERRIDE_COLUMNS = "badge_id, label, description, icon_url, tiers, created_at, updated_at";
 
 export function createProgressionAdminApi(client) {
     if (!client) throw new Error("A Supabase client is required.");
@@ -72,6 +73,14 @@ export function createProgressionAdminApi(client) {
                 .order("sort_order", { ascending: true })
                 .order("label", { ascending: true })
                 .limit(1000);
+        },
+
+        async listBadgeOverrides() {
+            return client.from("badge_catalog_overrides").select(BADGE_OVERRIDE_COLUMNS).order("badge_id");
+        },
+
+        async saveBadgeOverride(badge) {
+            return client.rpc("admin_save_badge_catalog_override", { p_badge: badge });
         },
 
         async saveWeeklyMissionTemplate(template) {
