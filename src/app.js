@@ -1,7 +1,7 @@
 import { createFeedbackApi } from "./api/feedback.js";
 import { createNotificationApi } from "./api/notifications.js";
 import { saveProfileCustomization, syncDiscordProfile } from "./api/profile.js";
-import { createProgressionAdminApi } from "./api/progression.js?v=badge-editor-1";
+import { createProgressionAdminApi } from "./api/progression.js?v=badge-editor-2";
 import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "./api/weekly-missions.js";
 import { canOpenAdminRoute, isAdminProfile } from "./auth/permissions.js";
 import {
@@ -17,10 +17,11 @@ import {
     progressionOptionLabel
 } from "./config/progression.js";
 import {
+    badgeTierEditableTarget,
     badgeTierPerMapTarget,
     mergeBadgeCatalog,
     normalizeBadgeCatalogOverride
-} from "./config/badge-catalog.js?v=badge-editor-1";
+} from "./config/badge-catalog.js?v=badge-editor-2";
 import { BADGE_CATALOG, badgeTierLevel } from "./config/badges.js";
 import {
     TICKET_SUBMIT_COOLDOWN_MS,
@@ -55,7 +56,7 @@ import {
     renderFeedbackContent,
     renderTicketDetailContent
 } from "./views/feedback.js";
-import { renderProgressionAdminContent } from "./views/progression.js?v=badge-editor-1";
+import { renderProgressionAdminContent } from "./views/progression.js?v=badge-editor-2";
 import { renderGiftNotificationPopup, renderNotificationInbox } from "./views/notifications.js";
 
 const MODE_LABELS = {
@@ -588,6 +589,10 @@ const state = {
         badgeEditorId: "",
         badgeFilterSearch: "",
         badgeFilterType: "all",
+        badgeDraft: null,
+        badgeExpandedTiers: new Set(),
+        badgeEditorStatus: "",
+        badgeEditorStatusError: "",
         badgeMessage: "",
         badgeError: "",
         weeklyTemplates: [],
@@ -988,6 +993,7 @@ function bindStaticEvents() {
             state.progression.editorKey = "";
             state.progression.creating = false;
             state.progression.badgeEditorId = "";
+            clearBadgeEditorDraft();
             state.progression.weeklyEditorId = "";
             state.progression.creatingWeekly = false;
             state.progression.playerGrantKey = "";
@@ -1007,7 +1013,10 @@ function bindStaticEvents() {
         const badgeEditorOpen = event.target.closest("[data-badge-editor-open]");
         if (badgeEditorOpen) {
             event.preventDefault();
+            clearBadgeEditorDraft();
             state.progression.badgeEditorId = badgeEditorOpen.dataset.badgeEditorOpen || "";
+            state.progression.badgeEditorStatus = "";
+            state.progression.badgeEditorStatusError = "";
             state.progression.badgeMessage = "";
             state.progression.badgeError = "";
             renderProgressionAdminPage();
@@ -1019,6 +1028,9 @@ function bindStaticEvents() {
         if (badgeEditorClose) {
             event.preventDefault();
             state.progression.badgeEditorId = "";
+            clearBadgeEditorDraft();
+            state.progression.badgeEditorStatus = "";
+            state.progression.badgeEditorStatusError = "";
             renderProgressionAdminPage();
             return;
         }
@@ -1793,13 +1805,22 @@ function bindStaticEvents() {
         }
 
         const badgeEditorForm = event.target.closest("[data-badge-editor-form]");
-        if (
-            badgeEditorForm &&
-            event.target.matches(
-                "[name='badgeLabel'], [name='badgeIconUrl'], [name^='tierName_'], [name^='tierIconUrl_']"
-            )
-        ) {
-            updateBadgeEditorPreview(badgeEditorForm, event.target);
+        if (badgeEditorForm) {
+            captureBadgeEditorDraft(badgeEditorForm);
+            state.progression.badgeEditorStatus = "";
+            state.progression.badgeEditorStatusError = "";
+            const status = badgeEditorForm.querySelector("[data-badge-editor-status]");
+            if (status) {
+                status.classList.remove("error");
+                status.textContent = "";
+            }
+            if (
+                event.target.matches(
+                    "[name='badgeLabel'], [name='badgeIconUrl'], [name^='tierName_'], [name^='tierIconUrl_']"
+                )
+            ) {
+                updateBadgeEditorPreview(badgeEditorForm, event.target);
+            }
             return;
         }
 
@@ -1808,6 +1829,20 @@ function bindStaticEvents() {
             updateAccountCustomizePreview(accountForm);
         }
     });
+
+    document.addEventListener(
+        "toggle",
+        (event) => {
+            const tier = event.target;
+            if (!(tier instanceof HTMLDetailsElement) || !tier.matches("[data-badge-tier]")) return;
+            if (!tier.closest("[data-badge-editor-form]")) return;
+            const index = Number(tier.dataset.badgeTier);
+            if (!Number.isInteger(index) || index < 0) return;
+            if (tier.open) state.progression.badgeExpandedTiers.add(index);
+            else state.progression.badgeExpandedTiers.delete(index);
+        },
+        true
+    );
 
     document.addEventListener("keydown", (event) => {
         if (event.key !== "Escape") return;
@@ -3621,6 +3656,7 @@ function resetFeedbackSessionState() {
 
 function resetProgressionAdminState() {
     const progression = state.progression;
+    releaseBadgeEditorDraftAssets(progression.badgeDraft);
     progression.loaded = false;
     progression.loading = false;
     progression.ready = false;
@@ -3649,6 +3685,10 @@ function resetProgressionAdminState() {
     progression.badgeEditorId = "";
     progression.badgeFilterSearch = "";
     progression.badgeFilterType = "all";
+    progression.badgeDraft = null;
+    progression.badgeExpandedTiers = new Set();
+    progression.badgeEditorStatus = "";
+    progression.badgeEditorStatusError = "";
     progression.badgeMessage = "";
     progression.badgeError = "";
     progression.weeklyTemplates = [];
@@ -4292,7 +4332,7 @@ async function loadAdminDocumentation({ force = false } = {}) {
     }
 }
 
-function renderProgressionAdminPage() {
+function renderProgressionAdminPage({ forceBadgeEditor = false } = {}) {
     const body = document.getElementById("admin-progression-body");
     if (!body) return;
     document.body.classList.toggle(
@@ -4320,6 +4360,11 @@ function renderProgressionAdminPage() {
         enforceProtectedAdminRoute();
         return;
     }
+    const openBadgeForm = body.querySelector("[data-badge-editor-form]");
+    if (!forceBadgeEditor && state.progression.badgeEditorId && openBadgeForm) {
+        captureBadgeEditorDraft(openBadgeForm);
+        return;
+    }
     if (!state.progression.loaded && !state.progression.loading) void loadProgressionAdminData();
     const adminCatalog = progressionAdminCatalogItems();
     body.innerHTML = renderProgressionAdminContent({
@@ -4341,12 +4386,16 @@ function renderProgressionAdminPage() {
             ready: state.badges.ready,
             badges: badgeCatalog(),
             editorId: state.progression.badgeEditorId,
+            draft: state.progression.badgeDraft,
+            expandedTiers: [...state.progression.badgeExpandedTiers],
             filters: {
                 search: state.progression.badgeFilterSearch,
                 type: state.progression.badgeFilterType
             },
             message: state.progression.badgeMessage,
             error: state.progression.badgeError || state.badges.error,
+            editorMessage: state.progression.badgeEditorStatus,
+            editorError: state.progression.badgeEditorStatusError,
             saving: state.progression.saving
         },
         weekly: {
@@ -5298,6 +5347,71 @@ function previewProgressionAsset(input) {
     if (status) status.textContent = "Preview updated. Save to upload the asset.";
 }
 
+function captureBadgeEditorDraft(form) {
+    if (!form) return null;
+    state.progression.badgeExpandedTiers = new Set(
+        [...form.querySelectorAll("[data-badge-tier][open]")]
+            .map((tier) => Number(tier.dataset.badgeTier))
+            .filter((index) => Number.isInteger(index) && index >= 0)
+    );
+    const values = new FormData(form);
+    const badgeId = String(values.get("badgeId") || "")
+        .trim()
+        .toLowerCase();
+    const badge = badgeCatalog().find((entry) => entry.id === badgeId);
+    if (!badge) return null;
+
+    const previous = state.progression.badgeDraft?.badgeId === badgeId ? state.progression.badgeDraft : null;
+    const selectedBadgeAsset = values.get("badgeAsset");
+    const tiers = (badge.tiers || []).map((tier, index) => {
+        const previousTier = previous?.tiers?.[index] || null;
+        const selectedTierAsset = values.get(`tierAsset_${index}`);
+        const supportsPerMapTarget = badgeTierPerMapTarget(tier) !== null;
+        return {
+            name: String(values.get(`tierName_${index}`) ?? ""),
+            description: String(values.get(`tierDescription_${index}`) ?? ""),
+            target: String(values.get(`tierTarget_${index}`) ?? badgeTierEditableTarget(tier)),
+            targetPerMap: supportsPerMapTarget
+                ? String(values.get(`tierTargetPerMap_${index}`) ?? badgeTierPerMapTarget(tier))
+                : null,
+            iconUrl: String(values.get(`tierIconUrl_${index}`) ?? ""),
+            asset:
+                selectedTierAsset instanceof File && selectedTierAsset.size > 0
+                    ? selectedTierAsset
+                    : previousTier?.asset || null,
+            previewUrl: previousTier?.previewUrl || ""
+        };
+    });
+
+    const draft = {
+        badgeId,
+        label: String(values.get("badgeLabel") ?? ""),
+        description: String(values.get("badgeDescription") ?? ""),
+        iconUrl: String(values.get("badgeIconUrl") ?? ""),
+        asset:
+            selectedBadgeAsset instanceof File && selectedBadgeAsset.size > 0
+                ? selectedBadgeAsset
+                : previous?.asset || null,
+        previewUrl: previous?.previewUrl || "",
+        tiers
+    };
+    state.progression.badgeDraft = draft;
+    return draft;
+}
+
+function releaseBadgeEditorDraftAssets(draft) {
+    const previewUrls = [draft?.previewUrl, ...(draft?.tiers || []).map((tier) => tier.previewUrl)].filter((value) =>
+        /^blob:/i.test(String(value || ""))
+    );
+    for (const previewUrl of previewUrls) URL.revokeObjectURL(previewUrl);
+}
+
+function clearBadgeEditorDraft({ resetExpanded = true } = {}) {
+    releaseBadgeEditorDraftAssets(state.progression.badgeDraft);
+    state.progression.badgeDraft = null;
+    if (resetExpanded) state.progression.badgeExpandedTiers = new Set();
+}
+
 function previewBadgeEditorAsset(input) {
     const file = input?.files?.[0];
     const form = input?.closest("[data-badge-editor-form]");
@@ -5315,25 +5429,34 @@ function previewBadgeEditorAsset(input) {
         return;
     }
 
+    const draft = captureBadgeEditorDraft(form);
+    if (!draft) return;
     const previews = [...form.closest(".badge-editor-dialog").querySelectorAll(`[data-badge-preview-for="${scope}"]`)];
     const objectUrl = URL.createObjectURL(file);
-    let pendingImages = 0;
+    if (scope === "base") {
+        if (/^blob:/i.test(draft.previewUrl)) URL.revokeObjectURL(draft.previewUrl);
+        draft.previewUrl = objectUrl;
+        draft.asset = file;
+    } else {
+        const tierIndex = Number(scope.replace(/^tier-/, ""));
+        const tierDraft = Number.isInteger(tierIndex) ? draft.tiers[tierIndex] : null;
+        if (tierDraft) {
+            if (/^blob:/i.test(tierDraft.previewUrl)) URL.revokeObjectURL(tierDraft.previewUrl);
+            tierDraft.previewUrl = objectUrl;
+            tierDraft.asset = file;
+        }
+    }
     for (const preview of previews) {
         const image = preview.querySelector("img");
         if (!image) continue;
-        pendingImages += 1;
-        image.addEventListener(
-            "load",
-            () => {
-                pendingImages -= 1;
-                if (pendingImages === 0) URL.revokeObjectURL(objectUrl);
-            },
-            { once: true }
-        );
         image.src = objectUrl;
     }
-    if (pendingImages === 0) URL.revokeObjectURL(objectUrl);
-    if (status) status.textContent = "Badge preview updated. Save to upload the icon.";
+    state.progression.badgeEditorStatus = "Badge preview updated. Save to upload the icon.";
+    state.progression.badgeEditorStatusError = "";
+    if (status) {
+        status.classList.remove("error");
+        status.textContent = state.progression.badgeEditorStatus;
+    }
 }
 
 function updateBadgeEditorPreview(form, input) {
@@ -5350,8 +5473,8 @@ function updateBadgeEditorPreview(form, input) {
     if (tierNameMatch) {
         const tier = form.querySelector(`[data-badge-tier="${tierNameMatch[1]}"]`);
         const label = String(input.value || "").trim() || `Level ${Number(tierNameMatch[1]) + 1}`;
-        const heading = tier?.querySelector("header strong");
-        const image = tier?.querySelector("header img");
+        const heading = tier?.querySelector("summary strong");
+        const image = tier?.querySelector("summary img");
         if (heading) heading.textContent = label;
         if (image) image.alt = label;
         return;
@@ -5364,7 +5487,9 @@ function updateBadgeEditorPreview(form, input) {
     const fileInput = form.elements.namedItem(fileInputName);
     if (fileInput instanceof HTMLInputElement && fileInput.files?.length) return;
     const source = safeBadgeAssetInput(input.value) || "./assets/badges/default.png";
-    for (const preview of form.closest(".badge-editor-dialog").querySelectorAll(`[data-badge-preview-for="${scope}"] img`)) {
+    for (const preview of form
+        .closest(".badge-editor-dialog")
+        .querySelectorAll(`[data-badge-preview-for="${scope}"] img`)) {
         preview.src = source;
     }
 }
@@ -5372,13 +5497,21 @@ function updateBadgeEditorPreview(form, input) {
 async function submitBadgeEditor(form) {
     const progression = state.progression;
     if (!progression.api || !isPlaytestAdmin() || !state.authSession?.user || progression.saving) return;
+    const draft = captureBadgeEditorDraft(form);
     const values = new FormData(form);
     const status = form.querySelector("[data-badge-editor-status]");
+    const submit = form.querySelector("button[type='submit']");
     const badgeId = String(values.get("badgeId") || "")
         .trim()
         .toLowerCase();
     const badge = badgeCatalog().find((entry) => entry.id === badgeId);
-    if (!badge) return;
+    if (!badge || !draft) {
+        if (status) {
+            status.classList.add("error");
+            status.textContent = "This badge is no longer available. Close the editor and try again.";
+        }
+        return;
+    }
 
     try {
         const label = cleanBadgeEditorText(values.get("badgeLabel"), 80);
@@ -5387,12 +5520,21 @@ async function submitBadgeEditor(form) {
         const rawIconUrl = String(values.get("badgeIconUrl") || "").trim();
         let iconUrl = safeBadgeAssetInput(rawIconUrl);
         if (rawIconUrl && !iconUrl) throw new Error("Badge icon URLs must use HTTPS.");
-        const badgeAsset = values.get("badgeAsset");
+        const badgeAsset = draft.asset || values.get("badgeAsset");
 
         progression.saving = true;
         progression.badgeError = "";
         progression.badgeMessage = "";
-        if (status) status.textContent = "Uploading badge icons...";
+        progression.badgeEditorStatus = "Uploading badge icons...";
+        progression.badgeEditorStatusError = "";
+        if (submit) {
+            submit.disabled = true;
+            submit.textContent = "Saving badge...";
+        }
+        if (status) {
+            status.classList.remove("error");
+            status.textContent = progression.badgeEditorStatus;
+        }
 
         if (badgeAsset instanceof File && badgeAsset.size > 0) {
             iconUrl = await uploadCatalogAsset(badgeAsset, "badge", badgeId);
@@ -5422,7 +5564,7 @@ async function submitBadgeEditor(form) {
             if (rawTierIconUrl && !tierIconUrl) {
                 throw new Error(`Level ${index + 1} icon URLs must use HTTPS.`);
             }
-            const tierAsset = values.get(`tierAsset_${index}`);
+            const tierAsset = draft.tiers[index]?.asset || values.get(`tierAsset_${index}`);
             if (tierAsset instanceof File && tierAsset.size > 0) {
                 tierIconUrl = await uploadCatalogAsset(tierAsset, "badge", `${badgeId}-tier-${index + 1}`);
             }
@@ -5436,7 +5578,8 @@ async function submitBadgeEditor(form) {
             });
         }
 
-        if (status) status.textContent = "Saving badge catalogue...";
+        progression.badgeEditorStatus = "Saving badge catalogue...";
+        if (status) status.textContent = progression.badgeEditorStatus;
         const result = await progression.api.saveBadgeOverride({
             badge_id: badgeId,
             label,
@@ -5448,13 +5591,27 @@ async function submitBadgeEditor(form) {
 
         progression.badgeEditorId = badgeId;
         progression.badgeMessage = `${label} and ${tiers.length || "its"} ${tiers.length === 1 ? "level were" : "levels were"} saved.`;
+        progression.badgeEditorStatus = progression.badgeMessage;
+        progression.badgeEditorStatusError = "";
         await loadBadgeCatalogOverrides({ force: true });
+        clearBadgeEditorDraft({ resetExpanded: false });
     } catch (error) {
         console.error("Could not save badge catalogue override", error);
-        progression.badgeError = badgeCatalogErrorMessage(error, "Could not save this badge.");
+        const message = badgeCatalogErrorMessage(error, "Could not save this badge.");
+        progression.badgeError = message;
+        progression.badgeEditorStatus = "";
+        progression.badgeEditorStatusError = message;
+        if (status) {
+            status.classList.add("error");
+            status.textContent = message;
+        }
     } finally {
         progression.saving = false;
-        if (state.view === "adminProgression") renderProgressionAdminPage();
+        if (submit) {
+            submit.disabled = false;
+            submit.textContent = "Save badge and levels";
+        }
+        if (state.view === "adminProgression") renderProgressionAdminPage({ forceBadgeEditor: true });
     }
 }
 

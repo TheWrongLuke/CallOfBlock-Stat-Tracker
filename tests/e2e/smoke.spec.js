@@ -581,6 +581,8 @@ test("an administrator can edit badge levels and animated icons in one persisten
     const form = dialog.locator("[data-badge-editor-form]");
     await expect(dialog).toBeVisible();
     await expect(form.locator("[data-badge-tier]")).toHaveCount(5);
+    await expect(form.locator("[data-badge-tier][open]")).toHaveCount(0);
+    await expect(form.locator('input[name="tierTarget_0"]')).toBeHidden();
     await expect(form.locator('input[name="tierTarget_0"]')).toHaveValue("1");
     await expect(form.locator('input[name="tierAsset_0"]')).toHaveAttribute("accept", /image\/gif/);
 
@@ -591,12 +593,23 @@ test("an administrator can edit badge levels and animated icons in one persisten
     await expect(dialog).toBeVisible();
 
     await form.locator('input[name="badgeLabel"]').fill("Battle Winner");
+    await form.locator('[data-badge-tier="0"] > summary').click();
+    await expect(form.locator('input[name="tierTarget_0"]')).toBeVisible();
     await form.locator('input[name="tierName_0"]').fill("First Crown");
     await form.locator('input[name="tierTarget_0"]').fill("2");
+    await form.locator('[data-badge-tier="4"] > summary').click();
     await form.locator('input[name="tierIconUrl_4"]').fill("https://cdn.example.com/apex-winner.gif");
+
+    await page.evaluate(() => window.dispatchEvent(new HashChangeEvent("hashchange")));
+    await expect(dialog.locator('input[name="tierIconUrl_4"]')).toBeFocused();
+    await expect(dialog.locator('input[name="badgeLabel"]')).toHaveValue("Battle Winner");
+    await expect(dialog.locator('input[name="tierName_0"]')).toHaveValue("First Crown");
+    await expect(dialog.locator('[data-badge-tier="0"]')).toHaveAttribute("open", "");
+    await expect(dialog.locator('[data-badge-tier="4"]')).toHaveAttribute("open", "");
+
     await form.getByRole("button", { name: "Save badge and levels" }).click();
 
-    await expect(page.getByText("Battle Winner and 5 levels were saved.")).toBeVisible();
+    await expect(dialog.locator("[data-badge-editor-status]")).toHaveText("Battle Winner and 5 levels were saved.");
     await expect(dialog.locator('input[name="badgeLabel"]')).toHaveValue("Battle Winner");
     await expect(dialog.locator('input[name="tierName_0"]')).toHaveValue("First Crown");
     await expect(dialog.locator('input[name="tierTarget_0"]')).toHaveValue("2");

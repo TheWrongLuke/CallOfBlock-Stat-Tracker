@@ -14,9 +14,13 @@ export function renderBadgeAdminContent({
     ready,
     badges = [],
     editorId = "",
+    draft = null,
+    expandedTiers = [],
     filters = {},
     message = "",
     error = "",
+    editorMessage = "",
+    editorError = "",
     saving = false
 }) {
     if (!ready) {
@@ -53,7 +57,18 @@ export function renderBadgeAdminContent({
                     : `<p class="progression-empty">No badges match these filters.</p>`
             }
         </section>
-        ${editorBadge ? renderBadgeEditor(editorBadge, saving) : ""}
+        ${
+            editorBadge
+                ? renderBadgeEditor(
+                      editorBadge,
+                      saving,
+                      draft?.badgeId === editorBadge.id ? draft : null,
+                      new Set(expandedTiers),
+                      editorMessage,
+                      editorError
+                  )
+                : ""
+        }
     `;
 }
 
@@ -73,18 +88,22 @@ function renderBadgeCard(badge) {
     `;
 }
 
-function renderBadgeEditor(badge, saving) {
+function renderBadgeEditor(badge, saving, draft, expandedTiers, editorMessage, editorError) {
     const levels = Array.isArray(badge.tiers) ? badge.tiers : [];
+    const label = draft?.label ?? badge.label;
+    const description = draft?.description ?? badge.description ?? "";
+    const iconUrl = draft?.iconUrl ?? remoteAssetValue(badge.iconUrl || badge.icon);
+    const previewIcon = draft?.previewUrl || draft?.iconUrl || badge.iconUrl || badge.icon;
     return `
         <div class="progression-modal-backdrop" data-badge-editor-backdrop>
             <section class="progression-cosmetic-dialog badge-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="badge-editor-title">
                 <header class="progression-dialog-header badge-editor-header">
                     <div class="progression-dialog-preview badge-editor-header-preview" data-badge-preview-for="base">
-                        ${renderBadgeImage(badge.iconUrl || badge.icon, badge.label)}
+                        ${renderBadgeImage(previewIcon, label)}
                     </div>
                     <div>
                         <p class="panel-kicker">Badge Editor</p>
-                        <h3 id="badge-editor-title">${escapeHtml(badge.label)}</h3>
+                        <h3 id="badge-editor-title">${escapeHtml(label)}</h3>
                         <span>${escapeHtml(levels.length ? `${levels.length} levels / ${badge.id}` : `Single badge / ${badge.id}`)}</span>
                     </div>
                     <button class="progression-dialog-close" type="button" data-badge-editor-close aria-label="Close badge editor">X</button>
@@ -95,12 +114,12 @@ function renderBadgeEditor(badge, saving) {
                         <legend>Badge identity</legend>
                         <div class="badge-editor-identity">
                             <div class="badge-editor-asset-preview" data-badge-preview-for="base">
-                                ${renderBadgeImage(badge.iconUrl || badge.icon, badge.label)}
+                                ${renderBadgeImage(previewIcon, label)}
                             </div>
                             <div class="progression-editor-fields">
-                                <label class="wide"><span>Badge name</span><input name="badgeLabel" value="${escapeHtml(badge.label)}" maxlength="80" required></label>
-                                <label class="wide"><span>Description</span><textarea name="badgeDescription" rows="3" maxlength="300">${escapeHtml(badge.description || "")}</textarea></label>
-                                <label class="wide"><span>Icon URL</span><input name="badgeIconUrl" value="${escapeHtml(remoteAssetValue(badge.iconUrl || badge.icon))}" maxlength="1000" placeholder="Optional HTTPS PNG, WebP or GIF URL"></label>
+                                <label class="wide"><span>Badge name</span><input name="badgeLabel" value="${escapeHtml(label)}" maxlength="80" required></label>
+                                <label class="wide"><span>Description</span><textarea name="badgeDescription" rows="3" maxlength="300">${escapeHtml(description)}</textarea></label>
+                                <label class="wide"><span>Icon URL</span><input name="badgeIconUrl" value="${escapeHtml(iconUrl)}" maxlength="1000" placeholder="Optional HTTPS PNG, WebP or GIF URL"></label>
                                 <label class="wide"><span>Replace icon</span><input type="file" name="badgeAsset" accept="image/png,image/webp,image/gif" data-badge-asset-input data-badge-asset-scope="base"><small>PNG, WebP or animated GIF, maximum 8 MB.</small></label>
                             </div>
                         </div>
@@ -109,11 +128,22 @@ function renderBadgeEditor(badge, saving) {
                         <legend>${levels.length ? "Upgrade levels" : "Unlock behavior"}</legend>
                         ${
                             levels.length
-                                ? `<div class="badge-editor-tier-list">${levels.map((tier, index) => renderBadgeTierEditor(badge, tier, index, levels.length)).join("")}</div>`
+                                ? `<div class="badge-editor-tier-list">${levels
+                                      .map((tier, index) =>
+                                          renderBadgeTierEditor(
+                                              badge,
+                                              tier,
+                                              index,
+                                              levels.length,
+                                              draft?.tiers?.[index],
+                                              expandedTiers.has(index)
+                                          )
+                                      )
+                                      .join("")}</div>`
                                 : `<p class="badge-editor-no-levels">This badge has no upgrade levels. Its unlock detector or manual grant remains unchanged; this editor changes its public name, description, and icon.</p>`
                         }
                     </fieldset>
-                    <p class="progression-editor-status" data-badge-editor-status role="status"></p>
+                    <p class="progression-editor-status ${editorError ? "error" : ""}" data-badge-editor-status role="status">${escapeHtml(editorError || editorMessage)}</p>
                     <footer class="progression-dialog-actions">
                         <button class="primary" type="submit" ${saving ? "disabled" : ""}>${saving ? "Saving badge..." : "Save badge and levels"}</button>
                     </footer>
@@ -123,36 +153,40 @@ function renderBadgeEditor(badge, saving) {
     `;
 }
 
-function renderBadgeTierEditor(badge, tier, index, total) {
-    const target = badgeTierEditableTarget(tier);
-    const perMapTarget = badgeTierPerMapTarget(tier);
-    const icon = tier.iconUrl || tier.icon || badge.iconUrl || badge.icon;
+function renderBadgeTierEditor(badge, tier, index, total, draft, expanded) {
+    const target = draft?.target ?? badgeTierEditableTarget(tier);
+    const perMapTarget = draft?.targetPerMap ?? badgeTierPerMapTarget(tier);
+    const name = draft?.name ?? tier.name;
+    const description = draft?.description ?? tier.description ?? "";
+    const iconUrl = draft?.iconUrl ?? remoteAssetValue(tier.iconUrl || tier.icon);
+    const icon = draft?.previewUrl || draft?.iconUrl || tier.iconUrl || tier.icon || badge.iconUrl || badge.icon;
     const rarity = tier.rarity || badge.rarity || "common";
     return `
-        <section class="badge-editor-tier rarity-${escapeHtml(rarity)}" data-badge-tier="${index}">
-            <header>
+        <details class="badge-editor-tier rarity-${escapeHtml(rarity)}" data-badge-tier="${index}" ${expanded ? "open" : ""}>
+            <summary>
                 <div class="badge-editor-tier-icon" data-badge-preview-for="tier-${index}">
-                    ${renderBadgeImage(icon, tier.name)}
+                    ${renderBadgeImage(icon, name)}
                 </div>
                 <div>
                     <small>Level ${index + 1} of ${total}</small>
-                    <strong>${escapeHtml(tier.name)}</strong>
+                    <strong>${escapeHtml(name)}</strong>
                     <span>${escapeHtml(rarityLabel(rarity))}</span>
                 </div>
-            </header>
+                <span class="badge-editor-tier-toggle-icon" aria-hidden="true"></span>
+            </summary>
             <div class="progression-editor-fields">
-                <label class="wide"><span>Level name</span><input name="tierName_${index}" value="${escapeHtml(tier.name)}" maxlength="80" required></label>
+                <label class="wide"><span>Level name</span><input name="tierName_${index}" value="${escapeHtml(name)}" maxlength="80" required></label>
                 <label><span>${escapeHtml(thresholdLabel(tier))}</span><input name="tierTarget_${index}" type="number" min="0" max="1000000000" step="0.01" value="${escapeHtml(target)}" required></label>
                 ${
                     perMapTarget === null
                         ? ""
                         : `<label><span>${escapeHtml(perMapLabel(tier))}</span><input name="tierTargetPerMap_${index}" type="number" min="0" max="1000000000" step="0.01" value="${escapeHtml(perMapTarget)}" required></label>`
                 }
-                <label class="wide"><span>Level description</span><textarea name="tierDescription_${index}" rows="2" maxlength="300">${escapeHtml(tier.description || "")}</textarea></label>
-                <label class="wide"><span>Level icon URL</span><input name="tierIconUrl_${index}" value="${escapeHtml(remoteAssetValue(tier.iconUrl || tier.icon))}" maxlength="1000" placeholder="Optional HTTPS PNG, WebP or GIF URL"></label>
+                <label class="wide"><span>Level description</span><textarea name="tierDescription_${index}" rows="2" maxlength="300">${escapeHtml(description)}</textarea></label>
+                <label class="wide"><span>Level icon URL</span><input name="tierIconUrl_${index}" value="${escapeHtml(iconUrl)}" maxlength="1000" placeholder="Optional HTTPS PNG, WebP or GIF URL"></label>
                 <label class="wide"><span>Replace level icon</span><input type="file" name="tierAsset_${index}" accept="image/png,image/webp,image/gif" data-badge-asset-input data-badge-asset-scope="tier-${index}"><small>Leave empty to use the badge icon. Animated GIFs remain animated.</small></label>
             </div>
-        </section>
+        </details>
     `;
 }
 
@@ -183,7 +217,8 @@ function renderBadgeImage(value, label) {
 
 function badgeAssetUrl(value) {
     const url = String(value || "").trim();
-    if (/^https:\/\//i.test(url) || /^\.\.?(?:\/|\\)/.test(url) || /^\/(?!\/)/.test(url)) return url;
+    if (/^https:\/\//i.test(url) || /^blob:/i.test(url) || /^\.\.?(?:\/|\\)/.test(url) || /^\/(?!\/)/.test(url))
+        return url;
     return "";
 }
 

@@ -1265,32 +1265,63 @@
     background: color-mix(in srgb, var(--rarity-color) 5%, rgba(8, 13, 20, 0.78));
 }
 
-.badge-editor-tier > header {
+.badge-editor-tier > summary {
     display: grid;
-    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-columns: 64px minmax(0, 1fr) 32px;
     align-items: center;
     gap: 11px;
-    border-bottom: 1px solid color-mix(in srgb, var(--rarity-color) 30%, transparent);
     padding: 11px;
     background: color-mix(in srgb, var(--rarity-color) 8%, #101a26);
+    cursor: pointer;
+    list-style: none;
 }
 
-.badge-editor-tier > header > div:last-child {
+.badge-editor-tier[open] > summary {
+    border-bottom: 1px solid color-mix(in srgb, var(--rarity-color) 30%, transparent);
+}
+
+.badge-editor-tier > summary::-webkit-details-marker {
+    display: none;
+}
+
+.badge-editor-tier > summary > div:nth-child(2) {
     min-width: 0;
     display: grid;
     gap: 2px;
 }
 
-.badge-editor-tier > header strong,
-.badge-editor-tier > header span,
-.badge-editor-tier > header small {
+.badge-editor-tier > summary strong,
+.badge-editor-tier > summary span,
+.badge-editor-tier > summary small {
     overflow-wrap: anywhere;
 }
 
-.badge-editor-tier > header span,
-.badge-editor-tier > header small {
+.badge-editor-tier > summary div span,
+.badge-editor-tier > summary small {
     color: var(--rarity-color);
     font-size: 0.7rem;
+}
+
+.badge-editor-tier-toggle-icon {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    justify-self: end;
+    border: 1px solid color-mix(in srgb, var(--rarity-color) 46%, var(--line));
+    border-radius: 50%;
+    color: var(--rarity-color);
+    background: rgba(8, 13, 20, 0.72);
+}
+
+.badge-editor-tier-toggle-icon::before {
+    content: "+";
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.badge-editor-tier[open] .badge-editor-tier-toggle-icon::before {
+    content: "-";
 }
 
 .badge-editor-tier-icon {
@@ -2081,6 +2112,10 @@
     margin: 12px 0 0;
     color: var(--muted);
     font-size: 0.76rem;
+}
+
+.progression-editor-status.error {
+    color: var(--danger);
 }
 
 .progression-dialog-actions {
