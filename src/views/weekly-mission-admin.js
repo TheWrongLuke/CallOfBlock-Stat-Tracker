@@ -2,10 +2,11 @@ import {
     WEEKLY_MISSION_DIFFICULTIES,
     WEEKLY_MISSION_METRICS,
     WEEKLY_MISSION_MODES,
+    WEEKLY_MISSION_TRACKING_TYPES,
     WEEKLY_MISSION_WEAPON_CATEGORIES,
     WEEKLY_MISSION_WEAPON_SCOPES,
     progressionOptionLabel
-} from "../config/progression.js";
+} from "../config/progression.js?v=weekly-missions-3";
 import { escapeHtml } from "../utils/sanitization.js";
 
 export function renderWeeklyMissionAdminContent({
@@ -72,6 +73,7 @@ function renderWeeklyMissionCard(template) {
 function renderWeeklyMissionEditor(template, saving, creating) {
     const exactWeapon = template.weaponScope === "exact_weapon";
     const category = template.weaponScope === "weapon_category";
+    const requirements = template.requirements || { type: "stat" };
     return `
         <div class="progression-modal-backdrop" data-weekly-template-backdrop>
             <section class="progression-cosmetic-dialog weekly-template-dialog" role="dialog" aria-modal="true" aria-labelledby="weekly-template-editor-title">
@@ -105,6 +107,8 @@ function renderWeeklyMissionEditor(template, saving, creating) {
                             <label><span>Tracked statistic</span><select name="metric">${renderOptions(WEEKLY_MISSION_METRICS, template.metric)}</select></label>
                             <label><span>Required amount</span><input name="target" type="number" min="1" max="1000000000" step="1" value="${escapeHtml(template.target)}" required></label>
                             <label><span>XP reward</span><input name="xp" type="number" min="1" max="20000" step="1" value="${escapeHtml(template.xp)}" required></label>
+                            <label class="wide"><span>Tracking rule</span><select name="trackingType">${renderOptions(WEEKLY_MISSION_TRACKING_TYPES, requirements.type || "stat")}</select></label>
+                            <label class="wide"><span>Tracking configuration</span><textarea name="requirements" rows="6" spellcheck="false">${escapeHtml(JSON.stringify(requirements, null, 2))}</textarea></label>
                             <label class="wide"><span>Weapon requirement</span><select name="weaponScope" data-weekly-template-weapon-scope>${renderOptions(WEEKLY_MISSION_WEAPON_SCOPES, template.weaponScope)}</select></label>
                             <label class="wide" data-weekly-template-exact-weapon ${exactWeapon ? "" : "hidden"}><span>Weapon ID</span><input name="weaponId" value="${escapeHtml(template.weaponId)}" maxlength="80" placeholder="weapon_internal_id"></label>
                             <label class="wide" data-weekly-template-category ${category ? "" : "hidden"}><span>Weapon category</span><select name="weaponCategory">${renderOptions(WEEKLY_MISSION_WEAPON_CATEGORIES, template.weaponCategory || "rifle")}</select></label>
@@ -141,7 +145,8 @@ function filterTemplates(templates, filters) {
                     template.metric,
                     template.mode,
                     template.weaponId,
-                    template.weaponCategory
+                    template.weaponCategory,
+                    JSON.stringify(template.requirements || {})
                 ].some((value) =>
                     String(value || "")
                         .toLowerCase()
@@ -162,7 +167,12 @@ function weeklyRequirementSummary(template) {
     const metric = progressionOptionLabel(WEEKLY_MISSION_METRICS, template.metric);
     const scope = progressionOptionLabel(WEEKLY_MISSION_WEAPON_SCOPES, template.weaponScope);
     const weapon = template.weaponScope === "none" ? "" : ` / ${scope}`;
-    return `${mode} / ${metric} ${template.target}${weapon}${template.active ? "" : " / archived"}`;
+    const tracking = progressionOptionLabel(
+        WEEKLY_MISSION_TRACKING_TYPES,
+        template.requirements?.type || "stat",
+        "Tracked requirement"
+    );
+    return `${mode} / ${metric} ${template.target}${weapon} / ${tracking}${template.active ? "" : " / archived"}`;
 }
 
 function newWeeklyMissionDraft() {
@@ -179,6 +189,7 @@ function newWeeklyMissionDraft() {
         weaponScope: "none",
         weaponId: "",
         weaponCategory: "rifle",
+        requirements: { type: "stat" },
         active: true,
         sortOrder: 0
     };

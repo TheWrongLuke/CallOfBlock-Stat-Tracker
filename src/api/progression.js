@@ -2,7 +2,7 @@ const RULE_COLUMNS =
     "id, cosmetic_type, cosmetic_id, mode, metric, target, active, sort_order, created_by, created_at, updated_at";
 const INVENTORY_COLUMNS = "profile_id, cosmetic_type, cosmetic_id, source, grant_note, granted_by, acquired_at";
 const WEEKLY_TEMPLATE_COLUMNS =
-    "id, family, difficulty, label, description, metric, target, xp, mode, weapon_scope, weapon_id, weapon_category, active, sort_order, created_at, updated_at";
+    "id, family, difficulty, label, description, metric, target, xp, mode, weapon_scope, weapon_id, weapon_category, requirements, active, sort_order, created_at, updated_at";
 const BADGE_OVERRIDE_COLUMNS = "badge_id, label, description, icon_url, tiers, created_at, updated_at";
 
 export function createProgressionAdminApi(client) {

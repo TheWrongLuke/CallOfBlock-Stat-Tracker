@@ -15,6 +15,7 @@ const templates = [
         weaponScope: "none",
         weaponId: "",
         weaponCategory: "",
+        requirements: { type: "stat" },
         active: true,
         sortOrder: 10
     },
@@ -31,6 +32,11 @@ const templates = [
         weaponScope: "random_weapon",
         weaponId: "",
         weaponCategory: "",
+        requirements: {
+            type: "counter",
+            key: "single_match_kills_10",
+            scope: "weapon"
+        },
         active: false,
         sortOrder: 20
     }
@@ -68,6 +74,9 @@ describe("weekly mission administration view", () => {
         expect(html).toContain('name="weaponScope"');
         expect(html).toContain('name="target"');
         expect(html).toContain('name="xp"');
+        expect(html).toContain('name="trackingType"');
+        expect(html).toContain('name="requirements"');
+        expect(html).toContain("&quot;type&quot;: &quot;stat&quot;");
         expect(html.match(/data-weekly-template-close/g)).toHaveLength(1);
         expect(html).not.toMatch(/data-weekly-template-backdrop[^>]*data-weekly-template-close/);
     });

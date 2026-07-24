@@ -3,11 +3,11 @@ import {
     PROGRESSION_METRICS,
     PROGRESSION_MODES,
     progressionOptionLabel
-} from "../config/progression.js";
+} from "../config/progression.js?v=weekly-missions-3";
 import { escapeHtml } from "../utils/sanitization.js";
 import { renderBadgeAdminContent } from "./badge-admin.js";
 import { renderPlayerManagerContent } from "./player-manager.js";
-import { renderWeeklyMissionAdminContent } from "./weekly-mission-admin.js";
+import { renderWeeklyMissionAdminContent } from "./weekly-mission-admin.js?v=weekly-missions-3";
 
 const COSMETIC_TYPES = Object.freeze([
     { value: "background", label: "Background" },

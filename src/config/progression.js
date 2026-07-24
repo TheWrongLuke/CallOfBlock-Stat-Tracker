@@ -83,6 +83,14 @@ export const WEEKLY_MISSION_WEAPON_CATEGORIES = Object.freeze([
     { value: "utility", label: "Utility" }
 ]);
 
+export const WEEKLY_MISSION_TRACKING_TYPES = Object.freeze([
+    { value: "stat", label: "Cumulative statistic" },
+    { value: "all", label: "Multiple requirements" },
+    { value: "distinct", label: "Different items" },
+    { value: "counter", label: "Tracked match or event counter" },
+    { value: "map_stat", label: "Deathmatch map statistic" }
+]);
+
 export function progressionOptionLabel(options, value, fallback = "Unknown") {
     return options.find((option) => option.value === value)?.label || fallback;
 }

@@ -1,7 +1,7 @@
 import { createFeedbackApi } from "./api/feedback.js";
 import { createNotificationApi } from "./api/notifications.js";
 import { saveProfileCustomization, syncDiscordProfile } from "./api/profile.js";
-import { createProgressionAdminApi } from "./api/progression.js?v=badge-editor-2";
+import { createProgressionAdminApi } from "./api/progression.js?v=weekly-missions-3";
 import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "./api/weekly-missions.js";
 import { canOpenAdminRoute, isAdminProfile } from "./auth/permissions.js";
 import {
@@ -11,11 +11,12 @@ import {
     WEEKLY_MISSION_DIFFICULTIES,
     WEEKLY_MISSION_METRICS,
     WEEKLY_MISSION_MODES,
+    WEEKLY_MISSION_TRACKING_TYPES,
     WEEKLY_MISSION_WEAPON_CATEGORIES,
     WEEKLY_MISSION_WEAPON_SCOPES,
     cosmeticCanAppearInShop,
     progressionOptionLabel
-} from "./config/progression.js";
+} from "./config/progression.js?v=weekly-missions-3";
 import {
     badgeTierEditableTarget,
     badgeTierPerMapTarget,
@@ -56,7 +57,7 @@ import {
     renderFeedbackContent,
     renderTicketDetailContent
 } from "./views/feedback.js";
-import { renderProgressionAdminContent } from "./views/progression.js?v=badge-editor-2";
+import { renderProgressionAdminContent } from "./views/progression.js?v=weekly-missions-3";
 import { renderGiftNotificationPopup, renderNotificationInbox } from "./views/notifications.js";
 
 const MODE_LABELS = {
@@ -418,6 +419,7 @@ const PLAYER_GRANT_SOURCE_VALUES = new Set(["friend", "admin"]);
 const WEEKLY_DIFFICULTY_VALUES = new Set(WEEKLY_MISSION_DIFFICULTIES.map((option) => option.value));
 const WEEKLY_MODE_VALUES = new Set(WEEKLY_MISSION_MODES.map((option) => option.value));
 const WEEKLY_METRIC_VALUES = new Set(WEEKLY_MISSION_METRICS.map((option) => option.value));
+const WEEKLY_TRACKING_TYPE_VALUES = new Set(WEEKLY_MISSION_TRACKING_TYPES.map((option) => option.value));
 const WEEKLY_WEAPON_SCOPE_VALUES = new Set(WEEKLY_MISSION_WEAPON_SCOPES.map((option) => option.value));
 const WEEKLY_WEAPON_CATEGORY_VALUES = new Set(WEEKLY_MISSION_WEAPON_CATEGORIES.map((option) => option.value));
 // Products are intentionally empty until a store-only catalog entry and its
@@ -4597,11 +4599,67 @@ function normalizeWeeklyMissionTemplate(row) {
             .trim()
             .slice(0, 80),
         weaponCategory,
+        requirements: normalizeWeeklyRequirements(row?.requirements),
         active: row?.active !== false,
         sortOrder: Math.min(100_000, Math.max(0, Math.floor(number(row?.sort_order)))),
         createdAt: String(row?.created_at || ""),
         updatedAt: String(row?.updated_at || "")
     };
+}
+
+function normalizeWeeklyRequirements(value) {
+    let source = value;
+    if (typeof source === "string") {
+        try {
+            source = JSON.parse(source);
+        } catch (_error) {
+            source = null;
+        }
+    }
+    if (!source || typeof source !== "object" || Array.isArray(source)) return { type: "stat" };
+
+    const type = ["stat", "all", "distinct", "counter", "map_stat"].includes(source.type) ? source.type : "stat";
+    if (type === "all") {
+        const components = (Array.isArray(source.components) ? source.components : []).slice(0, 8).map((component) => {
+            const mode =
+                WEEKLY_MODE_VALUES.has(component?.mode) && component.mode !== "random" ? component.mode : "overall";
+            const metric = WEEKLY_METRIC_VALUES.has(component?.metric) ? component.metric : "games";
+            return {
+                mode,
+                metric,
+                target: Math.min(1_000_000_000, Math.max(1, Math.floor(number(component?.target))))
+            };
+        });
+        return components.length ? { type, components } : { type: "stat" };
+    }
+    if (type === "distinct") {
+        const collection = ["weapons", "categories", "dm_maps", "vehicle_types"].includes(source.collection)
+            ? source.collection
+            : "weapons";
+        const metric = WEEKLY_METRIC_VALUES.has(source.metric) ? source.metric : "kills";
+        return {
+            type,
+            collection,
+            metric,
+            perItemTarget: Math.min(1_000_000_000, Math.max(1, Math.floor(number(source.perItemTarget) || 1)))
+        };
+    }
+    if (type === "counter") {
+        const key = String(source.key || "")
+            .trim()
+            .slice(0, 120);
+        const scope = ["mode", "weapon", "category"].includes(source.scope) ? source.scope : "mode";
+        return key ? { type, key, scope } : { type: "stat" };
+    }
+    if (type === "map_stat") {
+        const metric = WEEKLY_METRIC_VALUES.has(source.metric) ? source.metric : "games";
+        return {
+            type,
+            metric,
+            randomMap: source.randomMap !== false
+        };
+    }
+    return { type: "stat" };
 }
 
 function normalizeManagedPlayer(row) {
@@ -5087,9 +5145,11 @@ async function submitWeeklyMissionTemplate(form) {
         const metric = String(values.get("metric") || "");
         const weaponScope = String(values.get("weaponScope") || "none");
         const weaponCategory = String(values.get("weaponCategory") || "");
+        const trackingType = String(values.get("trackingType") || "stat");
         if (!WEEKLY_DIFFICULTY_VALUES.has(difficulty)) throw new Error("Choose a valid mission difficulty.");
         if (!WEEKLY_MODE_VALUES.has(mode)) throw new Error("Choose a valid game mode.");
         if (!WEEKLY_METRIC_VALUES.has(metric)) throw new Error("Choose a valid tracked statistic.");
+        if (!WEEKLY_TRACKING_TYPE_VALUES.has(trackingType)) throw new Error("Choose a valid tracking rule.");
         if (!WEEKLY_WEAPON_SCOPE_VALUES.has(weaponScope)) throw new Error("Choose a valid weapon requirement.");
         if (weaponScope === "weapon_category" && !WEEKLY_WEAPON_CATEGORY_VALUES.has(weaponCategory)) {
             throw new Error("Choose a valid weapon category.");
@@ -5116,6 +5176,16 @@ async function submitWeeklyMissionTemplate(form) {
         if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 100_000) {
             throw new Error("Sort order must be a whole number between 0 and 100,000.");
         }
+        let requirements;
+        try {
+            requirements = JSON.parse(String(values.get("requirements") || "{}"));
+        } catch (error) {
+            throw new Error("Tracking configuration must be valid JSON.", { cause: error });
+        }
+        requirements = normalizeWeeklyRequirements({ ...requirements, type: trackingType });
+        if (requirements.type !== trackingType) {
+            throw new Error("Tracking configuration does not contain the required fields for that rule.");
+        }
 
         progression.saving = true;
         progression.weeklyError = "";
@@ -5136,6 +5206,7 @@ async function submitWeeklyMissionTemplate(form) {
             weapon_scope: weaponScope,
             weapon_id: weaponScope === "exact_weapon" ? weaponId : null,
             weapon_category: weaponScope === "weapon_category" ? weaponCategory : null,
+            requirements,
             active: values.get("active") === "on",
             sort_order: sortOrder
         };
@@ -6974,10 +7045,12 @@ function renderAccountCustomizeForm(account, badgeState) {
                         <input type="hidden" name="profileBackground" value="${escapeHtml(background)}">
                         <input type="hidden" name="pfpBorder" value="${escapeHtml(border)}">
                         <input type="hidden" name="profileTitle" value="${escapeHtml(title)}">
-                        ${badgeCatalog().map((badge) => {
-                            const unlocked = badgeState.unlockedIds.has(badge.id);
-                            return `<input type="checkbox" name="selectedBadges" value="${escapeHtml(badge.id)}" data-cosmetic-owned="${unlocked ? "true" : "false"}" ${selectedIds.has(badge.id) ? "checked" : ""} ${unlocked ? "" : "disabled"}>`;
-                        }).join("")}
+                        ${badgeCatalog()
+                            .map((badge) => {
+                                const unlocked = badgeState.unlockedIds.has(badge.id);
+                                return `<input type="checkbox" name="selectedBadges" value="${escapeHtml(badge.id)}" data-cosmetic-owned="${unlocked ? "true" : "false"}" ${selectedIds.has(badge.id) ? "checked" : ""} ${unlocked ? "" : "disabled"}>`;
+                            })
+                            .join("")}
                     </div>
                 </div>
                 <aside class="account-custom-preview ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} aria-label="Complete profile preview" data-account-preview data-account-preview-background="${escapeHtml(background)}" ${backgroundCosmeticOwnershipDataAttributes(account)}>
@@ -7941,7 +8014,7 @@ function generateWeeklyMissions(account, profile, cycle) {
     return [...easy, ...hard].map((mission, index) => ({
         ...mission,
         id: `${cycle.key}-${mission.difficulty}-${index + 1}-${mission.family}`,
-        baseline: weeklyMissionMetric(profile, mission)
+        baseline: weeklyMissionBaseline(profile, mission)
     }));
 }
 
@@ -7988,6 +8061,8 @@ function expandWeeklyMissionTemplate(template, profile, rng) {
     let weaponId = "";
     let weaponLabel = "weapon";
     let category = "";
+    let mapId = "";
+    let mapLabel = "map";
 
     if (template.weaponScope === "exact_weapon") {
         weaponId = template.weaponId;
@@ -8017,6 +8092,13 @@ function expandWeeklyMissionTemplate(template, profile, rng) {
         if (!category) return null;
     }
 
+    if (template.requirements?.type === "map_stat") {
+        const map = randomChoice(weeklyEligibleMaps(profile), rng);
+        if (!map) return null;
+        mapId = map.id;
+        mapLabel = map.label;
+    }
+
     const resolvedMode =
         mode === "overall"
             ? { id: "overall", label: "any mode", short: "All" }
@@ -8025,7 +8107,8 @@ function expandWeeklyMissionTemplate(template, profile, rng) {
         "{mode}": resolvedMode.label,
         "{mode_short}": resolvedMode.short,
         "{weapon}": weaponLabel,
-        "{category}": weeklyCategoryLabel(category)
+        "{category}": weeklyCategoryLabel(category),
+        "{map}": mapLabel
     };
     return {
         ...weeklyMission(
@@ -8036,7 +8119,14 @@ function expandWeeklyMissionTemplate(template, profile, rng) {
             template.metric,
             template.target,
             template.xp,
-            { mode, weaponId, category }
+            {
+                mode,
+                weaponId,
+                category,
+                mapId,
+                mapLabel,
+                requirements: template.requirements
+            }
         ),
         templateId: template.id
     };
@@ -8320,7 +8410,10 @@ function weeklyMission(family, difficulty, label, description, metric, target, x
         xp,
         mode: options.mode || "overall",
         weaponId: options.weaponId || "",
-        category: options.category || ""
+        category: options.category || "",
+        mapId: options.mapId || "",
+        mapLabel: options.mapLabel || "",
+        requirements: normalizeWeeklyRequirements(options.requirements)
     };
 }
 
@@ -8339,7 +8432,54 @@ function weeklyStatSupported(profile, mode, metric) {
 }
 
 function weeklyMissionProgress(profile, mission) {
-    const current = weeklyMissionMetric(profile, mission);
+    const requirement = normalizeWeeklyRequirements(mission?.requirements);
+    if (requirement.type === "all") {
+        const baselineValues = Array.isArray(mission?.baseline?.values) ? mission.baseline.values : [];
+        const parts = requirement.components.map((component, index) => {
+            const current = weeklyMissionMetric(profile, { ...mission, ...component, requirements: { type: "stat" } });
+            const value = Math.max(0, current - number(baselineValues[index]));
+            return {
+                ...component,
+                value,
+                complete: value >= component.target
+            };
+        });
+        const complete = parts.length > 0 && parts.every((part) => part.complete);
+        const status = parts
+            .map((part) => {
+                const formatter = part.metric === "playtimeSeconds" ? formatDuration : formatNumber;
+                return `${weeklyModeShortLabel(part.mode)} ${formatter(part.value)} / ${formatter(part.target)}`;
+            })
+            .join(" | ");
+        return {
+            value: parts.reduce((sum, part) => sum + part.value, 0),
+            target: parts.reduce((sum, part) => sum + part.target, 0),
+            complete,
+            progress: parts.length
+                ? parts.reduce((sum, part) => sum + Math.min(1, part.value / part.target), 0) / parts.length
+                : 0,
+            status
+        };
+    }
+    if (requirement.type === "distinct") {
+        const baselineValues =
+            mission?.baseline?.values && typeof mission.baseline.values === "object" ? mission.baseline.values : {};
+        const currentValues = weeklyDistinctMissionValues(profile, mission, requirement);
+        const value = Object.entries(currentValues).filter(
+            ([id, current]) => Math.max(0, number(current) - number(baselineValues[id])) >= requirement.perItemTarget
+        ).length;
+        const target = Math.max(1, number(mission.target));
+        const complete = value >= target;
+        return {
+            value,
+            target,
+            complete,
+            progress: value / target,
+            status: `${formatNumber(value)} / ${formatNumber(target)}`
+        };
+    }
+
+    const current = weeklyMissionRequirementValue(profile, mission, requirement);
     const value = Math.max(0, current - number(mission.baseline));
     const target = Math.max(1, number(mission.target));
     const complete = value >= target;
@@ -8353,6 +8493,91 @@ function weeklyMissionProgress(profile, mission) {
     };
 }
 
+function weeklyMissionBaseline(profile, mission) {
+    const requirement = normalizeWeeklyRequirements(mission?.requirements);
+    if (requirement.type === "all") {
+        return {
+            type: "all",
+            values: requirement.components.map((component) =>
+                weeklyMissionMetric(profile, { ...mission, ...component, requirements: { type: "stat" } })
+            )
+        };
+    }
+    if (requirement.type === "distinct") {
+        return {
+            type: "distinct",
+            values: weeklyDistinctMissionValues(profile, mission, requirement)
+        };
+    }
+    return weeklyMissionRequirementValue(profile, mission, requirement);
+}
+
+function weeklyMissionRequirementValue(profile, mission, requirement) {
+    if (requirement.type === "map_stat") {
+        const entry = weeklyPlayerMapEntries(profile).find((map) => map.id === mission.mapId);
+        return number(normalizeStats(entry?.stats)[requirement.metric]);
+    }
+    if (requirement.type === "counter") {
+        const key = weeklyCounterKey(requirement.key, mission);
+        if (requirement.scope === "weapon") {
+            const entry = weeklyWeaponEntries(profile, mission.mode).find((weapon) => weapon.id === mission.weaponId);
+            return number(normalizeStats(entry?.stats).weeklyCounters[key]);
+        }
+        const player = weeklyModePlayer(profile, mission.mode);
+        return number(normalizeStats(player?.stats).weeklyCounters[key]);
+    }
+    return weeklyMissionMetric(profile, mission);
+}
+
+function weeklyDistinctMissionValues(profile, mission, requirement) {
+    if (requirement.collection === "vehicle_types") {
+        const stats = normalizeStats(weeklyModePlayer(profile, mission.mode)?.stats);
+        return Object.fromEntries(
+            Object.entries(stats.weeklyCounters)
+                .filter(([key]) => key.startsWith("vehicle_damage_type:"))
+                .map(([key, value]) => [key.slice("vehicle_damage_type:".length), number(value)])
+        );
+    }
+    if (requirement.collection === "dm_maps") {
+        return Object.fromEntries(
+            weeklyPlayerMapEntries(profile).map((entry) => [
+                entry.id,
+                number(normalizeStats(entry.stats)[requirement.metric])
+            ])
+        );
+    }
+    const weapons = weeklyWeaponEntries(profile, mission.mode).filter(
+        (entry) => entry.id && weeklyWeaponCategory(entry) !== "utility"
+    );
+    if (requirement.collection === "categories") {
+        const values = {};
+        for (const entry of weapons) {
+            const category = weeklyWeaponCategory(entry);
+            values[category] = number(values[category]) + number(normalizeStats(entry.stats)[requirement.metric]);
+        }
+        return values;
+    }
+    return Object.fromEntries(
+        weapons.map((entry) => [entry.id, number(normalizeStats(entry.stats)[requirement.metric])])
+    );
+}
+
+function weeklyCounterKey(key, mission) {
+    return String(key || "")
+        .split("{category}")
+        .join(mission?.category || "")
+        .split("{weapon}")
+        .join(mission?.weaponId || "")
+        .split("{map}")
+        .join(mission?.mapId || "");
+}
+
+function weeklyModeShortLabel(mode) {
+    if (mode === "battleRoyale") return "BR";
+    if (mode === "deathmatch") return "DM";
+    return "All";
+}
+
 function weeklyMissionMetric(profile, mission) {
     if (!profile || !mission) return 0;
     if (mission.weaponId || mission.category) {
@@ -8363,13 +8588,14 @@ function weeklyMissionMetric(profile, mission) {
             return sum + number(normalizeStats(entry.stats)[mission.metric]);
         }, 0);
     }
-    const player =
-        mission.mode === "battleRoyale"
-            ? normalizePlayer(profile.battleRoyale)
-            : mission.mode === "deathmatch"
-              ? normalizePlayer(profile.deathmatch)
-              : buildProfileOverall(profile);
+    const player = weeklyModePlayer(profile, mission.mode);
     return number(normalizeStats(player?.stats)[mission.metric]);
+}
+
+function weeklyModePlayer(profile, mode) {
+    if (mode === "battleRoyale") return normalizePlayer(profile?.battleRoyale);
+    if (mode === "deathmatch") return normalizePlayer(profile?.deathmatch);
+    return buildProfileOverall(profile);
 }
 
 function weeklyEligibleWeapons(profile, mode) {
@@ -8387,6 +8613,34 @@ function weeklyWeaponEntries(profile, mode) {
     if (mode === "battleRoyale") return cleanWeaponEntries(profile?.battleRoyale?.details?.weapons || []);
     if (mode === "deathmatch") return cleanWeaponEntries(profile?.deathmatch?.details?.weapons || []);
     return combinedWeapons(profile);
+}
+
+function weeklyMapEntries(profile) {
+    const entries = [
+        ...weeklyPlayerMapEntries(profile),
+        ...(Array.isArray(state.cache?.maps) ? state.cache.maps : [])
+    ];
+    const maps = new Map();
+    for (const entry of entries) {
+        const id = String(entry?.id || "").trim();
+        if (!id || maps.has(id)) continue;
+        maps.set(id, {
+            ...entry,
+            id,
+            label: String(entry?.label || id).trim() || id
+        });
+    }
+    return [...maps.values()];
+}
+
+function weeklyPlayerMapEntries(profile) {
+    return Array.isArray(profile?.deathmatch?.details?.deathmatchMaps)
+        ? profile.deathmatch.details.deathmatchMaps
+        : [];
+}
+
+function weeklyEligibleMaps(profile) {
+    return weeklyMapEntries(profile).filter((entry) => entry.id && entry.id !== "unknown");
 }
 
 function weeklyWeaponCategory(entry) {
@@ -13710,6 +13964,9 @@ function combineStats(...statsList) {
         total.largestComebackDeficit = Math.max(total.largestComebackDeficit, next.largestComebackDeficit);
         total.lowestWinningHealth = minimumPositive(total.lowestWinningHealth, next.lowestWinningHealth);
         total.maxZoneDamageInWin = Math.max(total.maxZoneDamageInWin, next.maxZoneDamageInWin);
+        for (const [key, value] of Object.entries(next.weeklyCounters)) {
+            total.weeklyCounters[key] = number(total.weeklyCounters[key]) + number(value);
+        }
         return total;
     }, normalizeStats(null));
 }
@@ -13764,8 +14021,18 @@ function normalizeStats(stats) {
         bestOneMagazineKills: number(stats?.bestOneMagazineKills),
         largestComebackDeficit: number(stats?.largestComebackDeficit),
         lowestWinningHealth: number(stats?.lowestWinningHealth),
-        maxZoneDamageInWin: number(stats?.maxZoneDamageInWin)
+        maxZoneDamageInWin: number(stats?.maxZoneDamageInWin),
+        weeklyCounters: normalizeNumberMap(stats?.weeklyCounters)
     };
+}
+
+function normalizeNumberMap(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return Object.fromEntries(
+        Object.entries(value)
+            .filter(([key]) => key && key.length <= 120)
+            .map(([key, entry]) => [key, number(entry)])
+    );
 }
 
 function minimumPositive(current, next) {
