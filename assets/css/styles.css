@@ -2523,6 +2523,8 @@ body.home-route::before {
     border: 0;
     border-radius: 0;
     overflow: hidden;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     padding: clamp(84px, 7vw, 118px) clamp(28px, 5vw, 72px) clamp(42px, 5vw, 76px);
     grid-template-columns: minmax(360px, 0.88fr) minmax(520px, 0.9fr);
     align-items: center;
@@ -2530,7 +2532,7 @@ body.home-route::before {
     background:
         linear-gradient(90deg, rgba(9, 10, 15, 0.92) 0%, rgba(9, 10, 15, 0.62) 44%, rgba(9, 10, 15, 0.24) 100%),
         linear-gradient(180deg, rgba(9, 13, 16, 0.14) 0%, rgba(9, 13, 16, 0.18) 55%, #090d10 100%),
-        url("./assets/home-hero-bg.png") center / cover no-repeat;
+        url("../home-hero-bg.png") center / cover no-repeat;
 }
 
 .home-route .hero::after {

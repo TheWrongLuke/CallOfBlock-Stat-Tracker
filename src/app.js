@@ -1971,6 +1971,7 @@ function bindStaticEvents() {
                 state.championMode = mode;
                 renderChampionControls();
             }
+            restartChampionRotation();
         }, 120);
     });
 
@@ -1983,6 +1984,10 @@ function bindStaticEvents() {
 }
 
 function startChampionRotation() {
+    restartChampionRotation();
+}
+
+function restartChampionRotation() {
     window.clearInterval(state.championTimer);
     state.championTimer = window.setInterval(() => {
         if (state.view !== "home") return;
@@ -11613,7 +11618,7 @@ function formatSlotWeekday(value) {
 }
 
 function formatSlotDay(value) {
-    return formatLocalDate(value, { day: "numeric", month: "long" });
+    return formatLocalDate(value, { day: "numeric", month: "long", year: "numeric" });
 }
 
 function formatSlotTime(value) {
@@ -11625,6 +11630,7 @@ function formatSlotShort(value) {
         weekday: "short",
         day: "numeric",
         month: "short",
+        year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
         hour12: false,
@@ -11677,7 +11683,7 @@ function formatDateKeyWeekday(value) {
 }
 
 function formatDateKeyDay(value) {
-    return formatLocalDate(localDateFromKey(value), { day: "numeric", month: "long" });
+    return formatLocalDate(localDateFromKey(value), { day: "numeric", month: "long", year: "numeric" });
 }
 
 function formatMonthLabel(value) {
@@ -11688,11 +11694,26 @@ function formatLocalDate(value, options) {
     if (!value) return "TBD";
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString(undefined, options).replace("24:", "00:");
+    const parts = new Intl.DateTimeFormat(undefined, options).formatToParts(date);
+    const readPart = (type) => parts.find((part) => part.type === type)?.value || "";
+    const dateBits = [readPart("weekday"), readPart("day"), readPart("month"), readPart("year")].filter(Boolean);
+    const timeBits = [readPart("hour"), readPart("minute"), readPart("second")].filter(Boolean);
+    const dayPeriod = readPart("dayPeriod");
+    const timeZoneName = readPart("timeZoneName");
+
+    let output = dateBits.join(" ");
+    if (timeBits.length) {
+        output = output ? `${output}, ${timeBits.join(":")}` : timeBits.join(":");
+        if (dayPeriod) output = `${output} ${dayPeriod}`;
+    }
+    if (timeZoneName) {
+        output = output ? `${output} ${timeZoneName}` : timeZoneName;
+    }
+    return output.replace("24:", "00:");
 }
 
 function formatAccountSignedDate(value) {
-    return formatLocalDate(value, { day: "numeric", month: "short", year: "numeric" });
+    return formatLocalDate(value, { day: "numeric", month: "long", year: "numeric" });
 }
 
 function formatAccountAge(value) {
@@ -14396,11 +14417,10 @@ function round2(value) {
 
 function formatShortDate(value) {
     if (!value) return "Unknown time";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString(undefined, {
-        month: "short",
+    return formatLocalDate(value, {
         day: "numeric",
+        month: "short",
+        year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
         timeZoneName: "short"
@@ -14408,24 +14428,15 @@ function formatShortDate(value) {
 }
 
 function formatCompactDate(value) {
-    if (!value) return "TBD";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleDateString(undefined, {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit"
-    });
+    return formatLocalDate(value, { day: "numeric", month: "short", year: "numeric" });
 }
 
 function formatFullLocalDate(value) {
     if (!value) return "Unknown time";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleString(undefined, {
-        year: "numeric",
-        month: "long",
+    return formatLocalDate(value, {
         day: "numeric",
+        month: "long",
+        year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
