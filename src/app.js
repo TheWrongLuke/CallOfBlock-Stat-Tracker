@@ -96,6 +96,15 @@ const PROFILE_WEAPON_SORTS = {
     vehicleKills: "Vehicle"
 };
 
+const PROFILE_BREAKDOWN_SORTS = {
+    label: "Name",
+    games: "Games",
+    avgKills: "Avg K",
+    winRate: "WR",
+    kdRatio: "KD",
+    playtimeSeconds: "Playtime"
+};
+
 const PLAYER_TABS = {
     overview: "Overview",
     battleRoyale: "Battle Royale",
@@ -650,6 +659,10 @@ const state = {
     historyFilter: "battleRoyale",
     profileWeaponSort: "kills",
     profileWeaponSortDirection: "desc",
+    profileBreakdownSorts: {
+        maps: { sort: "games", direction: "desc" },
+        kits: { sort: "games", direction: "desc" }
+    },
     expandedMatchIds: new Set(),
     championMode: "battleRoyale",
     championTimer: null,
@@ -1932,6 +1945,21 @@ function bindStaticEvents() {
                     state.profileWeaponSort = sort;
                     state.profileWeaponSortDirection = "desc";
                 }
+                render();
+            }
+            return;
+        }
+
+        const breakdownSort = event.target.closest("[data-profile-breakdown-sort]");
+        if (breakdownSort) {
+            const tableId = String(breakdownSort.dataset.profileBreakdownTable || "").trim();
+            const sort = String(breakdownSort.dataset.profileBreakdownSort || "").trim();
+            if (tableId && PROFILE_BREAKDOWN_SORTS[sort]) {
+                const current = profileBreakdownSortState(tableId);
+                state.profileBreakdownSorts[tableId] =
+                    current.sort === sort
+                        ? { sort, direction: current.direction === "desc" ? "asc" : "desc" }
+                        : { sort, direction: defaultProfileBreakdownDirection(sort) };
                 render();
             }
             return;
@@ -13568,6 +13596,8 @@ function renderBattleRoyaleTab(profile) {
     const player = normalizePlayer(profile.battleRoyale);
     if (!player.exists) return renderEmptyDetail("No Battle Royale games have been played yet.");
     const placement = player.details?.battleRoyalePlacement || {};
+    const sort = PROFILE_WEAPON_SORTS[state.profileWeaponSort] ? state.profileWeaponSort : "kills";
+    const direction = state.profileWeaponSortDirection === "asc" ? "asc" : "desc";
     return `
         ${renderModeBlock("Battle Royale", player)}
         <section class="detail-section">
@@ -13580,7 +13610,7 @@ function renderBattleRoyaleTab(profile) {
                 ${renderSnapshotItem("Top 10", placement.top10 || 0)}
             </div>
         </section>
-        ${renderWeaponTable("BR Weapons", player.details?.weapons || [])}
+        ${renderWeaponTable("BR Weapons", player.details?.weapons || [], sort, direction)}
     `;
 }
 
@@ -13598,8 +13628,8 @@ function renderDeathmatchTab(profile) {
                 ${renderSnapshotItem("Favorite Map", player.details?.favoriteMap?.label || "-")}
             </div>
         </section>
-        ${renderBreakdownTable("Maps", player.details?.deathmatchMaps || [], { wide: true })}
-        ${renderBreakdownTable("Kits", player.details?.deathmatchKits || [], { wide: true })}
+        ${renderBreakdownTable("Maps", player.details?.deathmatchMaps || [], { wide: true, tableId: "maps", itemLabel: "Map" })}
+        ${renderBreakdownTable("Kits", player.details?.deathmatchKits || [], { wide: true, tableId: "kits", itemLabel: "Kit" })}
     `;
 }
 
@@ -13607,7 +13637,7 @@ function renderMapsTab(profile) {
     const dm = normalizePlayer(profile.deathmatch);
     const maps = dm.details?.deathmatchMaps || [];
     return maps.length
-        ? renderBreakdownTable("Deathmatch Maps", maps, { wide: true })
+        ? renderBreakdownTable("Deathmatch Maps", maps, { wide: true, tableId: "maps", itemLabel: "Map" })
         : renderEmptyDetail("No map stats yet. New Deathmatch games will start filling this in.");
 }
 
@@ -13762,7 +13792,7 @@ function renderModeBlock(label, payload, options = {}) {
     return `
         <section class="mode-block">
             <h3>${escapeHtml(label)}</h3>
-            <div class="profile-stats">
+            <div class="profile-stats ${compact ? "profile-stats-compact" : "profile-stats-detail"}">
                 ${statItems.map(([statLabel, value]) => renderProfileStat(statLabel, value)).join("")}
             </div>
             ${
@@ -13782,11 +13812,23 @@ function renderModeBlock(label, payload, options = {}) {
 
 function renderBreakdownTable(title, entries, options = {}) {
     if (!entries || entries.length === 0) return "";
+    const tableId = String(options.tableId || "maps");
+    const itemLabel = options.itemLabel || "Entry";
+    const sortState = profileBreakdownSortState(tableId);
+    const rows = sortBreakdownEntries(entries, sortState.sort, sortState.direction);
     return `
         <section class="detail-section">
             <h3>${escapeHtml(title)}</h3>
-            <div class="breakdown-list ${options.wide ? "wide" : ""}">
-                ${entries.map(renderBreakdownRow).join("")}
+            <div class="breakdown-table ${options.wide ? "wide" : ""}">
+                <div class="breakdown-row heading">
+                    <span class="breakdown-primary-header">${renderProfileBreakdownSortButton(tableId, "label", itemLabel)}</span>
+                    <span>${renderProfileBreakdownSortButton(tableId, "games", "Games")}</span>
+                    <span>${renderProfileBreakdownSortButton(tableId, "avgKills", "Avg K")}</span>
+                    <span>${renderProfileBreakdownSortButton(tableId, "winRate", "WR")}</span>
+                    <span>${renderProfileBreakdownSortButton(tableId, "kdRatio", "KD")}</span>
+                    <span>${renderProfileBreakdownSortButton(tableId, "playtimeSeconds", "Playtime")}</span>
+                </div>
+                ${rows.map(renderBreakdownRow).join("")}
             </div>
         </section>
     `;
@@ -13847,6 +13889,31 @@ function renderProfileWeaponSortButton(sort) {
     `;
 }
 
+function renderProfileBreakdownSortButton(tableId, sort, label) {
+    const safeTableId = escapeHtml(tableId);
+    const safeSort = escapeHtml(sort);
+    const stateForTable = profileBreakdownSortState(tableId);
+    const active = stateForTable.sort === sort;
+    const direction = stateForTable.direction === "asc" ? "asc" : "desc";
+    const currentDirection = direction === "desc" ? "descending" : "ascending";
+    const nextDirection = active
+        ? direction === "desc"
+            ? "ascending"
+            : "descending"
+        : defaultProfileBreakdownDirection(sort) === "desc"
+          ? "descending"
+          : "ascending";
+    return `
+        <button class="sort-header breakdown-sort-header ${active ? "active" : ""} ${sort === "label" ? "primary" : ""}" type="button" data-profile-breakdown-table="${safeTableId}" data-profile-breakdown-sort="${safeSort}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(
+            active
+                ? `${label}, sorted ${currentDirection}. Activate to sort ${nextDirection}.`
+                : `${label}, not sorted. Activate to sort ${nextDirection}.`
+        )}">
+            ${escapeHtml(label)} <span aria-hidden="true">${active ? (direction === "desc" ? "v" : "^") : ""}</span>
+        </button>
+    `;
+}
+
 function sortProfileWeapons(rows, sort, directionId = "desc") {
     const sortId = PROFILE_WEAPON_SORTS[sort] ? sort : "kills";
     const direction = directionId === "asc" ? 1 : -1;
@@ -13857,6 +13924,55 @@ function sortProfileWeapons(rows, sort, directionId = "desc") {
         if (kills) return kills;
         return weaponLabel(a).localeCompare(weaponLabel(b));
     });
+}
+
+function profileBreakdownSortState(tableId) {
+    const saved = state.profileBreakdownSorts?.[tableId];
+    return {
+        sort: PROFILE_BREAKDOWN_SORTS[saved?.sort] ? saved.sort : "games",
+        direction: saved?.direction === "asc" ? "asc" : "desc"
+    };
+}
+
+function defaultProfileBreakdownDirection(sort) {
+    return sort === "label" ? "asc" : "desc";
+}
+
+function sortBreakdownEntries(entries, sort, directionId = "desc") {
+    const sortId = PROFILE_BREAKDOWN_SORTS[sort] ? sort : "games";
+    const direction = directionId === "asc" ? 1 : -1;
+    return [...entries].sort((a, b) => {
+        const primary =
+            sortId === "label"
+                ? breakdownLabel(a).localeCompare(breakdownLabel(b)) * direction
+                : (breakdownSortValue(a, sortId) - breakdownSortValue(b, sortId)) * direction;
+        if (primary) return primary;
+        const games = breakdownSortValue(b, "games") - breakdownSortValue(a, "games");
+        if (games) return games;
+        return breakdownLabel(a).localeCompare(breakdownLabel(b));
+    });
+}
+
+function breakdownSortValue(entry, sort) {
+    const stats = normalizeStats(entry?.stats);
+    const derived = normalizeDerived(entry?.derived, stats);
+    switch (sort) {
+        case "avgKills":
+            return derived.avgKills;
+        case "winRate":
+            return derived.winRate;
+        case "kdRatio":
+            return derived.kdRatio;
+        case "playtimeSeconds":
+            return stats.playtimeSeconds;
+        case "games":
+        default:
+            return stats.games;
+    }
+}
+
+function breakdownLabel(entry) {
+    return String(entry?.label || "Unknown");
 }
 
 function weaponSortValue(entry, sort) {
