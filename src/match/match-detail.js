@@ -16,11 +16,14 @@ export function createMatchDetailPage({
     api,
     replayApi,
     getSummary = () => null,
+    getActivePlayerId = () => "",
+    getBackHref = () => "#view=leaderboards&board=players&mode=battleRoyale&sort=wins",
     getPlayerPresentation = () => ({}),
     isAdmin = () => false,
     isAuthenticated = () => false
 }) {
     let activeMatchId = "";
+    let activePlayerId = "";
     let summary = null;
     let telemetry = null;
     let playback = null;
@@ -44,14 +47,17 @@ export function createMatchDetailPage({
 
     async function open(matchId, { force = false } = {}) {
         const id = String(matchId || "").trim();
+        const playerId = String(getActivePlayerId() || "").trim();
         if (!id) {
             renderFailure("No match ID was provided.");
             return;
         }
-        if (!force && activeMatchId === id && (telemetry || summary?.hasTelemetry === false)) return;
+        if (!force && activeMatchId === id && activePlayerId === playerId && (telemetry || summary?.hasTelemetry === false))
+            return;
         closePlayback();
         activeMatchId = id;
-        summary = getSummary(id);
+        activePlayerId = playerId;
+        summary = getSummary(id, playerId);
         telemetry = null;
         replayState = { loading: false, available: null, replays: [], error: "", message: "" };
         const token = ++requestToken;
@@ -79,6 +85,7 @@ export function createMatchDetailPage({
     function close() {
         requestToken++;
         activeMatchId = "";
+        activePlayerId = "";
         summary = null;
         telemetry = null;
         closePlayback();
@@ -94,7 +101,7 @@ export function createMatchDetailPage({
     function renderLoading() {
         container.innerHTML = `
             <section class="match-detail-shell match-detail-state" aria-live="polite">
-                ${renderBackLink()}
+                ${renderBackLink(getBackHref())}
                 <p class="panel-kicker">Match details</p>
                 <h2>Loading tactical telemetry...</h2>
                 <div class="match-loading-bar" aria-hidden="true"></div>
@@ -105,7 +112,7 @@ export function createMatchDetailPage({
     function renderFailure(message) {
         container.innerHTML = `
             <section class="match-detail-shell match-detail-state" aria-live="polite">
-                ${renderBackLink()}
+                ${renderBackLink(getBackHref())}
                 <p class="panel-kicker">Match details</p>
                 <h2>Telemetry could not be loaded</h2>
                 <p>${escapeHtml(message)}</p>
@@ -118,7 +125,7 @@ export function createMatchDetailPage({
         const participants = summary?.participants || [];
         container.innerHTML = `
             <section class="match-detail-shell" aria-live="polite">
-                ${renderBackLink()}
+                ${renderBackLink(getBackHref())}
                 <header class="match-detail-header">
                     <div>
                         <p class="panel-kicker">Match details</p>
@@ -141,7 +148,7 @@ export function createMatchDetailPage({
         const diagnostics = validateMatchTelemetry(telemetry);
         container.innerHTML = `
             <section class="match-detail-shell" aria-live="polite">
-                ${renderBackLink()}
+                ${renderBackLink(getBackHref())}
                 ${renderMatchHeader()}
                 ${renderResultSummary()}
                 <div class="match-playback-layout">
@@ -885,8 +892,8 @@ export function createMatchDetailPage({
     }
 }
 
-function renderBackLink() {
-    return `<a class="match-back-link" href="#view=leaderboards&board=players&mode=battleRoyale&sort=wins">Back to stats</a>`;
+function renderBackLink(href = "#view=leaderboards&board=players&mode=battleRoyale&sort=wins") {
+    return `<a class="match-back-link" href="${escapeHtml(href)}">Back to stats</a>`;
 }
 
 function renderAggregateSummary(match) {

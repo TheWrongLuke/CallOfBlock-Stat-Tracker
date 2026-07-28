@@ -668,6 +668,7 @@ const state = {
     },
     expandedMatchIds: new Set(),
     matchId: "",
+    matchPlayerId: "",
     championMode: "battleRoyale",
     championTimer: null,
     championScrollTimer: null,
@@ -787,6 +788,11 @@ function setupMatchDetailPage() {
         api: detailApi,
         replayApi,
         getSummary: findMatchSummary,
+        getActivePlayerId: () => state.matchPlayerId,
+        getBackHref: () =>
+            state.matchPlayerId
+                ? `#player=${encodeURIComponent(state.matchPlayerId)}&tab=history`
+                : "#view=leaderboards&board=players&mode=battleRoyale&sort=wins",
         getPlayerPresentation: matchPlayerPresentation,
         isAdmin: isPlaytestAdmin,
         isAuthenticated: () => Boolean(state.authSession?.user)
@@ -2066,9 +2072,11 @@ function restartChampionRotation() {
 
 function applyRoute() {
     state.accountPanelOpen = false;
+    const previousSelectedId = state.selectedId;
     const hash = window.location.hash.replace(/^#/, "");
     if (!hash) {
         state.view = "home";
+        state.matchPlayerId = "";
         return;
     }
     const params = new URLSearchParams(hash);
@@ -2077,18 +2085,21 @@ function applyRoute() {
     const entry = params.get("entry") || "";
     if (route === "home") {
         state.view = "home";
+        state.matchPlayerId = "";
         state.pendingScrollTarget = section;
         state.pendingDetailsTarget = "";
         return;
     }
     if (route === "help") {
         state.view = "home";
+        state.matchPlayerId = "";
         state.pendingScrollTarget = "help";
         state.pendingDetailsTarget = "";
         return;
     }
     if (route === "how-to-play" || route === "faq") {
         state.view = "home";
+        state.matchPlayerId = "";
         state.pendingScrollTarget = entry || route;
         state.pendingDetailsTarget = route === "faq" ? entry : "";
         return;
@@ -2096,12 +2107,14 @@ function applyRoute() {
     if (route === "admin-help") {
         if (!openProtectedAdminRoute("home")) return;
         state.view = "adminHelp";
+        state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
     }
     if (route === "feedback") {
         state.view = "feedback";
+        state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
@@ -2109,6 +2122,7 @@ function applyRoute() {
     if (route === "admin-tickets") {
         if (!openProtectedAdminRoute("feedback", "#feedback")) return;
         state.view = "adminTickets";
+        state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
@@ -2116,18 +2130,21 @@ function applyRoute() {
     if (route === "admin-progression") {
         if (!openProtectedAdminRoute("home")) return;
         state.view = "adminProgression";
+        state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
     }
     if (route === "playtests") {
         state.view = "playtests";
+        state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
     }
     if (route === "account") {
         state.view = "account";
+        state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
@@ -2135,6 +2152,7 @@ function applyRoute() {
     if (route === "store") {
         if (!openProtectedAdminRoute("home")) return;
         state.view = "store";
+        state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         state.store.checkoutStatus = ["success", "cancelled"].includes(params.get("checkout"))
@@ -2149,12 +2167,14 @@ function applyRoute() {
     if (route === "community-dates") {
         if (!openProtectedAdminRoute("playtests", "#playtests")) return;
         state.view = "communityAdmin";
+        state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
     }
     if (route === "leaderboards" || route === "leaderboard" || route === "weapons" || route === "maps") {
         state.view = "leaderboard";
+        state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
         const board = params.get("board") || (route === "weapons" || route === "maps" ? route : state.mainView);
@@ -2172,10 +2192,12 @@ function applyRoute() {
         if (!matchId) {
             state.view = "leaderboard";
             state.matchId = "";
+            state.matchPlayerId = "";
             return;
         }
         state.view = "match";
         state.matchId = matchId;
+        state.matchPlayerId = String(params.get("player") || previousSelectedId || "").trim();
         state.selectedId = null;
         state.profilePreviewOpen = false;
         return;
@@ -2184,6 +2206,7 @@ function applyRoute() {
     const ticketId = params.get("ticket");
     if (ticketId) {
         state.view = "ticket";
+        state.matchPlayerId = "";
         state.feedback.selectedTicketId = ticketId;
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -2194,9 +2217,11 @@ function applyRoute() {
     const tab = params.get("tab");
     if (!playerId) {
         state.view = "home";
+        state.matchPlayerId = "";
         return;
     }
     state.view = "player";
+    state.matchPlayerId = "";
     state.selectedId = playerId;
     state.playerTab = PLAYER_TABS[tab] ? tab : "overview";
 }
@@ -13758,25 +13783,29 @@ function renderHistoryTab(profile) {
                     })
                     .join("")}
             </div>
-            ${renderHistoryList(filteredHistory(profile, state.historyFilter), { expandable: true })}
+            ${renderHistoryList(filteredHistory(profile, state.historyFilter), {
+                expandable: true,
+                playerId: profile.playerId
+            })}
         </section>
     `;
 }
 
-function renderHistoryList(matches, { expandable }) {
+function renderHistoryList(matches, { expandable, playerId = "" }) {
     if (!matches || matches.length === 0) return `<p class="mode-empty">No game history yet.</p>`;
     return `
         <div class="history-list detail-history">
-            ${matches.map((match) => renderMatchHistoryRow(match, { expandable })).join("")}
+            ${matches.map((match) => renderMatchHistoryRow(match, { expandable, playerId })).join("")}
         </div>
     `;
 }
 
-function renderMatchHistoryRow(match, { expandable }) {
+function renderMatchHistoryRow(match, { expandable, playerId = "" }) {
     const result = match.won ? "Win" : "Loss";
     const resultClass = match.won ? "win" : "loss";
     const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
     const expanded = state.expandedMatchIds.has(match.matchId);
+    const matchHref = matchRouteHash(match.matchId, playerId);
     const placement =
         match.mode === "battleRoyale" && match.placement
             ? `<span>${escapeHtml(formatPlacement(match.placement))} place</span>`
@@ -13811,7 +13840,7 @@ function renderMatchHistoryRow(match, { expandable }) {
             </${closeTag}>
             <div class="history-card-actions">
                 <span>${match.hasTelemetry ? `Tactical playback v${escapeHtml(String(match.telemetryVersion || 1))}` : "Summary only"}</span>
-                <a href="#view=match&match=${encodeURIComponent(match.matchId)}">View details</a>
+                <a href="${escapeHtml(matchHref)}">View details</a>
             </div>
             ${expanded ? renderMatchParticipants(match) : ""}
         </article>
@@ -14417,13 +14446,28 @@ function filteredHistory(profile, mode) {
     return matches.filter((match) => match.mode === mode);
 }
 
-function findMatchSummary(matchId) {
+function findMatchSummary(matchId, preferredPlayerId = "") {
     if (!matchId) return null;
+    const preferredId = String(preferredPlayerId || "").trim();
+    if (preferredId) {
+        const preferredMatch = (profileById(preferredId)?.recentMatches || []).find((entry) => entry.matchId === matchId);
+        if (preferredMatch) return preferredMatch;
+    }
     for (const profile of state.cache.profiles || []) {
         const match = (profile.recentMatches || []).find((entry) => entry.matchId === matchId);
         if (match) return match;
     }
     return null;
+}
+
+function matchRouteHash(matchId, playerId = "") {
+    const id = String(matchId || "").trim();
+    if (!id) return "#view=leaderboards&board=players&mode=battleRoyale&sort=wins";
+    const params = new URLSearchParams();
+    params.set("view", "match");
+    params.set("match", id);
+    if (playerId) params.set("player", String(playerId).trim());
+    return `#${params.toString()}`;
 }
 
 function matchPlayerPresentation(playerId, participant = null) {
