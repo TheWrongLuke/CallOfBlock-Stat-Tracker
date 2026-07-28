@@ -3373,6 +3373,7 @@ function rebuildCache() {
 function render() {
     renderHeroStatus();
     renderTopNav();
+    renderCreatorIdentity();
     renderAccountWidget();
     renderAccountSidePanel();
     renderNotificationGiftDialog();
@@ -3420,6 +3421,15 @@ function render() {
 
     renderCosmeticPicker();
     renderRoute();
+}
+
+function renderCreatorIdentity() {
+    const image = document.querySelector("[data-creator-avatar]");
+    if (!(image instanceof HTMLImageElement)) return;
+    const account = creatorAccountProfile();
+    const profile = account ? accountLinkedStatsProfile(account) : null;
+    image.src = account ? accountAvatarUrl(account, profile, 160) : "./assets/branding/icon.png";
+    image.alt = account ? `${accountDisplayName(account)} profile icon` : "Creator profile icon";
 }
 
 function renderLeaderboardView() {
@@ -12495,6 +12505,18 @@ function accountMinecraftNameKeys(account) {
 function accountProfileCandidates() {
     if (!state.accountProfileIndex?.ready) rebuildAccountProfileIndex();
     return state.accountProfileIndex.candidates;
+}
+
+function creatorAccountProfile() {
+    const candidates = accountProfileCandidates();
+    return (
+        candidates.find((account) => cleanProfileTitle(account?.profile_title, account) === "owner") ||
+        candidates.find((account) => arrayField(account?.unlocked_titles).includes("owner")) ||
+        candidates.find((account) => normalizePlayerName(account?.minecraft_player_name) === "rtxluke") ||
+        candidates.find((account) => normalizePlayerName(account?.display_name) === "rtxluke") ||
+        candidates.find((account) => normalizePlayerName(account?.username) === "thewrongluke") ||
+        null
+    );
 }
 
 function accountDisplayName(account) {
