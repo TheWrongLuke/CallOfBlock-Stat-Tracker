@@ -9,6 +9,7 @@
     },
     "scripts": {
         "dev": "node scripts/static-server.mjs --root=. --port=4173",
+        "fixtures:match": "node scripts/generate-match-telemetry-fixtures.mjs",
         "build": "node scripts/build.mjs",
         "preview": "node scripts/static-server.mjs --root=dist --port=4174",
         "lint": "eslint --config config/eslint.config.js src scripts tests config",

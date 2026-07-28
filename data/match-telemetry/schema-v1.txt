@@ -1,0 +1,123 @@
+CALL OF BLOCK MATCH TELEMETRY - BROWSER CONTRACT VERSION 1
+
+Storage and availability
+
+- Match summaries contain only telemetry availability, version, counts, duration,
+  map identity, and replay count.
+- Detailed documents are stored separately and loaded only from
+  #view=match&match=<match-id>.
+- Only immutable documents with status "completed" are public.
+- In-progress checkpoints and incomplete documents are never exposed as completed
+  tactical playback.
+
+Capture
+
+- Default periodic snapshot interval: 2,000 milliseconds (40 server ticks).
+- The interval is configurable in config/brcontrol/match_telemetry_config.json.
+- Important events also create immediate snapshots.
+- Snapshot times and event times are match-relative monotonic milliseconds.
+- Missing health, armor, result, map, and combat values remain null/unavailable;
+  they are not converted to zero.
+
+Version 1 event types
+
+match_start
+damage
+engagement_start
+elimination
+vehicle_destroyed
+zone_phase_changed
+rapid_streak
+ace
+respawn
+team_eliminated
+match_end
+
+Engagement grouping
+
+- Valid opposing-player damage opens or extends an engagement.
+- Related damage shares at least one participant and has no gap greater than
+  15,000 milliseconds from the latest related damage.
+- Bridging damage can merge additional players into one team engagement.
+- A single isolated non-lethal hit remains in full playback but is excluded from
+  skip-idle playback.
+- A non-lethal engagement qualifies for skip-idle playback after at least two
+  related damage events or reciprocal damage.
+- A one-hit elimination is a valid skip-idle engagement at the hit/elimination
+  time.
+- Engagement IDs and start/end times are authored by the server.
+
+Distance calculations
+
+- Horizontal distance = sqrt((attackerX - victimX)^2 + (attackerZ - victimZ)^2).
+- Three-dimensional distance also includes the world-Y difference.
+- Vertical difference = attackerY - victimY. Positive values mean the attacker
+  was above the victim.
+
+Map calibration
+
+- Every match stores mapId and mapVersion.
+- A calibrated map stores imageUrl, world X/Z bounds, rotation, and flip flags.
+- The browser converts X/Z to percentages and keeps Y for altitude labels.
+- Matches without an explicitly calibrated image use a coordinate grid.
+- To add a map image, add a versioned image asset and export bounds/orientation
+  for that exact map version. Never reuse an incompatible newer image for an
+  older match.
+
+Winner and MVP
+
+- Winner data comes from the authoritative Battle Royale or Deathmatch result.
+- MVP reuses the existing server rule: most kills, then fewer deaths, then
+  case-insensitive player name for deterministic ties.
+- The browser presents these values and does not recalculate either result.
+
+Playback
+
+- Full playback shows every stored snapshot in chronological order.
+- Skip idle time is enabled by default and uses server-authored engagements plus
+  elimination, vehicle, zone, streak, Ace, respawn, team-elimination, and
+  match-end moments.
+- Filters control engagements, eliminations, vehicles, zone events, streaks, and
+  respawns.
+- Legacy match summaries remain visible with a clear unavailable state.
+- Invalid individual events are skipped with diagnostics rather than crashing
+  the complete match page.
+
+Replay Mod files
+
+- Replay files are optional and separate from telemetry.
+- Visibility values are participants, community, and public. The default is
+  participants.
+- Participant access compares the signed-in account's linked Minecraft UUID with
+  the private participant UUID list.
+- Community access requires an authenticated, non-banned account.
+- Public access must be deliberately selected by an administrator.
+- Private object paths are never included in telemetry. Downloads use short-lived
+  URLs from the trusted match-replays function.
+- The trusted uploader validates extension, ZIP structure, Replay Mod entries,
+  paths, executable extensions, archive limits, file size, and SHA-256.
+
+Private infrastructure names
+
+- Private telemetry table: cob_match_telemetry
+- Public completed-payload view: cob_public_match_telemetry
+- Private replay metadata table: cob_match_replays
+- Private replay audit table: cob_match_replay_audit
+- Private storage bucket: match-replays
+- Authorized metadata function: cob_list_match_replays
+- Trusted Edge Function: match-replays
+
+Validation
+
+1. Complete a local non-debug BR or DM match.
+2. Confirm one immutable JSON document exists in
+   config/brcontrol/match-telemetry and no .recording.json checkpoint remains.
+3. Publish stats and confirm the normal match summary contains counts but no
+   snapshots or events arrays.
+4. Request /matches/<match-id> and confirm the completed sanitized document
+   contains no minecraftUuid or replay storage path.
+5. Open #view=match&match=<match-id>, use both playback modes, select an event,
+   and inspect administrator diagnostics.
+6. For missing telemetry, check the Forge log, recorder config, final JSON status,
+   publisher output, private table/view deployment, and browser load error in that
+   order.

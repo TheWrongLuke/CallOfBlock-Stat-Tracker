@@ -383,8 +383,9 @@ test("homepage and primary navigation load without fatal errors", async ({ page 
     await openApp(page);
     await expect(page.getByRole("heading", { level: 1, name: "Call of Block" })).toBeVisible();
     await expect(page.locator(".video-card")).toBeVisible();
+    await expect(page.locator("#leaderboard-view")).toBeHidden();
     await page.locator(".tracker-float").click();
-    await expect(page.locator(".dashboard")).toBeVisible();
+    await expect(page.locator("#leaderboard-view")).toBeVisible();
     expect(pageErrors).toEqual([]);
 });
 
@@ -398,7 +399,41 @@ test("existing public hash routes still open", async ({ page }) => {
     await expect(page.locator("#faq")).toBeVisible();
     await expect(page.locator("#faq")).toContainText("#minecraft-verification");
     await page.goto("/#view=leaderboards&mode=battleRoyale&board=players&sort=wins");
-    await expect(page.locator(".dashboard")).toBeVisible();
+    await expect(page.locator("#leaderboard-view")).toBeVisible();
+});
+
+test("creator trust section and footer trust links are visible to public visitors", async ({ page }) => {
+    await openApp(page);
+
+    const creatorSection = page.locator("#about-the-creator");
+    await expect(creatorSection).toBeVisible();
+    await expect(creatorSection.getByRole("heading", { name: "Who is behind Call of Block?" })).toBeVisible();
+    await expect(creatorSection).toContainText("Lukas / TheWrongLuke");
+    await expect(creatorSection.getByRole("link", { name: "Portfolio" })).toHaveAttribute("target", "_blank");
+    await expect(creatorSection.getByRole("link", { name: "GitHub" })).toHaveAttribute("rel", /noopener/);
+
+    const footer = page.locator(".site-footer");
+    await expect(footer).toContainText("Explore");
+    await expect(footer).toContainText("Community");
+    await expect(footer).toContainText("About & Trust");
+    await expect(footer.locator("[data-admin-store-link]")).toBeHidden();
+    await expect(footer.getByRole("link", { name: "Website Safety" })).toBeVisible();
+});
+
+test("website safety footer link opens the targeted FAQ entry", async ({ page }) => {
+    await openApp(page);
+
+    await page.locator('.site-footer a[href="#view=faq&entry=faq-safety"]').click();
+    await expect.poll(() => page.evaluate(() => window.location.hash)).toBe("#view=faq&entry=faq-safety");
+    await expect(page.locator("#faq-safety")).toHaveJSProperty("open", true);
+    await expect(page.locator("#faq-safety")).toContainText("Discord OAuth");
+    await expect(page.locator("#faq-safety summary")).toBeFocused();
+
+    await page.evaluate(() => {
+        document.querySelector('.site-footer a[href="#view=faq&entry=faq-safety"]')?.click();
+    });
+    await expect(page.locator("#faq-safety")).toHaveJSProperty("open", true);
+    await expect(page.locator("#faq-safety summary")).toBeFocused();
 });
 
 test("a player profile can be opened from existing test data", async ({ page }) => {
@@ -872,4 +907,117 @@ test("profile editing preview reflects the complete unsaved cosmetic draft", asy
     await page.locator('[data-cosmetic-option="admin"]').click();
     await page.locator("[data-cosmetic-picker-close]").click();
     await expect(preview.locator("[data-account-preview-badges] .badge-admin")).toBeVisible();
+});
+
+test("completed Battle Royale telemetry opens as interactive tactical playback", async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await openApp(page, "#view=match&match=fixture-br");
+
+    const matchView = page.locator("#match-view");
+    await expect(matchView).toBeVisible();
+    await expect(matchView.getByRole("heading", { level: 2, name: "Shmar" })).toBeVisible();
+    await expect(matchView.getByText("Winner & MVP")).toBeVisible();
+    await expect(matchView.locator(".tactical-map-image")).toBeVisible();
+    await expect(matchView.locator(".tactical-player-marker")).toHaveCount(4);
+    await expect(matchView.locator(".tactical-vehicle-marker")).toBeVisible();
+    await expect(matchView.locator(".tactical-zone")).toBeVisible();
+    await expect(matchView.locator("[data-match-skip-idle]")).toBeChecked();
+    await expect(matchView.locator("[data-match-status]")).toContainText("Engagement");
+
+    await matchView.locator('[data-match-event="elimination-1"]').first().click();
+    await expect(matchView.locator(".tactical-event-lines .kill-line")).toBeVisible();
+    await expect(matchView.locator(".tactical-event-lines text")).toContainText("blocks");
+    await expect(matchView.locator("[data-match-event-feed]")).toContainText("Headshot");
+    await expect(matchView.locator("[data-match-event-feed]")).toContainText("height advantage");
+
+    const alphaMarker = matchView.locator('[data-tactical-player="p_alpha"]');
+    await alphaMarker.click();
+    await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("Alpha");
+    await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("HP");
+
+    await matchView.locator("[data-match-skip-idle]").uncheck();
+    await expect(matchView.locator("[data-match-status]")).toContainText("Snapshot");
+    await matchView.locator('[name="match-speed"][value="2"]').check();
+    await expect(matchView.locator('[name="match-speed"][value="2"]')).toBeChecked();
+
+    await matchView.locator('[data-match-filter="vehicles"]').uncheck();
+    await expect(matchView.locator('[data-event-type="vehicle_destroyed"]')).toBeHidden();
+    await matchView.locator("[data-match-timeline]").evaluate((element) => {
+        element.value = "50000";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator("[data-match-end-overlay]")).toContainText("Winner & MVP");
+
+    const horizontalOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+    );
+    expect(horizontalOverflow).toBeLessThanOrEqual(1);
+    expect(pageErrors).toEqual([]);
+});
+
+test("match routes support Back and Forward plus legacy, partial, and failure states", async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(() => {
+        window.location.hash = "#view=match&match=fixture-dm";
+    });
+    await expect(page.locator("#match-view")).toBeVisible();
+    await expect(page.locator("#match-view")).toContainText("Winning team");
+    await expect(page.locator("#match-view")).toContainText("Match MVP");
+    await expect(page.locator(".tactical-map-grid")).toBeVisible();
+
+    await page.goBack();
+    await expect(page.locator("#home-view")).toBeVisible();
+    await page.goForward();
+    await expect(page.locator("#match-view")).toBeVisible();
+
+    await page.goto("/#view=match&match=fixture-partial");
+    await expect(page.locator("#match-view")).toContainText("Legacy Shmar");
+    await expect(page.locator("#match-view")).toContainText("Unavailable");
+    await expect(page.locator(".tactical-map-grid")).toBeVisible();
+
+    await page.goto("/#view=match&match=deathmatch-1777678266192");
+    await expect(page.locator("#match-view")).toContainText("Tactical playback unavailable");
+    await expect(page.locator("#match-view")).toContainText("Legacy match");
+
+    await page.goto("/#view=match&match=missing-telemetry-fixture");
+    await expect(page.locator("#match-view")).toContainText("Telemetry could not be loaded");
+    await expect(page.locator("#match-view").getByRole("button", { name: "Retry" })).toBeVisible();
+});
+
+test("tactical controls work from the keyboard and reduced motion stays usable", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openApp(page, "#view=match&match=fixture-br");
+
+    const controls = page.locator("[data-match-viewer-controls]");
+    await controls.focus();
+    const initialStatus = await page.locator("[data-match-status]").textContent();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator("[data-match-status]")).not.toHaveText(initialStatus);
+    await page.keyboard.press(" ");
+    await expect(page.locator("[data-match-play]")).toHaveText("Pause");
+    await page.keyboard.press(" ");
+    await expect(page.locator("[data-match-play]")).toHaveText("Play");
+
+    const transitionDuration = await page
+        .locator(".tactical-player-marker")
+        .first()
+        .evaluate((element) => getComputedStyle(element).transitionDuration);
+    expect(transitionDuration).toMatch(/0\.001s|1ms/);
+});
+
+test("administrators receive protected telemetry diagnostics and replay management", async ({ page }) => {
+    await openAdminApp(page, "#view=match&match=fixture-br");
+
+    const matchView = page.locator("#match-view");
+    await expect(matchView.locator(".match-diagnostics")).toBeVisible();
+    await matchView.locator(".match-diagnostics").getByText("Admin telemetry diagnostics").click();
+    await expect(matchView.locator("[data-match-diagnostics]")).toContainText("No validation errors.");
+    await expect(matchView.locator("[data-match-diagnostics]")).toContainText("Snapshots");
+
+    await expect(matchView.getByRole("button", { name: "Download" })).toBeVisible();
+    await matchView.locator(".match-replay-manage").getByText("Manage").click();
+    await expect(matchView.locator("[data-replay-edit-form]")).toBeVisible();
+    await expect(matchView.locator("[data-replay-edit-form]")).toContainText("Replace file");
+    await expect(matchView.locator("[data-replay-upload-form]")).toBeVisible();
 });

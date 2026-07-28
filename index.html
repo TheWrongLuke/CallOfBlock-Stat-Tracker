@@ -303,6 +303,12 @@
                     <summary>How do community playtests work?</summary>
                     <p>Open Playtests, select a date, and submit your status and available time range. Times are displayed in your local timezone. A gray Unconfirmed date is only a possibility; the Upcoming Event appears after an administrator confirms the final date and time.</p>
                 </details>
+                <details id="faq-safety" tabindex="-1">
+                    <summary>Is the website safe, and what information does it store?</summary>
+                    <p>The public parts of the website can be viewed without signing in. When you choose to log in, authentication is handled directly by Discord through Discord OAuth. Call of Block does not receive or store your Discord password.</p>
+                    <p>Discord provides the basic account information required to identify your profile, such as your Discord user ID, username and avatar. The website may also store your linked Minecraft identity, tracked game statistics, profile customization, XP and mission progress, playtest responses, notifications, and any support tickets or attachments you choose to submit.</p>
+                    <p>Call of Block will never ask you to enter your Discord password, authentication code or account token into a website form. Only use the official website, Discord server and modpack links provided here.</p>
+                </details>
                 <details>
                     <summary>Who can see my support tickets and evidence?</summary>
                     <p>Your ticket, replies, and directly uploaded screenshot or clip are available to you and authorized staff, not to other players. Do not include passwords, authentication codes, or other secrets.</p>
@@ -358,7 +364,7 @@
         </section>
     </main>
 
-    <main class="dashboard">
+    <main class="leaderboard-view hidden" id="leaderboard-view" hidden>
         <section class="leaderboard-panel panel">
             <div class="panel-header">
                 <div>
@@ -526,6 +532,8 @@
         <div id="player-detail-body" class="player-detail-body"></div>
     </section>
 
+    <main class="match-view hidden" id="match-view" aria-live="polite"></main>
+
     <main class="account-view panel hidden" id="account-view">
         <div id="account-body" class="account-body"></div>
     </main>
@@ -534,25 +542,86 @@
         <div id="store-body" class="store-body"></div>
     </main>
 
-    <footer class="site-footer">
-        <div class="footer-main">
-            <p class="panel-kicker">Call of Block</p>
-            <p>Modded Battle Royale and Deathmatch for Minecraft 1.20.1 Forge.</p>
+    <section class="creator-trust" id="about-the-creator" tabindex="-1" aria-labelledby="creator-trust-title">
+        <div class="creator-trust-shell">
+            <article class="creator-trust-panel">
+                <div class="creator-trust-copy">
+                    <p class="panel-kicker">Creator &amp; Trust</p>
+                    <h2 id="creator-trust-title">Who is behind Call of Block?</h2>
+                    <p>Call of Block 2 is an independent project created and maintained by Lukas, also known online as TheWrongLuke.</p>
+                    <p>I originally created the website as a portfolio project, but it also became an important part of developing Call of Block as a complete community minigame. It provides live statistics, player profiles, account customization, missions, playtest scheduling, community support and other features surrounding the Minecraft server.</p>
+                    <p>The project is developed independently and is still evolving through testing, player feedback and continued development.</p>
+                    <div class="creator-trust-links" aria-label="Creator links">
+                        <a href="https://thewrongluke.github.io/Portfolio/" target="_blank" rel="noopener noreferrer" aria-label="Open Lukas portfolio in a new tab">Portfolio</a>
+                        <a href="https://github.com/TheWrongLuke" target="_blank" rel="noopener noreferrer" aria-label="Open TheWrongLuke GitHub profile in a new tab">GitHub</a>
+                        <a href="#feedback">Feedback &amp; Support</a>
+                        <button type="button" data-contact-email>Contact</button>
+                    </div>
+                </div>
+                <aside class="creator-identity" aria-label="Creator identity">
+                    <img src="./assets/branding/icon.png" alt="Call of Block icon">
+                    <div class="creator-identity-copy">
+                        <p class="panel-kicker">Maintained by</p>
+                        <h3>Lukas / TheWrongLuke</h3>
+                        <p>Independent creator, maintainer, and community operator building Call of Block into a full player-facing project around the server.</p>
+                    </div>
+                </aside>
+            </article>
         </div>
-        <nav class="footer-links" aria-label="Footer links">
-            <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord</a>
-            <a href="https://www.curseforge.com/minecraft/modpacks/call-of-block" target="_blank" rel="noopener noreferrer">CurseForge</a>
-            <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Modrinth</a>
-            <a href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">YouTube</a>
-            <a href="https://ko-fi.com/J3J17SDR6" target="_blank" rel="noopener noreferrer">Ko-fi</a>
-            <a class="hidden" href="#store" data-admin-store-link hidden>Store</a>
-            <a href="#playtests">Playtests</a>
-            <a href="#feedback">Feedback &amp; Support</a>
-            <a href="#how-to-play">How to Play</a>
-            <a href="#faq">FAQ</a>
-            <a href="#help">Help</a>
-            <button type="button" data-contact-email>Email</button>
-        </nav>
+    </section>
+
+    <footer class="site-footer">
+        <div class="site-footer-shell">
+            <div class="footer-grid">
+                <section class="footer-column footer-project">
+                    <div class="footer-brand">
+                        <img src="./assets/branding/icon.png" alt="Call of Block icon">
+                        <div>
+                            <p class="panel-kicker">Project</p>
+                            <h2>Call of Block</h2>
+                        </div>
+                    </div>
+                    <p>Modded Battle Royale and Deathmatch for Minecraft 1.20.1 Forge.</p>
+                    <p class="footer-project-meta">Call of Block 2.3 Community Hub</p>
+                </section>
+                <nav class="footer-column" aria-labelledby="footer-explore-title">
+                    <p class="footer-heading" id="footer-explore-title">Explore</p>
+                    <div class="footer-link-list">
+                        <button type="button" data-route="home">Home</button>
+                        <a href="#view=leaderboards&mode=battleRoyale&board=players&sort=wins">Stats / Leaderboards</a>
+                        <a href="#playtests">Playtests</a>
+                        <a href="#how-to-play">How to Play</a>
+                        <a href="#faq">FAQ</a>
+                        <a href="#help">Help</a>
+                        <a class="hidden" href="#store" data-admin-store-link hidden>Store</a>
+                    </div>
+                </nav>
+                <nav class="footer-column" aria-labelledby="footer-community-title">
+                    <p class="footer-heading" id="footer-community-title">Community</p>
+                    <div class="footer-link-list">
+                        <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord</a>
+                        <a href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">YouTube</a>
+                        <a href="#feedback">Feedback &amp; Support</a>
+                        <a href="https://www.curseforge.com/minecraft/modpacks/call-of-block" target="_blank" rel="noopener noreferrer">CurseForge</a>
+                        <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Modrinth</a>
+                        <a href="https://ko-fi.com/J3J17SDR6" target="_blank" rel="noopener noreferrer">Ko-fi</a>
+                    </div>
+                </nav>
+                <nav class="footer-column" aria-labelledby="footer-trust-title">
+                    <p class="footer-heading" id="footer-trust-title">About &amp; Trust</p>
+                    <div class="footer-link-list">
+                        <a href="#view=home&section=about-the-creator">Who is behind Call of Block?</a>
+                        <a href="https://thewrongluke.github.io/Portfolio/" target="_blank" rel="noopener noreferrer">Portfolio</a>
+                        <a href="https://github.com/TheWrongLuke" target="_blank" rel="noopener noreferrer">GitHub</a>
+                        <a href="#view=faq&entry=faq-safety">Website Safety</a>
+                        <button type="button" data-contact-email>Contact</button>
+                    </div>
+                </nav>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Lukas / TheWrongLuke. Call of Block 2 is an independently developed Minecraft project. It is not affiliated with Mojang Studios, Microsoft, Activision or Call of Duty.</p>
+            </div>
+        </div>
     </footer>
 </div>
 

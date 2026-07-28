@@ -1,0 +1,642 @@
+{
+  "telemetryVersion": 1,
+  "matchId": "fixture-dm",
+  "mode": "deathmatch",
+  "startedAt": "2026-07-28T11:00:00.000Z",
+  "endedAt": "2026-07-28T11:00:20.000Z",
+  "durationMs": 20000,
+  "status": "completed",
+  "map": {
+    "mapId": "raid",
+    "mapVersion": "1",
+    "label": "Raid",
+    "imageUrl": "",
+    "worldMinX": 0,
+    "worldMaxX": 50,
+    "worldMinZ": 0,
+    "worldMaxZ": 50,
+    "rotationDegrees": 0,
+    "flipX": false,
+    "flipY": false,
+    "calibrated": false,
+    "calibrationSource": "spawn_bounds_fallback"
+  },
+  "capture": {
+    "snapshotIntervalMs": 2000,
+    "engagementInactivityMs": 15000
+  },
+  "participants": [
+    {
+      "playerId": "p_alpha",
+      "name": "Alpha",
+      "teamId": "red"
+    },
+    {
+      "playerId": "p_bravo",
+      "name": "Bravo",
+      "teamId": "blue"
+    },
+    {
+      "playerId": "p_charlie",
+      "name": "Charlie",
+      "teamId": "blue"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshotId": "snapshot-1",
+      "timeMs": 0,
+      "reason": "match_start",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "red",
+          "x": 12,
+          "y": 70,
+          "z": 18,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_bravo",
+          "teamId": "blue",
+          "x": 45,
+          "y": 70,
+          "z": 42,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 2,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_charlie",
+          "teamId": "blue",
+          "x": 38,
+          "y": 70,
+          "z": 14,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 3,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": [],
+      "zone": null,
+      "scores": {
+        "red": 0,
+        "blue": 0,
+        "target": 40,
+        "players": {
+          "p_alpha": 0,
+          "p_bravo": 4,
+          "p_charlie": -4
+        }
+      }
+    },
+    {
+      "snapshotId": "snapshot-2",
+      "timeMs": 2000,
+      "reason": "periodic",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "red",
+          "x": 13,
+          "y": 70,
+          "z": 18.5,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_bravo",
+          "teamId": "blue",
+          "x": 44.5,
+          "y": 70,
+          "z": 41.6,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 2,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_charlie",
+          "teamId": "blue",
+          "x": 38,
+          "y": 70,
+          "z": 14.666666666666666,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 3,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": [],
+      "zone": null,
+      "scores": {
+        "red": 1,
+        "blue": 2,
+        "target": 40,
+        "players": {
+          "p_alpha": 1,
+          "p_bravo": 4,
+          "p_charlie": -2
+        }
+      }
+    },
+    {
+      "snapshotId": "snapshot-3",
+      "timeMs": 4000,
+      "reason": "damage",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "red",
+          "x": 14,
+          "y": 70,
+          "z": 19,
+          "health": 12,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_bravo",
+          "teamId": "blue",
+          "x": 44,
+          "y": 70,
+          "z": 41.2,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 2,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_charlie",
+          "teamId": "blue",
+          "x": 38,
+          "y": 70,
+          "z": 15.333333333333334,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 3,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": [],
+      "zone": null,
+      "scores": {
+        "red": 2,
+        "blue": 4,
+        "target": 40,
+        "players": {
+          "p_alpha": 2,
+          "p_bravo": 4,
+          "p_charlie": 0
+        }
+      }
+    },
+    {
+      "snapshotId": "snapshot-4",
+      "timeMs": 5000,
+      "reason": "elimination",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "red",
+          "x": 14.5,
+          "y": 70,
+          "z": 19.25,
+          "health": 0,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_bravo",
+          "teamId": "blue",
+          "x": 43.75,
+          "y": 70,
+          "z": 41,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 2,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_charlie",
+          "teamId": "blue",
+          "x": 38,
+          "y": 70,
+          "z": 15.666666666666666,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 3,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": [],
+      "zone": null,
+      "scores": {
+        "red": 2,
+        "blue": 5,
+        "target": 40,
+        "players": {
+          "p_alpha": 2,
+          "p_bravo": 4,
+          "p_charlie": 1
+        }
+      }
+    },
+    {
+      "snapshotId": "snapshot-5",
+      "timeMs": 10000,
+      "reason": "respawn",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "red",
+          "x": 17,
+          "y": 70,
+          "z": 20.5,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_bravo",
+          "teamId": "blue",
+          "x": 42.5,
+          "y": 70,
+          "z": 40,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 2,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_charlie",
+          "teamId": "blue",
+          "x": 38,
+          "y": 70,
+          "z": 17.333333333333332,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 3,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": [],
+      "zone": null,
+      "scores": {
+        "red": 9,
+        "blue": 17,
+        "target": 40,
+        "players": {
+          "p_alpha": 9,
+          "p_bravo": 4,
+          "p_charlie": 13
+        }
+      }
+    },
+    {
+      "snapshotId": "snapshot-6",
+      "timeMs": 18000,
+      "reason": "periodic",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "red",
+          "x": 21,
+          "y": 70,
+          "z": 22.5,
+          "health": 16,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_bravo",
+          "teamId": "blue",
+          "x": 40.5,
+          "y": 70,
+          "z": 38.4,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 2,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_charlie",
+          "teamId": "blue",
+          "x": 38,
+          "y": 70,
+          "z": 20,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 3,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": [],
+      "zone": null,
+      "scores": {
+        "red": 31,
+        "blue": 38,
+        "target": 40,
+        "players": {
+          "p_alpha": 31,
+          "p_bravo": 4,
+          "p_charlie": 34
+        }
+      }
+    },
+    {
+      "snapshotId": "snapshot-7",
+      "timeMs": 20000,
+      "reason": "match_end",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "red",
+          "x": 22,
+          "y": 70,
+          "z": 23,
+          "health": 16,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_bravo",
+          "teamId": "blue",
+          "x": 40,
+          "y": 70,
+          "z": 38,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 2,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_charlie",
+          "teamId": "blue",
+          "x": 38,
+          "y": 70,
+          "z": 20.666666666666668,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 3,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": [],
+      "zone": null,
+      "scores": {
+        "red": 33,
+        "blue": 40,
+        "target": 40,
+        "players": {
+          "p_alpha": 33,
+          "p_bravo": 4,
+          "p_charlie": 36
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "eventId": "match-start-1",
+      "type": "match_start",
+      "timeMs": 0,
+      "snapshotId": "snapshot-1"
+    },
+    {
+      "eventId": "engagement-start-1",
+      "type": "engagement_start",
+      "timeMs": 4000,
+      "snapshotId": "snapshot-3",
+      "engagementId": "engagement-1",
+      "engagementStartMs": 4000,
+      "engagementEndMs": 5000,
+      "participantIds": [
+        "p_bravo",
+        "p_alpha"
+      ],
+      "qualifiesForSkipIdle": true
+    },
+    {
+      "eventId": "damage-1",
+      "type": "damage",
+      "timeMs": 4000,
+      "snapshotId": "snapshot-3",
+      "engagementId": "engagement-1",
+      "engagementStartMs": 4000,
+      "engagementEndMs": 5000,
+      "attackerId": "p_bravo",
+      "victimId": "p_alpha",
+      "weaponId": "tacz:ak47",
+      "weaponLabel": "AK-47",
+      "damageType": "firearm",
+      "damage": 8,
+      "headshot": false,
+      "attackerPosition": {
+        "x": 44,
+        "y": 70,
+        "z": 41.2
+      },
+      "victimPosition": {
+        "x": 14,
+        "y": 70,
+        "z": 19
+      },
+      "victimHealthBefore": 20,
+      "victimHealthAfter": 12,
+      "victimArmorBefore": 4,
+      "victimArmorAfter": 2,
+      "qualifiesForSkipIdle": true
+    },
+    {
+      "eventId": "elimination-1",
+      "type": "elimination",
+      "timeMs": 5000,
+      "snapshotId": "snapshot-4",
+      "engagementId": "engagement-1",
+      "engagementStartMs": 4000,
+      "engagementEndMs": 5000,
+      "killerId": "p_bravo",
+      "victimId": "p_alpha",
+      "weaponId": "tacz:ak47",
+      "weaponLabel": "AK-47",
+      "damageType": "firearm",
+      "headshot": false,
+      "horizontalDistance": 36.9,
+      "distance3d": 36.9,
+      "verticalDifference": 0,
+      "killerHealthAfter": 20,
+      "killerArmorAfter": 2,
+      "victimHealthBeforeFinalDamage": 12,
+      "victimArmorBeforeFinalDamage": 2,
+      "finalDamage": 12,
+      "qualifiesForSkipIdle": true
+    },
+    {
+      "eventId": "respawn-1",
+      "type": "respawn",
+      "timeMs": 10000,
+      "snapshotId": "snapshot-5",
+      "playerId": "p_alpha",
+      "position": {
+        "x": 17,
+        "y": 70,
+        "z": 20.5
+      },
+      "reason": "Deathmatch respawn"
+    },
+    {
+      "eventId": "match-end-1",
+      "type": "match_end",
+      "timeMs": 20000,
+      "snapshotId": "snapshot-7",
+      "reason": "Target reached"
+    }
+  ],
+  "engagements": [
+    {
+      "engagementId": "engagement-1",
+      "startMs": 4000,
+      "endMs": 5000,
+      "participantIds": [
+        "p_bravo",
+        "p_alpha"
+      ],
+      "damageEventIds": [
+        "damage-1"
+      ],
+      "damageEventCount": 1,
+      "reciprocalDamage": false,
+      "qualifiesForSkipIdle": true,
+      "eliminationEventId": "elimination-1"
+    }
+  ],
+  "result": {
+    "winner": {
+      "type": "team",
+      "playerId": null,
+      "teamId": "blue",
+      "finalScore": 40,
+      "opponentScore": 33,
+      "survivingPlayerIds": []
+    },
+    "mvp": {
+      "playerId": "p_alpha",
+      "reason": "most_kills_then_fewest_deaths_then_name",
+      "score": 33
+    },
+    "finalScores": {
+      "red": 33,
+      "blue": 40,
+      "target": 40,
+      "players": {
+        "p_alpha": 33,
+        "p_bravo": 4,
+        "p_charlie": 36
+      }
+    },
+    "participants": [
+      {
+        "playerId": "p_alpha",
+        "teamId": "red",
+        "won": false,
+        "placement": null,
+        "kills": 33,
+        "deaths": 4,
+        "assists": 2,
+        "damage": 710,
+        "headshotKills": 9,
+        "bestKillStreak": 12,
+        "longestKillDistance": 45,
+        "utilityKills": 1,
+        "vehicleKills": 0
+      },
+      {
+        "playerId": "p_bravo",
+        "teamId": "blue",
+        "won": true,
+        "placement": null,
+        "kills": 20,
+        "deaths": 10,
+        "assists": 7,
+        "damage": 430,
+        "headshotKills": 4,
+        "bestKillStreak": 5,
+        "longestKillDistance": 36.9,
+        "utilityKills": 0,
+        "vehicleKills": 0
+      },
+      {
+        "playerId": "p_charlie",
+        "teamId": "blue",
+        "won": true,
+        "placement": null,
+        "kills": 20,
+        "deaths": 12,
+        "assists": 4,
+        "damage": 390,
+        "headshotKills": 2,
+        "bestKillStreak": 4,
+        "longestKillDistance": 28,
+        "utilityKills": 0,
+        "vehicleKills": 0
+      }
+    ],
+    "endReason": "Target reached"
+  },
+  "replays": []
+}

@@ -1,0 +1,160 @@
+{
+  "telemetryVersion": 1,
+  "matchId": "fixture-partial",
+  "mode": "battleRoyale",
+  "startedAt": "2026-07-28T12:00:00.000Z",
+  "endedAt": "2026-07-28T12:00:08.000Z",
+  "durationMs": 8000,
+  "status": "completed",
+  "map": {
+    "mapId": "legacy-shmar",
+    "mapVersion": "unknown",
+    "label": "Legacy Shmar",
+    "imageUrl": "",
+    "worldMinX": -100,
+    "worldMaxX": 100,
+    "worldMinZ": -100,
+    "worldMaxZ": 100,
+    "rotationDegrees": 0,
+    "flipX": false,
+    "flipY": true,
+    "calibrated": false,
+    "calibrationSource": "unknown"
+  },
+  "capture": {
+    "snapshotIntervalMs": null,
+    "engagementInactivityMs": 15000
+  },
+  "participants": [
+    {
+      "playerId": "p_alpha",
+      "name": "Alpha",
+      "teamId": "solo-alpha"
+    },
+    {
+      "playerId": "p_bravo",
+      "name": "Bravo",
+      "teamId": "solo-bravo"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshotId": "snapshot-1",
+      "timeMs": 0,
+      "reason": "match_start",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "solo-alpha",
+          "x": -20,
+          "y": 72,
+          "z": -10,
+          "health": null,
+          "maxHealth": null,
+          "armor": null,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_bravo",
+          "teamId": "solo-bravo",
+          "x": 30,
+          "y": 68,
+          "z": 40,
+          "health": null,
+          "maxHealth": null,
+          "armor": null,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ]
+    },
+    {
+      "snapshotId": "snapshot-2",
+      "timeMs": 8000,
+      "reason": "match_end",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "solo-alpha",
+          "x": 0,
+          "y": 72,
+          "z": 5,
+          "health": null,
+          "maxHealth": null,
+          "armor": null,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        },
+        {
+          "playerId": "p_bravo",
+          "teamId": "solo-bravo",
+          "x": 20,
+          "y": 68,
+          "z": 25,
+          "health": null,
+          "maxHealth": null,
+          "armor": null,
+          "alive": false,
+          "connected": true,
+          "vehicleId": null
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "eventId": "match-start-1",
+      "type": "match_start",
+      "timeMs": 0,
+      "snapshotId": "snapshot-1"
+    },
+    {
+      "eventId": "malformed-event",
+      "type": "not_a_real_event",
+      "timeMs": "invalid"
+    },
+    {
+      "eventId": "match-end-1",
+      "type": "match_end",
+      "timeMs": 8000,
+      "snapshotId": "snapshot-2"
+    }
+  ],
+  "engagements": [],
+  "result": {
+    "winner": {
+      "type": "player",
+      "playerId": "p_alpha",
+      "teamId": "solo-alpha",
+      "survivingPlayerIds": [
+        "p_alpha"
+      ]
+    },
+    "mvp": null,
+    "finalScores": null,
+    "participants": [
+      {
+        "playerId": "p_alpha",
+        "teamId": "solo-alpha",
+        "won": true,
+        "placement": 1,
+        "kills": 1,
+        "deaths": 0
+      },
+      {
+        "playerId": "p_bravo",
+        "teamId": "solo-bravo",
+        "won": false,
+        "placement": 2,
+        "kills": 0,
+        "deaths": 1
+      }
+    ],
+    "endReason": "Legacy capture completed"
+  },
+  "replays": []
+}

@@ -59,6 +59,9 @@ import {
 } from "./views/feedback.js";
 import { renderProgressionAdminContent } from "./views/progression.js?v=weekly-missions-3";
 import { renderGiftNotificationPopup, renderNotificationInbox } from "./views/notifications.js";
+import { createMatchDetailApi } from "./match/match-detail-api.js";
+import { createMatchDetailPage } from "./match/match-detail.js";
+import { createReplayApi } from "./match/replay-downloads.js";
 
 const MODE_LABELS = {
     overall: "Overall",
@@ -664,10 +667,12 @@ const state = {
         kits: { sort: "games", direction: "desc" }
     },
     expandedMatchIds: new Set(),
+    matchId: "",
     championMode: "battleRoyale",
     championTimer: null,
     championScrollTimer: null,
     pendingScrollTarget: "",
+    pendingDetailsTarget: "",
     playtests: emptyPlaytestState(),
     cache: emptyCache()
 };
@@ -682,10 +687,12 @@ let badgeEditorSearchTimer = 0;
 let weeklyTemplateSearchTimer = 0;
 let playerManagerSearchTimer = 0;
 let weeklyTemplateLoadPromise = null;
+let matchDetailPage = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
     setupAuthClient();
+    setupMatchDetailPage();
     loadPlaytestState();
     bindAvatarImageEvents();
     applyRoute();
@@ -761,6 +768,29 @@ function setupAuthClient() {
     state.feedback.api = createFeedbackApi(state.authClient);
     state.notifications.api = createNotificationApi(state.authClient);
     state.progression.api = createProgressionAdminApi(state.authClient);
+}
+
+function setupMatchDetailPage() {
+    const container = document.getElementById("match-view");
+    if (!container) return;
+    const detailApi = createMatchDetailApi({
+        supabaseClient: state.authClient,
+        apiUrl: state.apiUrl
+    });
+    const replayApi = createReplayApi({
+        supabaseClient: state.authClient,
+        supabaseUrl: state.supabaseUrl,
+        supabaseKey: state.supabaseKey
+    });
+    matchDetailPage = createMatchDetailPage({
+        container,
+        api: detailApi,
+        replayApi,
+        getSummary: findMatchSummary,
+        getPlayerPresentation: matchPlayerPresentation,
+        isAdmin: isPlaytestAdmin,
+        isAuthenticated: () => Boolean(state.authSession?.user)
+    });
 }
 
 async function initAuth() {
@@ -1438,6 +1468,16 @@ function bindStaticEvents() {
             return;
         }
 
+        const internalHashLink = event.target.closest("a[href^='#']");
+        if (internalHashLink) {
+            const href = internalHashLink.getAttribute("href") || "";
+            if (href.length > 1) {
+                event.preventDefault();
+                navigateToHashRoute(href);
+                return;
+            }
+        }
+
         const button = event.target.closest("[data-route]");
         if (button) {
             event.preventDefault();
@@ -2033,18 +2073,24 @@ function applyRoute() {
     }
     const params = new URLSearchParams(hash);
     const route = params.get("view") || hash;
+    const section = params.get("section") || "";
+    const entry = params.get("entry") || "";
     if (route === "home") {
         state.view = "home";
+        state.pendingScrollTarget = section;
+        state.pendingDetailsTarget = "";
         return;
     }
     if (route === "help") {
         state.view = "home";
         state.pendingScrollTarget = "help";
+        state.pendingDetailsTarget = "";
         return;
     }
     if (route === "how-to-play" || route === "faq") {
         state.view = "home";
-        state.pendingScrollTarget = route;
+        state.pendingScrollTarget = entry || route;
+        state.pendingDetailsTarget = route === "faq" ? entry : "";
         return;
     }
     if (route === "admin-help") {
@@ -2119,6 +2165,19 @@ function applyRoute() {
         const sort = params.get("sort");
         if (SORT_LABELS[sort]) state.sort = sort;
         state.page = 1;
+        return;
+    }
+    if (route === "match") {
+        const matchId = String(params.get("match") || "").trim();
+        if (!matchId) {
+            state.view = "leaderboard";
+            state.matchId = "";
+            return;
+        }
+        state.view = "match";
+        state.matchId = matchId;
+        state.selectedId = null;
+        state.profilePreviewOpen = false;
         return;
     }
 
@@ -2327,6 +2386,18 @@ function routeTo(route) {
 
 function routeToLeaderboard(options = {}) {
     routeToLeaderboardWithOptions(options);
+}
+
+function navigateToHashRoute(hash) {
+    const nextHash = String(hash || "").replace(/^#/, "");
+    if (!nextHash) {
+        routeTo("home");
+        return;
+    }
+    if (!setRouteHash(nextHash)) {
+        applyRoute();
+        render();
+    }
 }
 
 function routeToLeaderboardWithOptions(options) {
@@ -3350,17 +3421,30 @@ function renderRoute() {
     document.getElementById("community-admin-view").classList.toggle("hidden", state.view !== "communityAdmin");
     document.getElementById("account-view").classList.toggle("hidden", state.view !== "account");
     document.getElementById("store-view").classList.toggle("hidden", state.view !== "store");
-    const dashboard = document.querySelector(".dashboard");
-    dashboard.classList.toggle("hidden", state.view !== "leaderboard");
-    dashboard.classList.toggle("profile-closed", state.view === "leaderboard" && !state.profilePreviewOpen);
+    const leaderboardView = document.getElementById("leaderboard-view");
+    leaderboardView.hidden = state.view !== "leaderboard";
+    leaderboardView.classList.toggle("hidden", state.view !== "leaderboard");
+    leaderboardView.classList.toggle("profile-closed", state.view === "leaderboard" && !state.profilePreviewOpen);
     document.getElementById("player-view").classList.toggle("hidden", state.view !== "player");
+    document.getElementById("match-view").classList.toggle("hidden", state.view !== "match");
     updateFloatingButtonPosition();
     if (state.view === "player") renderPlayerDetail();
-    if (state.view === "home" && state.pendingScrollTarget) {
+    if (state.view === "match") {
+        void matchDetailPage?.open(state.matchId);
+    } else {
+        matchDetailPage?.close();
+    }
+    if (state.view === "home" && (state.pendingScrollTarget || state.pendingDetailsTarget)) {
         const targetId = state.pendingScrollTarget;
+        const detailsId = state.pendingDetailsTarget;
         state.pendingScrollTarget = "";
+        state.pendingDetailsTarget = "";
         window.requestAnimationFrame(() => {
-            document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+            const details = detailsId ? document.getElementById(detailsId) : null;
+            if (details instanceof HTMLDetailsElement) details.open = true;
+            const target = (targetId ? document.getElementById(targetId) : null) || details;
+            target?.scrollIntoView({ behavior: "smooth", block: "start" });
+            if (details instanceof HTMLDetailsElement) details.querySelector("summary")?.focus({ preventScroll: true });
         });
     }
 }
@@ -13725,6 +13809,10 @@ function renderMatchHistoryRow(match, { expandable }) {
                 </div>
                 <time datetime="${escapeHtml(match.endedAt || "")}" title="${escapeHtml(formatFullLocalDate(match.endedAt))}">${escapeHtml(formatShortDate(match.endedAt))}</time>
             </${closeTag}>
+            <div class="history-card-actions">
+                <span>${match.hasTelemetry ? `Tactical playback v${escapeHtml(String(match.telemetryVersion || 1))}` : "Summary only"}</span>
+                <a href="#view=match&match=${encodeURIComponent(match.matchId)}">View details</a>
+            </div>
             ${expanded ? renderMatchParticipants(match) : ""}
         </article>
     `;
@@ -14327,6 +14415,25 @@ function filteredHistory(profile, mode) {
     const matches = profile?.recentMatches || [];
     if (mode === "overall") return matches;
     return matches.filter((match) => match.mode === mode);
+}
+
+function findMatchSummary(matchId) {
+    if (!matchId) return null;
+    for (const profile of state.cache.profiles || []) {
+        const match = (profile.recentMatches || []).find((entry) => entry.matchId === matchId);
+        if (match) return match;
+    }
+    return null;
+}
+
+function matchPlayerPresentation(playerId, participant = null) {
+    const profile = profileById(playerId);
+    const player = participant || profile || { playerId, name: "Unknown player" };
+    const account = accountProfileForPlayer(player, profile);
+    return {
+        name: playerDisplayName(player, profile),
+        avatarUrl: accountAvatarUrl(account, profile || player, 64)
+    };
 }
 
 function findLastMatch(profiles) {
