@@ -788,6 +788,8 @@ function setupMatchDetailPage() {
         api: detailApi,
         replayApi,
         getSummary: findMatchSummary,
+        getViewerSummary: findViewerMatchSummary,
+        getViewerPlayerId: () => linkedStatsProfile()?.playerId || "",
         getActivePlayerId: () => state.matchPlayerId,
         getBackHref: () =>
             state.matchPlayerId
@@ -14458,6 +14460,13 @@ function findMatchSummary(matchId, preferredPlayerId = "") {
         if (match) return match;
     }
     return null;
+}
+
+function findViewerMatchSummary(matchId) {
+    if (!matchId) return null;
+    const viewerProfile = linkedStatsProfile();
+    if (!viewerProfile) return null;
+    return (viewerProfile.recentMatches || []).find((entry) => entry.matchId === matchId) || null;
 }
 
 function matchRouteHash(matchId, playerId = "") {

@@ -16,6 +16,8 @@ export function createMatchDetailPage({
     api,
     replayApi,
     getSummary = () => null,
+    getViewerSummary = () => null,
+    getViewerPlayerId = () => "",
     getActivePlayerId = () => "",
     getBackHref = () => "#view=leaderboards&board=players&mode=battleRoyale&sort=wins",
     getPlayerPresentation = () => ({}),
@@ -24,7 +26,9 @@ export function createMatchDetailPage({
 }) {
     let activeMatchId = "";
     let activePlayerId = "";
+    let activeViewerPlayerId = "";
     let summary = null;
+    let viewerSummary = null;
     let telemetry = null;
     let playback = null;
     let mapRenderer = null;
@@ -48,16 +52,25 @@ export function createMatchDetailPage({
     async function open(matchId, { force = false } = {}) {
         const id = String(matchId || "").trim();
         const playerId = String(getActivePlayerId() || "").trim();
+        const viewerPlayerId = String(getViewerPlayerId() || "").trim();
         if (!id) {
             renderFailure("No match ID was provided.");
             return;
         }
-        if (!force && activeMatchId === id && activePlayerId === playerId && (telemetry || summary?.hasTelemetry === false))
+        if (
+            !force &&
+            activeMatchId === id &&
+            activePlayerId === playerId &&
+            activeViewerPlayerId === viewerPlayerId &&
+            (telemetry || summary?.hasTelemetry === false)
+        )
             return;
         closePlayback();
         activeMatchId = id;
         activePlayerId = playerId;
+        activeViewerPlayerId = viewerPlayerId;
         summary = getSummary(id, playerId);
+        viewerSummary = getViewerSummary(id);
         telemetry = null;
         replayState = { loading: false, available: null, replays: [], error: "", message: "" };
         const token = ++requestToken;
@@ -86,7 +99,9 @@ export function createMatchDetailPage({
         requestToken++;
         activeMatchId = "";
         activePlayerId = "";
+        activeViewerPlayerId = "";
         summary = null;
+        viewerSummary = null;
         telemetry = null;
         closePlayback();
     }
@@ -138,7 +153,7 @@ export function createMatchDetailPage({
                     <h3>Tactical playback unavailable</h3>
                     <p>Tactical playback is unavailable because detailed telemetry was not recorded for this match.</p>
                 </section>
-                ${renderAggregateSummary(summary)}
+                ${renderAggregateSummary(summary, viewerSummary, isAuthenticated())}
                 ${renderLegacyParticipants(participants)}
             </section>
         `;
@@ -896,13 +911,20 @@ function renderBackLink(href = "#view=leaderboards&board=players&mode=battleRoya
     return `<a class="match-back-link" href="${escapeHtml(href)}">Back to stats</a>`;
 }
 
-function renderAggregateSummary(match) {
+function renderAggregateSummary(match, viewerMatch, isAuthenticated) {
     if (!match) return "";
+    const personalMatch = isAuthenticated ? viewerMatch : null;
     return `
         <section class="match-result-summary">
-            <article><span>Result</span><strong>${match.won ? "Win" : "Loss"}</strong></article>
-            <article><span>Kills / deaths</span><strong>${valueOrUnavailable(match.kills)} / ${valueOrUnavailable(match.deaths)}</strong></article>
-            <article><span>Placement</span><strong>${valueOrUnavailable(match.placement)}</strong></article>
+            ${
+                personalMatch
+                    ? `
+                        <article><span>Result</span><strong>${personalMatch.won ? "Win" : "Loss"}</strong></article>
+                        <article><span>Kills / deaths</span><strong>${valueOrUnavailable(personalMatch.kills)} / ${valueOrUnavailable(personalMatch.deaths)}</strong></article>
+                        <article><span>Placement</span><strong>${valueOrUnavailable(personalMatch.placement)}</strong></article>
+                    `
+                    : ""
+            }
             <article><span>Duration</span><strong>${match.playtimeSeconds === null || match.playtimeSeconds === undefined ? "Unavailable" : formatDuration(match.playtimeSeconds * 1000)}</strong></article>
         </section>
     `;
