@@ -1,5 +1,6 @@
 import { MatchMapRenderer } from "./match-map-renderer.js";
 import { MatchPlaybackController } from "./match-playback-controller.js";
+import { loadMatchPlaybackPreferences, saveMatchPlaybackPreferences } from "./match-playback-preferences.js";
 import { validateMatchTelemetry } from "./match-telemetry-normalizer.js";
 
 const FILTER_LABELS = {
@@ -32,6 +33,7 @@ export function createMatchDetailPage({
     let telemetry = null;
     let playback = null;
     let mapRenderer = null;
+    let playbackPreferences = loadMatchPlaybackPreferences();
     let requestToken = 0;
     let replayState = { loading: false, available: null, replays: [], error: "", message: "" };
 
@@ -176,8 +178,8 @@ export function createMatchDetailPage({
                             <span data-match-time>${formatMatchTime(0)}</span>
                         </div>
                         <div data-match-map></div>
-                        ${renderPlaybackControls()}
                         ${renderTimeline()}
+                        ${renderPlaybackControls()}
                     </section>
                     <aside class="match-event-panel" aria-live="polite">
                         <div data-match-event-feed></div>
@@ -199,7 +201,7 @@ export function createMatchDetailPage({
         `;
         const mapHost = container.querySelector("[data-match-map]");
         mapRenderer = new MatchMapRenderer(mapHost, telemetry, getPlayerPresentation);
-        playback = new MatchPlaybackController(telemetry, updatePlayback);
+        playback = new MatchPlaybackController(telemetry, updatePlayback, playbackPreferences);
         updatePlayback(playback.state());
     }
 
@@ -275,7 +277,7 @@ export function createMatchDetailPage({
                         .map(
                             (speed) => `
                             <label>
-                                <input type="radio" name="match-speed" value="${speed}" ${speed === 1 ? "checked" : ""}>
+                                <input type="radio" name="match-speed" value="${speed}" ${speed === playbackPreferences.speed ? "checked" : ""}>
                                 <span>${speed}x</span>
                             </label>
                         `
@@ -288,7 +290,7 @@ export function createMatchDetailPage({
                         .map(
                             ([id, label]) => `
                             <label>
-                                <input type="checkbox" data-match-filter="${id}" checked>
+                                <input type="checkbox" data-match-filter="${id}" ${playbackPreferences.filters[id] ? "checked" : ""}>
                                 <span>${escapeHtml(label)}</span>
                             </label>
                         `
@@ -297,7 +299,7 @@ export function createMatchDetailPage({
                 </fieldset>
                 <div class="match-skip-control">
                     <label>
-                        <input type="checkbox" data-match-skip-idle checked>
+                        <input type="checkbox" data-match-skip-idle ${playbackPreferences.skipIdle ? "checked" : ""}>
                         <span>Skip idle time</span>
                     </label>
                     <details>
@@ -715,11 +717,28 @@ export function createMatchDetailPage({
             return;
         }
         if (!playback) return;
-        if (event.target.matches("[name='match-speed']")) playback.setSpeed(event.target.value);
-        if (event.target.matches("[data-match-skip-idle]")) playback.setSkipIdle(event.target.checked);
+        if (event.target.matches("[name='match-speed']")) {
+            playback.setSpeed(event.target.value);
+            rememberPlaybackPreferences();
+        }
+        if (event.target.matches("[data-match-skip-idle]")) {
+            playback.setSkipIdle(event.target.checked);
+            rememberPlaybackPreferences();
+        }
         if (event.target.matches("[data-match-filter]")) {
             playback.setFilter(event.target.dataset.matchFilter, event.target.checked);
+            rememberPlaybackPreferences();
         }
+    }
+
+    function rememberPlaybackPreferences() {
+        if (!playback) return;
+        const playbackState = playback.state();
+        playbackPreferences = saveMatchPlaybackPreferences({
+            speed: playbackState.speed,
+            skipIdle: playbackState.skipIdle,
+            filters: playbackState.filters
+        });
     }
 
     function handleInput(event) {

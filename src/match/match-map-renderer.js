@@ -1,6 +1,22 @@
 import { mapCoordinateToPercent } from "./match-telemetry-normalizer.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+const VEHICLE_LABELS = new Map([
+    ["ah-64", "AH-64"],
+    ["ah_6", "AH-6"],
+    ["bmp_2", "BMP-2"],
+    ["gepard-1a2", "Gepard 1A2"],
+    ["lav_150", "LAV-150"],
+    ["m1a1abrams", "M1A1 Abrams"],
+    ["m3a3-bradley", "M3A3 Bradley"],
+    ["mh_60m", "MH-60M"],
+    ["mle_1934", "MLE 1934"],
+    ["prism_tank", "Prism Tank"],
+    ["speedboat", "Speedboat"],
+    ["t_90", "T-90"],
+    ["tos", "TOS"],
+    ["uh_60", "UH-60"]
+]);
 
 export class MatchMapRenderer {
     constructor(container, telemetry, getPlayerPresentation = () => ({})) {
@@ -10,8 +26,10 @@ export class MatchMapRenderer {
         this.playerMarkers = new Map();
         this.vehicleMarkers = new Map();
         this.playerStates = new Map();
+        this.vehicleStates = new Map();
         this.currentEvents = [];
         this.lockedPlayerId = "";
+        this.lockedVehicleId = "";
         this.handleKeyDown = (event) => {
             if (event.key === "Escape") this.closeTooltip();
         };
@@ -22,6 +40,7 @@ export class MatchMapRenderer {
         if (!snapshot) return;
         this.currentEvents = events;
         this.playerStates = new Map(snapshot.players.map((player) => [player.playerId, player]));
+        this.vehicleStates = new Map(snapshot.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
         const activeEvent = events.find((event) => event.eventId === currentEventId) || events.at(-1) || null;
         const highlighted = new Set(
             events.flatMap((event) => [
@@ -66,12 +85,15 @@ export class MatchMapRenderer {
         this.updateScore(snapshot.scores);
         this.updateEventLines(events, activeEvent);
         if (this.lockedPlayerId) this.showTooltip(this.lockedPlayerId);
+        else if (this.lockedVehicleId) this.showVehicleTooltip(this.lockedVehicleId);
     }
 
     closeTooltip() {
         this.lockedPlayerId = "";
+        this.lockedVehicleId = "";
         this.tooltip.hidden = true;
         this.playerMarkers.forEach((marker) => marker.setAttribute("aria-pressed", "false"));
+        this.vehicleMarkers.forEach((marker) => marker.setAttribute("aria-pressed", "false"));
     }
 
     destroy() {
@@ -94,7 +116,14 @@ export class MatchMapRenderer {
             image.src = this.telemetry.map.imageUrl;
             image.alt = `${this.telemetry.map.label} tactical map`;
             image.decoding = "async";
+            const applyImageAspectRatio = () => {
+                const width = Number(this.telemetry.map.imageWidth) || image.naturalWidth;
+                const height = Number(this.telemetry.map.imageHeight) || image.naturalHeight;
+                if (width > 0 && height > 0) this.stage.style.aspectRatio = `${width} / ${height}`;
+            };
+            image.addEventListener("load", applyImageAspectRatio, { once: true });
             this.stage.append(image);
+            applyImageAspectRatio();
             if (!this.telemetry.map.calibrated) {
                 const status = document.createElement("span");
                 status.className = "tactical-map-calibration-status";
@@ -150,10 +179,25 @@ export class MatchMapRenderer {
         this.stage.append(this.tooltip);
 
         this.stage.addEventListener("click", (event) => {
+            const vehicleMarker = event.target.closest("[data-tactical-vehicle]");
+            if (vehicleMarker) {
+                const vehicleId = vehicleMarker.dataset.tacticalVehicle;
+                this.lockedPlayerId = "";
+                this.lockedVehicleId = this.lockedVehicleId === vehicleId ? "" : vehicleId;
+                this.playerMarkers.forEach((item) => item.setAttribute("aria-pressed", "false"));
+                this.vehicleMarkers.forEach((item, id) => {
+                    item.setAttribute("aria-pressed", String(id === this.lockedVehicleId));
+                });
+                if (this.lockedVehicleId) this.showVehicleTooltip(this.lockedVehicleId);
+                else this.closeTooltip();
+                return;
+            }
             const marker = event.target.closest("[data-tactical-player]");
             if (marker) {
                 const playerId = marker.dataset.tacticalPlayer;
+                this.lockedVehicleId = "";
                 this.lockedPlayerId = this.lockedPlayerId === playerId ? "" : playerId;
+                this.vehicleMarkers.forEach((item) => item.setAttribute("aria-pressed", "false"));
                 this.playerMarkers.forEach((item, id) => {
                     item.setAttribute("aria-pressed", String(id === this.lockedPlayerId));
                 });
@@ -171,7 +215,7 @@ export class MatchMapRenderer {
         const presentation = this.getPlayerPresentation(participant.playerId, participant) || {};
         const marker = document.createElement("button");
         marker.type = "button";
-        marker.className = `tactical-player-marker team-${safeClass(participant.teamId || "solo")}`;
+        marker.className = `tactical-player-marker team-${safeClass(teamClass(participant.teamId))}`;
         marker.dataset.tacticalPlayer = participant.playerId;
         marker.setAttribute("aria-pressed", "false");
         marker.title = "";
@@ -219,10 +263,12 @@ export class MatchMapRenderer {
                 marker = document.createElement("button");
                 marker.type = "button";
                 marker.className = "tactical-vehicle-marker";
-                marker.textContent = vehicleGlyph(vehicle.vehicleType);
+                marker.dataset.tacticalVehicle = vehicle.vehicleId;
+                marker.setAttribute("aria-pressed", "false");
                 this.vehicleLayer.append(marker);
                 this.vehicleMarkers.set(vehicle.vehicleId, marker);
             }
+            marker.textContent = vehicleGlyph(vehicle.vehicleType);
             marker.hidden = false;
             marker.style.setProperty("--map-x", `${point.x}%`);
             marker.style.setProperty("--map-y", `${point.y}%`);
@@ -320,9 +366,10 @@ export class MatchMapRenderer {
         const state = this.playerStates.get(playerId);
         if (!participant || !state) return;
         const presentation = this.getPlayerPresentation(playerId, participant) || {};
-        const event = this.currentEvents.find(
+        const playerEvents = this.currentEvents.filter(
             (item) => item.attackerId === playerId || item.killerId === playerId || item.victimId === playerId
         );
+        const event = playerEvents.find((item) => item.type === "elimination") || playerEvents[0];
         this.tooltip.replaceChildren();
         const heading = document.createElement("strong");
         heading.textContent = presentation.name || participant.name;
@@ -334,6 +381,36 @@ export class MatchMapRenderer {
             weapon.textContent = `Weapon: ${event.weaponLabel || labelFromId(event.weaponId)}`;
             this.tooltip.append(weapon);
         }
+        const distance = event?.distance3d ?? event?.horizontalDistance;
+        if (distance !== null && distance !== undefined) {
+            const range = document.createElement("span");
+            range.textContent = `Shot range: ${round(distance)} blocks`;
+            this.tooltip.append(range);
+        }
+        this.tooltip.hidden = false;
+    }
+
+    showVehicleTooltip(vehicleId) {
+        const vehicle = this.vehicleStates.get(vehicleId);
+        if (!vehicle) {
+            this.closeTooltip();
+            return;
+        }
+        this.tooltip.replaceChildren();
+        const heading = document.createElement("strong");
+        heading.textContent = labelFromId(vehicle.vehicleType);
+        const condition = document.createElement("span");
+        const health =
+            vehicle.health === null
+                ? "Health unavailable"
+                : `${round(vehicle.health)}${vehicle.maxHealth === null ? "" : ` / ${round(vehicle.maxHealth)}`} HP`;
+        condition.textContent = `${vehicle.destroyed ? "Destroyed" : health} - X ${round(vehicle.x)}, Y ${round(vehicle.y)}, Z ${round(vehicle.z)}`;
+        this.tooltip.append(heading, condition);
+        if (vehicle.occupantPlayerIds.length) {
+            const occupants = document.createElement("span");
+            occupants.textContent = `Occupants: ${vehicle.occupantPlayerIds.map((id) => this.playerName(id)).join(", ")}`;
+            this.tooltip.append(occupants);
+        }
         this.tooltip.hidden = false;
     }
 
@@ -341,8 +418,9 @@ export class MatchMapRenderer {
         const status = !state.connected ? "Disconnected" : state.alive ? "Alive" : "Eliminated";
         const health = state.health === null ? "HP unavailable" : `${round(state.health)} HP`;
         const armor = state.armor === null ? "armor unavailable" : `${round(state.armor)} armor`;
-        const vehicle = state.vehicleId ? `, vehicle ${state.vehicleId}` : "";
-        return `${participant.name}, ${participant.teamId || "No team"}, ${health}, ${armor}, X ${round(state.x)}, Y ${round(state.y)}, Z ${round(state.z)}, ${status}${vehicle}`;
+        const vehicleState = state.vehicleId ? this.vehicleStates.get(state.vehicleId) : null;
+        const vehicle = vehicleState ? `, in ${labelFromId(vehicleState.vehicleType)}` : "";
+        return `${teamLabel(participant.teamId)}, ${health}, ${armor}, X ${round(state.x)}, Y ${round(state.y)}, Z ${round(state.z)}, ${status}${vehicle}`;
     }
 
     positionForPlayer(playerId) {
@@ -378,23 +456,69 @@ function initialsFor(name) {
 
 function vehicleGlyph(type) {
     const value = String(type || "").toLowerCase();
-    if (value.includes("helicopter") || value.includes("aircraft") || value.includes("plane")) return "H";
-    if (value.includes("tank") || value.includes("apc")) return "T";
+    const id = value.split(":").pop() || value;
+    const compact = id.replace(/[^a-z0-9]+/g, "");
+    if (value.includes("helicopter") || value.includes("chopper") || /^(?:ah|ka|mh|mi|rah|uh)\d/.test(compact)) {
+        return "H";
+    }
+    if (
+        value.includes("aircraft") ||
+        value.includes("plane") ||
+        /^(?:a10|b2|f14|f15|f16|f18|mig|su25|su27|v22)/.test(compact)
+    ) {
+        return "P";
+    }
+    if (
+        value.includes("tank") ||
+        value.includes("apc") ||
+        /(?:abrams|bradley|bmp\d|gepard|lav\d|pantsir|t90|type63)/.test(compact)
+    ) {
+        return "T";
+    }
+    if (value.includes("artillery") || /^(?:mle1934|mk42|plz|tos)/.test(compact)) {
+        return "A";
+    }
+    if (value.includes("car") || value.includes("truck") || value.includes("jeep") || value.includes("humvee")) {
+        return "C";
+    }
+    if (value.includes("boat") || value.includes("ship")) return "B";
     return "V";
 }
 
 function labelFromId(value) {
-    return String(value || "Vehicle")
+    const id = String(value || "Vehicle")
         .split(":")
-        .pop()
-        .replaceAll("_", " ")
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+        .pop();
+    return (
+        VEHICLE_LABELS.get(id.toLowerCase()) ||
+        id.replaceAll(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+    );
 }
 
 function safeClass(value) {
     return String(value || "solo")
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, "-");
+}
+
+function teamClass(value) {
+    const team = String(value || "").trim();
+    if (!team || /^solo(?:[-_: ].*|$)/i.test(team)) return "solo";
+    const numbered = /^team[-_: ]?(\d+)$/i.exec(team);
+    return numbered ? `team-${numbered[1]}` : "team";
+}
+
+function teamLabel(value) {
+    const team = String(value || "").trim();
+    if (!team || /^solo(?:[-_: ].*|$)/i.test(team)) return "Solo";
+    const numbered = /^team[-_: ]?(\d+)$/i.exec(team);
+    if (numbered) return `Team ${numbered[1]}`;
+    if (looksLikeUuid(team)) return "Team";
+    return labelFromId(team);
+}
+
+function looksLikeUuid(value) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function round(value) {

@@ -12,12 +12,15 @@ const DEFAULT_FILTERS = Object.freeze({
 });
 
 export class MatchPlaybackController {
-    constructor(telemetry, onChange = () => {}) {
+    constructor(telemetry, onChange = () => {}, options = {}) {
         this.telemetry = telemetry;
         this.onChange = onChange;
-        this.skipIdle = true;
-        this.speed = 1;
-        this.filters = { ...DEFAULT_FILTERS };
+        this.skipIdle = options.skipIdle !== false;
+        this.speed = [0.5, 1, 2].includes(Number(options.speed)) ? Number(options.speed) : 1;
+        this.filters = {
+            ...DEFAULT_FILTERS,
+            ...Object.fromEntries(Object.keys(DEFAULT_FILTERS).map((key) => [key, options.filters?.[key] !== false]))
+        };
         this.playing = false;
         this.timer = 0;
         this.sequence = [];
@@ -156,10 +159,13 @@ export class MatchPlaybackController {
 
     setSkipIdle(enabled) {
         const currentTime = this.snapshot()?.timeMs || 0;
-        this.stopTimer();
+        const wasPlaying = this.playing;
+        globalThis.clearTimeout(this.timer);
+        this.timer = 0;
         this.skipIdle = Boolean(enabled);
         this.rebuildSequence(currentTime);
         this.emit();
+        if (wasPlaying) this.schedule();
     }
 
     setSpeed(speed) {
@@ -176,10 +182,13 @@ export class MatchPlaybackController {
     setFilter(filter, enabled) {
         if (!(filter in this.filters)) return;
         const currentTime = this.snapshot()?.timeMs || 0;
-        this.stopTimer();
+        const wasPlaying = this.playing;
+        globalThis.clearTimeout(this.timer);
+        this.timer = 0;
         this.filters[filter] = Boolean(enabled);
         this.rebuildSequence(currentTime);
         this.emit();
+        if (wasPlaying) this.schedule();
     }
 
     destroy() {

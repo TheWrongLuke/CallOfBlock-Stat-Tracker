@@ -40,8 +40,8 @@ describe("match telemetry normalization", () => {
 
     it("converts calibrated world coordinates and reports points outside bounds", async () => {
         const telemetry = normalizeMatchTelemetry(await fixture("fixture-br"), "fixture-br");
-        const center = mapCoordinateToPercent(telemetry.map, 50, 50);
-        const outside = mapCoordinateToPercent(telemetry.map, 140, 50);
+        const center = mapCoordinateToPercent(telemetry.map, -48.5, -40.5);
+        const outside = mapCoordinateToPercent(telemetry.map, 500, -40.5);
 
         expect(center).toEqual({ x: 50, y: 50, outsideBounds: false });
         expect(outside).toEqual({ x: 100, y: 50, outsideBounds: true });
@@ -85,6 +85,36 @@ describe("match telemetry normalization", () => {
             finalPlacement: 1
         });
     });
+
+    it("removes transient vehicle-like entities from older recordings", async () => {
+        const source = await fixture("fixture-br");
+        source.snapshots[0].vehicles.push(
+            {
+                vehicleId: "tow-1",
+                vehicleType: "superbwarfare:tow",
+                x: 0,
+                y: 64,
+                z: 0
+            },
+            {
+                vehicleId: "decoy-1",
+                vehicleType: "superbwarfare:smoke_decoy",
+                x: 0,
+                y: 64,
+                z: 0
+            },
+            {
+                vehicleId: "flyby-1",
+                vehicleType: "brcontrol:fly_by_carrier",
+                x: 0,
+                y: 64,
+                z: 0
+            }
+        );
+
+        const telemetry = normalizeMatchTelemetry(source, "fixture-br");
+        expect(telemetry.snapshots[0].vehicles.map((vehicle) => vehicle.vehicleId)).toEqual(["vehicle-tank-1"]);
+    });
 });
 
 describe("match tactical playback", () => {
@@ -98,6 +128,21 @@ describe("match tactical playback", () => {
         expect(moments.find((moment) => moment.id === "engagement-2")?.startMs).toBe(22_000);
         expect(moments.find((moment) => moment.id === "engagement-3")?.startMs).toBe(43_000);
         controller.destroy();
+    });
+
+    it("keeps playing while event filters and skip-idle mode are changed", async () => {
+        vi.useFakeTimers();
+        const telemetry = normalizeMatchTelemetry(await fixture("fixture-br"), "fixture-br");
+        const controller = new MatchPlaybackController(telemetry);
+
+        controller.play();
+        controller.setFilter("vehicles", false);
+        expect(controller.state().playing).toBe(true);
+        controller.setSkipIdle(false);
+        expect(controller.state().playing).toBe(true);
+
+        controller.destroy();
+        vi.useRealTimers();
     });
 
     it("supports full snapshots, speed, filters, timeline seeking, and event selection", async () => {

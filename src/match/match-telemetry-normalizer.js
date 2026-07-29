@@ -1,3 +1,5 @@
+import { applyKnownTacticalMap } from "../config/tactical-maps.js";
+
 export const MATCH_TELEMETRY_VERSION = 1;
 
 const EVENT_TYPES = new Set([
@@ -55,7 +57,7 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
         ...events.map((event) => event.timeMs)
     );
     const durationMs = finiteNonNegative(raw.durationMs) ?? highestTime;
-    const map = normalizeMap(raw.map);
+    const map = normalizeMap(raw.map, raw.mode);
     if (!map.calibrated || !map.imageUrl) {
         warnings.push("Map calibration is unavailable; marker positions use the approximate coordinate grid.");
     }
@@ -231,21 +233,42 @@ function normalizePlayerState(value, participantIds) {
 
 function normalizeVehicleState(value) {
     const vehicleId = text(value?.vehicleId);
+    const vehicleType = text(value?.vehicleType) || "Vehicle";
     const x = finite(value?.x);
     const y = finite(value?.y);
     const z = finite(value?.z);
-    if (!vehicleId || x === null || y === null || z === null) return null;
+    if (
+        !vehicleId ||
+        x === null ||
+        y === null ||
+        z === null ||
+        value?.spawnedByMatch === false ||
+        isTransientVehicleType(vehicleType)
+    ) {
+        return null;
+    }
     return {
         vehicleId,
-        vehicleType: text(value.vehicleType) || "Vehicle",
+        vehicleType,
         x,
         y,
         z,
         health: finiteNonNegative(value.health),
         maxHealth: finitePositive(value.maxHealth),
         destroyed: value.destroyed === true,
+        spawnedByMatch: value.spawnedByMatch === true,
         occupantPlayerIds: stringArray(value.occupantPlayerIds)
     };
+}
+
+function isTransientVehicleType(value) {
+    const type = String(value || "").toLowerCase();
+    return (
+        type === "minecraft:pig" ||
+        type.includes("fly_by_carrier") ||
+        /(?:^|:)(?:tow|smoke_decoy)$/.test(type) ||
+        /(missile|projectile|rocket|shell|bullet|grenade|torpedo|bomb|ptkm)/.test(type)
+    );
 }
 
 function normalizeEvent(value, index, participantIds, snapshotIds, warnings) {
@@ -317,22 +340,27 @@ function normalizeEngagement(value, index, participantIds, eventIds, warnings) {
     };
 }
 
-function normalizeMap(value) {
-    return {
-        mapId: text(value?.mapId) || "unknown",
-        mapVersion: text(value?.mapVersion) || "unknown",
-        label: text(value?.label) || text(value?.mapId) || "Unknown map",
-        imageUrl: safeAssetUrl(value?.imageUrl),
-        worldMinX: finite(value?.worldMinX),
-        worldMaxX: finite(value?.worldMaxX),
-        worldMinZ: finite(value?.worldMinZ),
-        worldMaxZ: finite(value?.worldMaxZ),
-        rotationDegrees: finite(value?.rotationDegrees) ?? 0,
-        flipX: value?.flipX === true,
-        flipY: value?.flipY === true,
-        calibrated: value?.calibrated === true,
-        calibrationSource: text(value?.calibrationSource)
-    };
+function normalizeMap(value, mode) {
+    return applyKnownTacticalMap(
+        {
+            mapId: text(value?.mapId) || "unknown",
+            mapVersion: text(value?.mapVersion) || "unknown",
+            label: text(value?.label) || text(value?.mapId) || "Unknown map",
+            imageUrl: safeAssetUrl(value?.imageUrl),
+            imageWidth: finitePositive(value?.imageWidth),
+            imageHeight: finitePositive(value?.imageHeight),
+            worldMinX: finite(value?.worldMinX),
+            worldMaxX: finite(value?.worldMaxX),
+            worldMinZ: finite(value?.worldMinZ),
+            worldMaxZ: finite(value?.worldMaxZ),
+            rotationDegrees: finite(value?.rotationDegrees) ?? 0,
+            flipX: value?.flipX === true,
+            flipY: value?.flipY === true,
+            calibrated: value?.calibrated === true,
+            calibrationSource: text(value?.calibrationSource)
+        },
+        mode
+    );
 }
 
 function normalizeZone(value) {

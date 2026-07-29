@@ -76,14 +76,15 @@ function normalizeTierOverride(tier, fallbackIndex) {
     if (!Number.isInteger(index) || index < 0 || index > 20) return null;
 
     const target = Number(tier?.target);
-    const targetPerMap = Number(tier?.target_per_map ?? tier?.targetPerMap);
+    const rawTargetPerMap = tier?.target_per_map ?? tier?.targetPerMap;
+    const targetPerMap = rawTargetPerMap === null || rawTargetPerMap === undefined ? null : Number(rawTargetPerMap);
     return {
         index,
         name: cleanText(tier?.name, MAX_BADGE_NAME_LENGTH),
         description: cleanText(tier?.description, MAX_BADGE_TEXT_LENGTH, true),
         iconUrl: cleanBadgeAssetUrl(tier?.icon_url ?? tier?.iconUrl),
         target: Number.isFinite(target) && target >= 0 ? target : null,
-        targetPerMap: Number.isFinite(targetPerMap) && targetPerMap >= 0 ? targetPerMap : null
+        targetPerMap: targetPerMap !== null && Number.isFinite(targetPerMap) && targetPerMap >= 0 ? targetPerMap : null
     };
 }
 

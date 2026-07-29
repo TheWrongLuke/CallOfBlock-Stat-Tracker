@@ -20,7 +20,7 @@
     <link rel="icon" type="image/png" href="./assets/branding/icon.png">
     <link rel="apple-touch-icon" href="./assets/branding/icon.png">
     <link rel="manifest" href="./site.webmanifest">
-    <link rel="stylesheet" href="./assets/css/styles.css?v=badge-editor-2">
+    <link rel="stylesheet" href="./assets/css/styles.css?v=tactical-replay-1">
 </head>
 <body class="home-route">
 <div class="app-shell">
@@ -88,6 +88,13 @@
     </header>
     <div class="floating-actions" aria-label="Site actions">
         <button type="button" class="store-float hidden" data-route="store" data-admin-store-link hidden>Store</button>
+        <div class="stats-refresh-control hidden" data-stats-refresh-control aria-live="polite">
+            <button type="button" class="stats-refresh-button" data-stats-refresh>
+                <span class="stats-refresh-symbol" aria-hidden="true">&#8635;</span>
+                <span data-stats-refresh-label>Load</span>
+            </button>
+            <span class="sr-only" data-stats-refresh-status>Loading statistics...</span>
+        </div>
         <button type="button" class="tracker-float" data-route="leaderboard">Tracker</button>
         <div class="account-widget" id="account-widget" aria-live="polite"></div>
     </div>
@@ -373,13 +380,6 @@
                     <p class="leaderboard-count" id="leaderboard-count">0 tracked players</p>
                 </div>
                 <div class="leaderboard-header-actions">
-                    <div class="stats-refresh-control" aria-live="polite">
-                        <button type="button" class="stats-refresh-button" data-stats-refresh>
-                            <span class="stats-refresh-symbol" aria-hidden="true">&#8635;</span>
-                            <span data-stats-refresh-label>Refresh</span>
-                        </button>
-                        <small data-stats-refresh-status>Loading statistics...</small>
-                    </div>
                     <div class="tab-row" id="mode-tabs" role="group" aria-label="Leaderboard mode"></div>
                 </div>
             </div>
@@ -508,26 +508,10 @@
             <div class="admin-help-actions">
                 <button type="button" data-route="admin-tickets">Ticket dashboard</button>
                 <button type="button" data-route="admin-progression">Progression &amp; missions</button>
-                <button type="button" data-route="admin-map-calibration">Map calibration</button>
                 <a href="#help">Player help</a>
             </div>
         </section>
         <div id="admin-documentation-body" aria-live="polite"></div>
-    </main>
-
-    <main class="admin-map-calibration-view hidden" id="admin-map-calibration-view">
-        <section class="feedback-hero">
-            <div>
-                <p class="panel-kicker">Admin Map Tools</p>
-                <h2>Tactical map calibration.</h2>
-                <p>Collect known image and Minecraft X/Z pairs, inspect affine-fit error, and export a candidate configuration.</p>
-            </div>
-            <div class="admin-help-actions">
-                <button type="button" data-route="admin-help">Admin documentation</button>
-                <button type="button" data-route="admin-progression">Progression &amp; missions</button>
-            </div>
-        </section>
-        <div class="map-calibration-body" id="map-calibration-body" aria-live="polite"></div>
     </main>
 
     <main class="admin-progression-view hidden" id="admin-progression-view">
@@ -653,6 +637,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./src/config/api-config.js?v=site-2"></script>
     <script src="./src/config/store-catalog.js?v=store-2"></script>
-    <script type="module" src="./src/app.js?v=weekly-missions-3"></script>
+    <script type="module" src="./src/app.js?v=tactical-replay-1"></script>
 </body>
 </html>

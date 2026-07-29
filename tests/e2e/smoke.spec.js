@@ -383,8 +383,14 @@ test("homepage and primary navigation load without fatal errors", async ({ page 
     await expect(page.getByRole("heading", { level: 1, name: "Call of Block" })).toBeVisible();
     await expect(page.locator(".video-card")).toBeVisible();
     await expect(page.locator("#leaderboard-view")).toBeHidden();
+    await expect(page.locator("[data-stats-refresh-control]")).toBeHidden();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
     await page.locator(".tracker-float").click();
     await expect(page.locator("#leaderboard-view")).toBeVisible();
+    await expect(page.locator("[data-stats-refresh-control]")).toBeVisible();
+    await expect(page.locator("[data-stats-refresh-label]")).toHaveText(/^\d+[smh]$/);
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
     expect(pageErrors).toEqual([]);
 });
 
@@ -395,7 +401,7 @@ test("statistics refresh only on demand and preserves the active route on failur
     });
 
     await openApp(page, "#view=leaderboards&board=players&mode=deathmatch&sort=kills");
-    await expect(page.locator("[data-stats-refresh-status]")).toContainText("Last updated");
+    await expect(page.locator("[data-stats-refresh-status]")).toContainText("last refreshed");
     const requestsAfterLoad = statsRequests;
 
     await page.waitForTimeout(10_500);
@@ -520,7 +526,6 @@ test("admin routes reject a logged-out visitor", async ({ page }) => {
         ["#admin-tickets", "#admin-tickets-view", /#feedback$/],
         ["#admin-help", "#admin-help-view", /\/$/],
         ["#admin-progression", "#admin-progression-view", /\/$/],
-        ["#admin-map-calibration", "#admin-map-calibration-view", /\/$/],
         ["#store", "#store-view", /\/$/],
         ["#community-dates", "#community-admin-view", /#playtests$/],
         ["#community-admin", "#community-admin-view", /#community-admin$/]
@@ -533,32 +538,6 @@ test("admin routes reject a logged-out visitor", async ({ page }) => {
         await expect(page.locator(selector)).toBeHidden();
     }
     await expect(page.getByRole("button", { name: "Admin documentation" })).toHaveCount(0);
-});
-
-test("administrators can collect and retain a candidate affine map calibration", async ({ page }) => {
-    await openAdminApp(page, "#admin-map-calibration");
-    const view = page.locator("#admin-map-calibration-view");
-    await expect(view).toBeVisible();
-    await expect(view).toContainText("Approximate / uncalibrated");
-
-    const addPoint = async (label, worldX, worldZ, x, y) => {
-        await view.locator("[data-map-calibration-stage]").click({ position: { x, y } });
-        const form = view.locator("[data-map-calibration-form]");
-        await form.locator("input[name='label']").fill(label);
-        await form.locator("input[name='worldX']").fill(String(worldX));
-        await form.locator("input[name='worldZ']").fill(String(worldZ));
-        await form.getByRole("button", { name: "Add point" }).click();
-    };
-
-    await addPoint("North west", 0, 0, 80, 80);
-    await addPoint("North east", 100, 0, 220, 80);
-    await addPoint("South west", 0, 100, 80, 220);
-    await expect(view).toContainText("Affine candidate available");
-    await expect(view.locator("[data-map-calibration-export]")).toBeEnabled();
-
-    await page.reload();
-    await expect(view).toBeVisible();
-    await expect(view).toContainText("3 collected");
 });
 
 test("admin routes reject a signed-in non-admin on direct navigation and refresh", async ({ page }) => {
@@ -966,11 +945,28 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     await expect(matchView.getByRole("heading", { level: 2, name: "Shmar" })).toBeVisible();
     await expect(matchView.getByText("Winner & MVP")).toBeVisible();
     await expect(matchView.locator(".tactical-map-image")).toBeVisible();
+    const mapSize = await matchView.locator(".tactical-map-stage").boundingBox();
+    expect(mapSize.width / mapSize.height).toBeCloseTo(832 / 816, 1);
     await expect(matchView.locator(".tactical-player-marker")).toHaveCount(4);
     await expect(matchView.locator(".tactical-vehicle-marker")).toBeVisible();
+    await expect(matchView.locator(".tactical-vehicle-marker")).toHaveText("T");
     await expect(matchView.locator(".tactical-zone")).toBeVisible();
+    await expect(matchView.locator(".tactical-marker-tooltip")).toBeHidden();
     await expect(matchView.locator("[data-match-skip-idle]")).toBeChecked();
     await expect(matchView.locator("[data-match-status]")).toContainText("Engagement");
+    const timelineFollowsMap = await matchView.evaluate((element) => {
+        const map = element.querySelector("[data-match-map]");
+        const timeline = element.querySelector(".match-timeline");
+        return Boolean(map && timeline && map.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(timelineFollowsMap).toBe(true);
+
+    await matchView.locator(".tactical-map-stage").evaluate((element) => {
+        element.scrollIntoView({ block: "center" });
+    });
+    await matchView.locator(".tactical-vehicle-marker").first().click();
+    await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("M1A1 Abrams");
+    await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("HP");
 
     await matchView.locator('[data-match-event="elimination-1"]').first().click();
     await expect(matchView.locator(".tactical-event-lines .kill-line")).toBeVisible();
@@ -979,22 +975,33 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     await expect(matchView.locator("[data-match-event-feed]")).toContainText("height advantage");
 
     const alphaMarker = matchView.locator('[data-tactical-player="p_alpha"]');
-    await alphaMarker.click();
+    await alphaMarker.focus();
+    await page.keyboard.press("Enter");
     await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("Alpha");
     await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("HP");
+    await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("Shot range");
 
     await matchView.locator("[data-match-skip-idle]").uncheck();
     await expect(matchView.locator("[data-match-status]")).toContainText("Snapshot");
     await matchView.locator('[name="match-speed"][value="2"]').check();
     await expect(matchView.locator('[name="match-speed"][value="2"]')).toBeChecked();
 
+    await matchView.locator("[data-match-play]").click();
+    await expect(matchView.locator("[data-match-play]")).toHaveText("Pause");
     await matchView.locator('[data-match-filter="vehicles"]').uncheck();
+    await expect(matchView.locator("[data-match-play]")).toHaveText("Pause");
     await expect(matchView.locator('[data-event-type="vehicle_destroyed"]')).toBeHidden();
+    await matchView.locator("[data-match-play]").click();
     await matchView.locator("[data-match-timeline]").evaluate((element) => {
         element.value = "50000";
         element.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await expect(matchView.locator("[data-match-end-overlay]")).toContainText("Winner & MVP");
+
+    await page.reload();
+    await expect(matchView.locator("[data-match-skip-idle]")).not.toBeChecked();
+    await expect(matchView.locator('[name="match-speed"][value="2"]')).toBeChecked();
+    await expect(matchView.locator('[data-match-filter="vehicles"]')).not.toBeChecked();
 
     const horizontalOverflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth
@@ -1011,7 +1018,7 @@ test("match routes support Back and Forward plus legacy, partial, and failure st
     await expect(page.locator("#match-view")).toBeVisible();
     await expect(page.locator("#match-view")).toContainText("Winning team");
     await expect(page.locator("#match-view")).toContainText("Match MVP");
-    await expect(page.locator(".tactical-map-grid")).toBeVisible();
+    await expect(page.locator(".tactical-map-image")).toBeVisible();
 
     await page.goBack();
     await expect(page.locator("#home-view")).toBeVisible();
@@ -1021,7 +1028,7 @@ test("match routes support Back and Forward plus legacy, partial, and failure st
     await page.goto("/#view=match&match=fixture-partial");
     await expect(page.locator("#match-view")).toContainText("Legacy Shmar");
     await expect(page.locator("#match-view")).toContainText("Unavailable");
-    await expect(page.locator(".tactical-map-grid")).toBeVisible();
+    await expect(page.locator(".tactical-map-image")).toBeVisible();
 
     await page.goto("/#view=match&match=deathmatch-1777678266192");
     await expect(page.locator("#match-view")).toContainText("Tactical playback unavailable");

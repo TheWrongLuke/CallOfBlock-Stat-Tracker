@@ -109,7 +109,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -193,7 +193,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -277,7 +277,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -361,7 +361,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -445,7 +445,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -529,7 +529,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -613,7 +613,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -697,7 +697,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -781,7 +781,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -865,7 +865,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -947,7 +947,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -1029,7 +1029,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -1111,7 +1111,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -1193,7 +1193,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -1275,7 +1275,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -1357,7 +1357,7 @@
       "vehicles": [
         {
           "vehicleId": "vehicle-tank-1",
-          "vehicleType": "Tank",
+          "vehicleType": "ashvehicle:m1a1abrams",
           "x": 58,
           "y": 65,
           "z": 55,
@@ -1583,7 +1583,7 @@
       "attackerId": "p_alpha",
       "playerId": "p_alpha",
       "vehicleId": "vehicle-tank-1",
-      "vehicleType": "Tank",
+      "vehicleType": "ashvehicle:m1a1abrams",
       "weaponId": "superbwarfare:javelin",
       "weaponLabel": "FGM-148 Javelin",
       "occupantPlayerIds": [

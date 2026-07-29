@@ -61,7 +61,6 @@ import { renderProgressionAdminContent } from "./views/progression.js?v=weekly-m
 import { renderGiftNotificationPopup, renderNotificationInbox } from "./views/notifications.js";
 import { createMatchDetailApi } from "./match/match-detail-api.js";
 import { createMatchDetailPage } from "./match/match-detail.js";
-import { applyMapCalibration, fitMapCalibration } from "./match/map-calibration.js";
 import { createReplayApi } from "./match/replay-downloads.js";
 
 const MODE_LABELS = {
@@ -133,7 +132,6 @@ const CONTACT_EMAIL_CODES = [
 const PLAYTEST_STORAGE_KEY = "cob_playtest_scheduler_v2";
 const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
 const NOTIFICATION_POPUP_SESSION_KEY = "cob_notification_popup_seen_v1";
-const MAP_CALIBRATION_STORAGE_KEY = "cob_map_calibration_draft_v1";
 const BADGE_SEEN_STORAGE_KEY = "cob_seen_badges_v1";
 const WEEKLY_MISSION_STORAGE_KEY = "cob_weekly_missions_v1";
 const ACCOUNT_MAX_LEVEL = 1000;
@@ -628,6 +626,7 @@ const state = {
         overrides: [],
         loaded: false,
         loading: false,
+        request: null,
         ready: false,
         error: ""
     },
@@ -651,18 +650,8 @@ const state = {
         status: "loading",
         message: "Loading statistics...",
         lastUpdatedAt: null,
-        request: null
-    },
-    mapCalibration: {
-        loaded: false,
-        points: [],
-        editIndex: -1,
-        clickedXPercent: null,
-        clickedYPercent: null,
-        previewWorldX: "",
-        previewWorldZ: "",
-        message: "",
-        error: ""
+        request: null,
+        counterTimer: 0
     },
     dataSignature: "",
     mode: "battleRoyale",
@@ -691,6 +680,7 @@ const state = {
     championScrollTimer: null,
     pendingScrollTarget: "",
     pendingDetailsTarget: "",
+    routeScrollPending: false,
     playtests: emptyPlaytestState(),
     cache: emptyCache()
 };
@@ -716,6 +706,7 @@ document.addEventListener("DOMContentLoaded", () => {
     applyRoute();
     bindStaticEvents();
     startChampionRotation();
+    state.statsRefresh.counterTimer = window.setInterval(renderStatsRefreshControl, 1000);
     void initAuth();
     void loadRemotePlaytests({ silent: true });
     void loadData();
@@ -1009,74 +1000,6 @@ function bindStaticEvents() {
         if (statsRefresh) {
             event.preventDefault();
             void manuallyRefreshStats();
-            return;
-        }
-
-        const calibrationStage = event.target.closest("[data-map-calibration-stage]");
-        if (calibrationStage && isPlaytestAdmin()) {
-            const bounds = calibrationStage.getBoundingClientRect();
-            if (bounds.width > 0 && bounds.height > 0) {
-                state.mapCalibration.clickedXPercent = Math.max(
-                    0,
-                    Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100)
-                );
-                state.mapCalibration.clickedYPercent = Math.max(
-                    0,
-                    Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100)
-                );
-                state.mapCalibration.message = "Image position selected. Enter the matching in-game X and Z.";
-                state.mapCalibration.error = "";
-                renderMapCalibrationPage();
-            }
-            return;
-        }
-
-        const calibrationEdit = event.target.closest("[data-map-calibration-edit]");
-        if (calibrationEdit && isPlaytestAdmin()) {
-            const index = Number(calibrationEdit.dataset.mapCalibrationEdit);
-            const point = state.mapCalibration.points[index];
-            if (!point) return;
-            state.mapCalibration.editIndex = index;
-            state.mapCalibration.clickedXPercent = point.imageXPercent;
-            state.mapCalibration.clickedYPercent = point.imageYPercent;
-            state.mapCalibration.message = `Editing ${point.label}.`;
-            state.mapCalibration.error = "";
-            renderMapCalibrationPage();
-            window.requestAnimationFrame(() => {
-                const form = document.querySelector("[data-map-calibration-form]");
-                if (!form) return;
-                form.elements.namedItem("label").value = point.label;
-                form.elements.namedItem("worldX").value = point.worldX;
-                form.elements.namedItem("worldZ").value = point.worldZ;
-                form.elements.namedItem("label").focus();
-            });
-            return;
-        }
-
-        const calibrationRemove = event.target.closest("[data-map-calibration-remove]");
-        if (calibrationRemove && isPlaytestAdmin()) {
-            const index = Number(calibrationRemove.dataset.mapCalibrationRemove);
-            if (!state.mapCalibration.points[index]) return;
-            state.mapCalibration.points.splice(index, 1);
-            state.mapCalibration.editIndex = -1;
-            state.mapCalibration.message = "Calibration point removed.";
-            saveMapCalibrationDraft();
-            renderMapCalibrationPage();
-            return;
-        }
-
-        if (event.target.closest("[data-map-calibration-cancel]") && isPlaytestAdmin()) {
-            state.mapCalibration.editIndex = -1;
-            state.mapCalibration.clickedXPercent = null;
-            state.mapCalibration.clickedYPercent = null;
-            state.mapCalibration.message = "";
-            state.mapCalibration.error = "";
-            renderMapCalibrationPage();
-            return;
-        }
-
-        if (event.target.closest("[data-map-calibration-export]") && isPlaytestAdmin()) {
-            exportMapCalibration();
             return;
         }
 
@@ -1641,20 +1564,6 @@ function bindStaticEvents() {
     });
 
     document.addEventListener("submit", (event) => {
-        if (event.target.matches("[data-map-calibration-form]")) {
-            event.preventDefault();
-            submitMapCalibrationPoint(event.target);
-            return;
-        }
-
-        if (event.target.matches("[data-map-calibration-preview-form]")) {
-            event.preventDefault();
-            state.mapCalibration.previewWorldX = event.target.elements.namedItem("previewWorldX").value;
-            state.mapCalibration.previewWorldZ = event.target.elements.namedItem("previewWorldZ").value;
-            renderMapCalibrationPage();
-            return;
-        }
-
         if (event.target.matches("[data-feedback-create]")) {
             event.preventDefault();
             void submitFeedbackTicket(event.target);
@@ -2156,6 +2065,7 @@ function bindStaticEvents() {
     });
 
     window.addEventListener("hashchange", () => {
+        state.routeScrollPending = true;
         applyRoute();
         render();
     });
@@ -2236,14 +2146,6 @@ function applyRoute() {
     if (route === "admin-progression") {
         if (!openProtectedAdminRoute("home")) return;
         state.view = "adminProgression";
-        state.matchPlayerId = "";
-        state.selectedId = null;
-        state.profilePreviewOpen = false;
-        return;
-    }
-    if (route === "admin-map-calibration") {
-        if (!openProtectedAdminRoute("home")) return;
-        state.view = "adminMapCalibration";
         state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -2373,6 +2275,7 @@ function updatePlayerHash() {
 
 function setRouteHash(hash) {
     if (window.location.hash.replace(/^#/, "") === hash) return false;
+    state.routeScrollPending = true;
     window.location.hash = hash;
     return true;
 }
@@ -2381,9 +2284,7 @@ function enforceProtectedAdminRoute() {
     if (!state.authReady || isPlaytestAdmin()) return;
     const protectedView = state.view;
     if (
-        !["store", "adminHelp", "adminTickets", "adminProgression", "adminMapCalibration", "communityAdmin"].includes(
-            protectedView
-        )
+        !["store", "adminHelp", "adminTickets", "adminProgression", "communityAdmin"].includes(protectedView)
     )
         return;
 
@@ -2409,6 +2310,7 @@ function routeTo(route) {
     if (route === "home") {
         state.view = "home";
         state.expandedMatchIds.clear();
+        state.routeScrollPending = true;
         history.pushState("", document.title, window.location.pathname + window.location.search);
         render();
         return;
@@ -2472,21 +2374,6 @@ function routeTo(route) {
         state.selectedId = null;
         state.profilePreviewOpen = false;
         if (!setRouteHash("admin-progression")) render();
-        return;
-    }
-    if (route === "admin-map-calibration") {
-        if (!isPlaytestAdmin()) {
-            state.view = "home";
-            state.selectedId = null;
-            state.profilePreviewOpen = false;
-            window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
-            render();
-            return;
-        }
-        state.view = "adminMapCalibration";
-        state.selectedId = null;
-        state.profilePreviewOpen = false;
-        if (!setRouteHash("admin-map-calibration")) render();
         return;
     }
     if (route === "playtests") {
@@ -2633,6 +2520,8 @@ function manuallyRefreshStats() {
         try {
             await refreshData({ initial: false });
             markStatsRefreshSuccess();
+            render();
+            if (state.view === "match") matchDetailPage?.refresh();
         } catch (error) {
             console.error("Failed to refresh statistics", error);
             state.statsRefresh.status = "error";
@@ -2657,25 +2546,37 @@ function markStatsRefreshSuccess() {
 
 function renderStatsRefreshControl() {
     const refresh = state.statsRefresh;
+    const control = document.querySelector("[data-stats-refresh-control]");
     const button = document.querySelector("[data-stats-refresh]");
     const label = document.querySelector("[data-stats-refresh-label]");
     const status = document.querySelector("[data-stats-refresh-status]");
-    if (!(button instanceof HTMLButtonElement) || !label || !status) return;
+    if (!control || !(button instanceof HTMLButtonElement) || !label || !status) return;
 
+    const visible = state.view !== "home";
+    control.classList.toggle("hidden", !visible);
+    control.setAttribute("aria-hidden", visible ? "false" : "true");
     button.disabled = refresh.loading;
     button.classList.toggle("is-loading", refresh.loading);
-    label.textContent = refresh.loading ? "Refreshing..." : refresh.status === "error" ? "Retry" : "Refresh";
+    const elapsed = refresh.lastUpdatedAt ? elapsedRefreshTime(refresh.lastUpdatedAt) : "Load";
+    label.textContent = refresh.loading ? "..." : refresh.status === "error" ? "Retry" : elapsed;
     status.classList.toggle("is-error", refresh.status === "error");
     status.classList.toggle("is-success", refresh.status === "success");
     status.textContent =
         refresh.message ||
         (refresh.lastUpdatedAt
-            ? `Last updated ${new Intl.DateTimeFormat(undefined, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit"
-              }).format(refresh.lastUpdatedAt)}`
+            ? `Statistics last refreshed ${elapsedRefreshTime(refresh.lastUpdatedAt, true)} ago.`
             : "Not refreshed yet");
+    button.title = refresh.loading ? "Refreshing statistics" : `${status.textContent} Click to refresh.`;
+    button.setAttribute("aria-label", button.title);
+}
+
+function elapsedRefreshTime(date, long = false) {
+    const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    if (seconds < 60) return long ? `${seconds} second${seconds === 1 ? "" : "s"}` : `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return long ? `${minutes} minute${minutes === 1 ? "" : "s"}` : `${minutes}m`;
+    const hours = Math.floor(minutes / 60);
+    return long ? `${hours} hour${hours === 1 ? "" : "s"}` : `${hours}h`;
 }
 
 async function fetchSupabaseExport() {
@@ -3604,9 +3505,6 @@ function render() {
         case "adminProgression":
             renderProgressionAdminPage();
             break;
-        case "adminMapCalibration":
-            renderMapCalibrationPage();
-            break;
         case "adminHelp":
             renderAdminDocumentationPage();
             break;
@@ -3659,9 +3557,6 @@ function renderRoute() {
     document.getElementById("ticket-view").classList.toggle("hidden", state.view !== "ticket");
     document.getElementById("admin-tickets-view").classList.toggle("hidden", state.view !== "adminTickets");
     document.getElementById("admin-progression-view").classList.toggle("hidden", state.view !== "adminProgression");
-    document
-        .getElementById("admin-map-calibration-view")
-        .classList.toggle("hidden", state.view !== "adminMapCalibration");
     document.getElementById("community-admin-view").classList.toggle("hidden", state.view !== "communityAdmin");
     document.getElementById("account-view").classList.toggle("hidden", state.view !== "account");
     document.getElementById("store-view").classList.toggle("hidden", state.view !== "store");
@@ -3678,11 +3573,16 @@ function renderRoute() {
     } else {
         matchDetailPage?.close();
     }
+    if (state.routeScrollPending && !(state.view === "home" && (state.pendingScrollTarget || state.pendingDetailsTarget))) {
+        state.routeScrollPending = false;
+        window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
+    }
     if (state.view === "home" && (state.pendingScrollTarget || state.pendingDetailsTarget)) {
         const targetId = state.pendingScrollTarget;
         const detailsId = state.pendingDetailsTarget;
         state.pendingScrollTarget = "";
         state.pendingDetailsTarget = "";
+        state.routeScrollPending = false;
         window.requestAnimationFrame(() => {
             const details = detailsId ? document.getElementById(detailsId) : null;
             if (details instanceof HTMLDetailsElement) details.open = true;
@@ -3708,6 +3608,7 @@ function renderTopNav() {
         floatingButton.setAttribute("aria-label", onHome ? "Open stats tracker" : "Return to server hub");
         floatingButton.title = onHome ? "Open stats tracker" : "Return to server hub";
     }
+    renderStatsRefreshControl();
     const canSeeStore = isPlaytestAdmin();
     document.querySelectorAll("[data-admin-store-link]").forEach((link) => {
         link.hidden = !canSeeStore;
@@ -3860,7 +3761,6 @@ function renderAccountSidePanel() {
                                 ? `
                             <button class="profile-drawer-tickets" type="button" data-route="admin-tickets">Ticket dashboard</button>
                             <button class="profile-drawer-progression" type="button" data-route="admin-progression">Progression &amp; missions</button>
-                            <button class="profile-drawer-map" type="button" data-route="admin-map-calibration">Map calibration</button>
                             <button class="profile-drawer-docs" type="button" data-route="admin-help">Admin documentation</button>
                             <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
                         `
@@ -4696,276 +4596,6 @@ async function loadAdminDocumentation({ force = false } = {}) {
     }
 }
 
-function renderMapCalibrationPage() {
-    const body = document.getElementById("map-calibration-body");
-    if (!body) return;
-    if (!isPlaytestAdmin()) {
-        enforceProtectedAdminRoute();
-        return;
-    }
-
-    loadMapCalibrationDraft();
-    const calibration = state.mapCalibration;
-    const fit = fitMapCalibration(calibration.points);
-    const previewWorldX = Number(calibration.previewWorldX);
-    const previewWorldZ = Number(calibration.previewWorldZ);
-    const preview =
-        fit.valid && Number.isFinite(previewWorldX) && Number.isFinite(previewWorldZ)
-            ? applyMapCalibration(fit.transform, previewWorldX, previewWorldZ)
-            : null;
-    const previewInImage = preview && preview.x >= 0 && preview.x <= 100 && preview.y >= 0 && preview.y <= 100;
-    const editPoint = calibration.points[calibration.editIndex] || null;
-
-    body.innerHTML = `
-        <section class="map-calibration-workspace">
-            <div class="map-calibration-stage-column">
-                <div class="map-calibration-notice">
-                    <strong>Approximate / uncalibrated</strong>
-                    <span>This draft is not applied to tactical playback. Current marker behavior remains unchanged.</span>
-                </div>
-                <div class="map-calibration-stage" data-map-calibration-stage role="button" tabindex="0" aria-label="Click a known location on the Shmar tactical map">
-                    <img src="./assets/shmar-vehicle-spawn-map.webp" alt="Shmar tactical map used for calibration">
-                    ${calibration.points
-                        .map(
-                            (point, index) => `
-                                <span class="map-calibration-marker" style="--marker-x:${point.imageXPercent}%;--marker-y:${point.imageYPercent}%" title="${escapeHtml(point.label)}">${index + 1}</span>
-                            `
-                        )
-                        .join("")}
-                    ${
-                        calibration.clickedXPercent !== null && calibration.clickedYPercent !== null
-                            ? `<span class="map-calibration-click" style="--marker-x:${calibration.clickedXPercent}%;--marker-y:${calibration.clickedYPercent}%"></span>`
-                            : ""
-                    }
-                    ${
-                        previewInImage
-                            ? `<span class="map-calibration-preview-marker" style="--marker-x:${preview.x}%;--marker-y:${preview.y}%">P</span>`
-                            : ""
-                    }
-                </div>
-                <p class="map-calibration-coordinate">
-                    ${
-                        calibration.clickedXPercent === null
-                            ? "Click the image to select a recognizable location."
-                            : `Selected image position: ${calibration.clickedXPercent.toFixed(2)}% X, ${calibration.clickedYPercent.toFixed(2)}% Y`
-                    }
-                </p>
-            </div>
-
-            <div class="map-calibration-controls">
-                <form class="map-calibration-form" data-map-calibration-form>
-                    <div>
-                        <p class="panel-kicker">${editPoint ? "Edit Point" : "Add Point"}</p>
-                        <h3>${editPoint ? escapeHtml(editPoint.label) : "Match image to world coordinates"}</h3>
-                    </div>
-                    <label><span>Label</span><input name="label" maxlength="100" value="${escapeHtml(editPoint?.label || "")}" placeholder="Airport north-west corner" required></label>
-                    <div class="map-calibration-fields">
-                        <label><span>Minecraft world X</span><input name="worldX" type="number" step="0.01" value="${escapeHtml(editPoint?.worldX ?? "")}" required></label>
-                        <label><span>Minecraft world Z</span><input name="worldZ" type="number" step="0.01" value="${escapeHtml(editPoint?.worldZ ?? "")}" required></label>
-                    </div>
-                    <div class="map-calibration-fields">
-                        <label><span>Image X</span><input value="${calibration.clickedXPercent === null ? "" : `${calibration.clickedXPercent.toFixed(2)}%`}" readonly></label>
-                        <label><span>Image Y</span><input value="${calibration.clickedYPercent === null ? "" : `${calibration.clickedYPercent.toFixed(2)}%`}" readonly></label>
-                    </div>
-                    <div class="map-calibration-form-actions">
-                        ${editPoint ? '<button type="button" data-map-calibration-cancel>Cancel edit</button>' : ""}
-                        <button type="submit">${editPoint ? "Save point" : "Add point"}</button>
-                    </div>
-                    ${calibration.message ? `<p class="form-status">${escapeHtml(calibration.message)}</p>` : ""}
-                    ${calibration.error ? `<p class="form-status error">${escapeHtml(calibration.error)}</p>` : ""}
-                </form>
-
-                <form class="map-calibration-form" data-map-calibration-preview-form>
-                    <div>
-                        <p class="panel-kicker">World Preview</p>
-                        <h3>Project a supplied coordinate</h3>
-                    </div>
-                    <div class="map-calibration-fields">
-                        <label><span>World X</span><input name="previewWorldX" type="number" step="0.01" value="${escapeHtml(calibration.previewWorldX)}"></label>
-                        <label><span>World Z</span><input name="previewWorldZ" type="number" step="0.01" value="${escapeHtml(calibration.previewWorldZ)}"></label>
-                    </div>
-                    <button type="submit" ${fit.valid ? "" : "disabled"}>Preview position</button>
-                    ${
-                        preview
-                            ? `<p class="form-status ${previewInImage ? "" : "error"}">Projected image position: ${preview.x.toFixed(2)}% X, ${preview.y.toFixed(2)}% Y${previewInImage ? "" : " (outside image)"}</p>`
-                            : ""
-                    }
-                </form>
-            </div>
-        </section>
-
-        <section class="map-calibration-results">
-            <div class="section-heading compact">
-                <div>
-                    <p class="panel-kicker">Reference Points</p>
-                    <h3>${calibration.points.length} collected</h3>
-                </div>
-                <button type="button" data-map-calibration-export ${fit.valid ? "" : "disabled"}>Export candidate JSON</button>
-            </div>
-            <div class="map-calibration-fit ${fit.valid ? "valid" : "pending"}">
-                ${
-                    fit.valid
-                        ? `
-                            <strong>Affine candidate available</strong>
-                            <span>RMS error ${fit.rmsErrorPercent.toFixed(3)}% · max error ${fit.maxErrorPercent.toFixed(3)}%</span>
-                            <span>X scale ${fit.xScalePercentPerBlock.toFixed(6)}%/block · Z scale ${fit.zScalePercentPerBlock.toFixed(6)}%/block</span>
-                            <span>Rotation ${fit.rotationDegrees.toFixed(2)}° · axis inversion ${fit.axisInverted ? "detected" : "not detected"}</span>
-                        `
-                        : `<strong>Not ready to calculate</strong><span>${escapeHtml(fit.reason)}</span>`
-                }
-            </div>
-            <div class="map-calibration-point-list">
-                ${
-                    calibration.points.length
-                        ? calibration.points
-                              .map(
-                                  (point, index) => `
-                                    <article>
-                                        <span class="map-calibration-point-number">${index + 1}</span>
-                                        <div>
-                                            <strong>${escapeHtml(point.label)}</strong>
-                                            <span>World ${point.worldX}, ${point.worldZ} · Image ${point.imageXPercent.toFixed(2)}%, ${point.imageYPercent.toFixed(2)}%</span>
-                                            ${fit.valid ? `<small>Fit error ${fit.pointErrors[index].toFixed(3)}%</small>` : ""}
-                                        </div>
-                                        <div>
-                                            <button type="button" data-map-calibration-edit="${index}">Edit</button>
-                                            <button type="button" data-map-calibration-remove="${index}">Remove</button>
-                                        </div>
-                                    </article>
-                                `
-                              )
-                              .join("")
-                        : '<p class="empty-state">No calibration points yet.</p>'
-                }
-            </div>
-        </section>
-
-        <section class="map-calibration-guide">
-            <p class="panel-kicker">Collection Procedure</p>
-            <h3>How to record reliable points</h3>
-            <ol>
-                <li>Join the Shmar world and stand on a precise, recognizable corner or landmark.</li>
-                <li>Open Minecraft's debug screen and record world X and Z. Do not use Y for map positioning.</li>
-                <li>Click that exact location on the image, enter X/Z, and add the point.</li>
-                <li>Collect at least three non-collinear points. Prefer five: north-west, north-east, south-west, south-east, and centre.</li>
-                <li>Use the preview fields to compare additional in-game coordinates that were not used for fitting.</li>
-                <li>Export the candidate only after errors and independent preview locations are acceptable. The export remains marked unverified.</li>
-            </ol>
-            <p>Do not infer map bounds, rotation, cropping, scale, or axis direction from appearance alone. Use exact correspondence points.</p>
-        </section>
-    `;
-}
-
-function submitMapCalibrationPoint(form) {
-    const calibration = state.mapCalibration;
-    const label = String(form.elements.namedItem("label")?.value || "").trim();
-    const worldX = Number(form.elements.namedItem("worldX")?.value);
-    const worldZ = Number(form.elements.namedItem("worldZ")?.value);
-    if (
-        !label ||
-        !Number.isFinite(worldX) ||
-        !Number.isFinite(worldZ) ||
-        calibration.clickedXPercent === null ||
-        calibration.clickedYPercent === null
-    ) {
-        calibration.error = "Select the image location and enter a label plus valid world X/Z coordinates.";
-        calibration.message = "";
-        renderMapCalibrationPage();
-        return;
-    }
-
-    const point = {
-        label,
-        worldX,
-        worldZ,
-        imageXPercent: calibration.clickedXPercent,
-        imageYPercent: calibration.clickedYPercent
-    };
-    if (calibration.editIndex >= 0 && calibration.points[calibration.editIndex]) {
-        calibration.points[calibration.editIndex] = point;
-        calibration.message = "Calibration point updated.";
-    } else {
-        calibration.points.push(point);
-        calibration.message = "Calibration point added.";
-    }
-    calibration.editIndex = -1;
-    calibration.clickedXPercent = null;
-    calibration.clickedYPercent = null;
-    calibration.error = "";
-    saveMapCalibrationDraft();
-    renderMapCalibrationPage();
-}
-
-function loadMapCalibrationDraft() {
-    const calibration = state.mapCalibration;
-    if (calibration.loaded) return;
-    calibration.loaded = true;
-    try {
-        const stored = JSON.parse(window.localStorage?.getItem(MAP_CALIBRATION_STORAGE_KEY) || "null");
-        if (!Array.isArray(stored?.points)) return;
-        calibration.points = stored.points
-            .map((point) => ({
-                label: String(point?.label || "").trim(),
-                worldX: Number(point?.worldX),
-                worldZ: Number(point?.worldZ),
-                imageXPercent: Number(point?.imageXPercent),
-                imageYPercent: Number(point?.imageYPercent)
-            }))
-            .filter(
-                (point) =>
-                    point.label &&
-                    [point.worldX, point.worldZ, point.imageXPercent, point.imageYPercent].every(Number.isFinite)
-            );
-    } catch (_error) {
-        calibration.points = [];
-    }
-}
-
-function saveMapCalibrationDraft() {
-    try {
-        window.localStorage?.setItem(
-            MAP_CALIBRATION_STORAGE_KEY,
-            JSON.stringify({ points: state.mapCalibration.points })
-        );
-    } catch (_error) {
-        state.mapCalibration.error = "The browser could not persist this draft. Export it before leaving.";
-    }
-}
-
-function exportMapCalibration() {
-    const fit = fitMapCalibration(state.mapCalibration.points);
-    if (!fit.valid) return;
-    const payload = {
-        schemaVersion: 1,
-        mapId: "shmar",
-        mapVersion: "unverified",
-        label: "Shmar",
-        imageUrl: "./assets/shmar-vehicle-spawn-map.webp",
-        calibrated: false,
-        requiresVerification: true,
-        calibrationSource: "admin_affine_points",
-        points: state.mapCalibration.points,
-        affineTransform: fit.transform,
-        diagnostics: {
-            rmsErrorPercent: fit.rmsErrorPercent,
-            maxErrorPercent: fit.maxErrorPercent,
-            translation: fit.translation,
-            xScalePercentPerBlock: fit.xScalePercentPerBlock,
-            zScalePercentPerBlock: fit.zScalePercentPerBlock,
-            rotationDegrees: fit.rotationDegrees,
-            axisInverted: fit.axisInverted
-        }
-    };
-    const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "shmar-map-calibration-candidate.json";
-    link.click();
-    URL.revokeObjectURL(url);
-    state.mapCalibration.message = "Candidate JSON exported. It is intentionally marked unverified.";
-    renderMapCalibrationPage();
-}
 
 function renderProgressionAdminPage({ forceBadgeEditor = false } = {}) {
     const body = document.getElementById("admin-progression-body");
@@ -6284,13 +5914,14 @@ async function submitBadgeEditor(form) {
 
         progression.badgeEditorStatus = "Saving badge catalogue...";
         if (status) status.textContent = progression.badgeEditorStatus;
-        const result = await progression.api.saveBadgeOverride({
+        const savedBadge = {
             badge_id: badgeId,
             label,
             description,
             icon_url: iconUrl || null,
             tiers
-        });
+        };
+        const result = await progression.api.saveBadgeOverride(savedBadge);
         if (result.error) throw result.error;
 
         progression.badgeEditorId = badgeId;
@@ -6298,6 +5929,10 @@ async function submitBadgeEditor(form) {
         progression.badgeEditorStatus = progression.badgeMessage;
         progression.badgeEditorStatusError = "";
         await loadBadgeCatalogOverrides({ force: true });
+        const persisted = state.badges.overrides.find((override) => override.badgeId === badgeId);
+        if (!state.badges.ready || !badgeOverrideMatches(persisted, savedBadge)) {
+            throw new Error("Supabase returned the previous badge values after saving. Retry after the current load finishes.");
+        }
         clearBadgeEditorDraft({ resetExpanded: false });
     } catch (error) {
         console.error("Could not save badge catalogue override", error);
@@ -6555,7 +6190,11 @@ function badgeCatalog() {
 
 async function loadBadgeCatalogOverrides({ force = false } = {}) {
     const badgeState = state.badges;
-    if (badgeState.loading || (badgeState.loaded && !force)) return;
+    if (badgeState.loading) {
+        await badgeState.request;
+        if (!force) return;
+    }
+    if (badgeState.loaded && !force) return;
     badgeState.loading = true;
     badgeState.error = "";
 
@@ -6569,24 +6208,46 @@ async function loadBadgeCatalogOverrides({ force = false } = {}) {
         return;
     }
 
-    try {
-        const result = await state.progression.api.listBadgeOverrides();
-        if (result.error) throw result.error;
-        badgeState.overrides = (Array.isArray(result.data) ? result.data : [])
-            .map(normalizeBadgeCatalogOverride)
-            .filter(Boolean);
-        badgeState.catalog = mergeBadgeCatalog(BADGE_CATALOG, badgeState.overrides);
-        badgeState.ready = true;
-    } catch (error) {
-        badgeState.catalog = BADGE_CATALOG;
-        badgeState.overrides = [];
-        badgeState.ready = false;
-        badgeState.error = badgeCatalogErrorMessage(error);
-    } finally {
-        badgeState.loaded = true;
-        badgeState.loading = false;
-        if (state.view === "adminProgression") renderProgressionAdminPage();
-    }
+    const request = (async () => {
+        try {
+            const result = await state.progression.api.listBadgeOverrides();
+            if (result.error) throw result.error;
+            badgeState.overrides = (Array.isArray(result.data) ? result.data : [])
+                .map(normalizeBadgeCatalogOverride)
+                .filter(Boolean);
+            badgeState.catalog = mergeBadgeCatalog(BADGE_CATALOG, badgeState.overrides);
+            badgeState.ready = true;
+        } catch (error) {
+            badgeState.catalog = BADGE_CATALOG;
+            badgeState.overrides = [];
+            badgeState.ready = false;
+            badgeState.error = badgeCatalogErrorMessage(error);
+        } finally {
+            badgeState.loaded = true;
+            badgeState.loading = false;
+            if (state.view === "adminProgression") renderProgressionAdminPage();
+        }
+    })();
+    badgeState.request = request;
+    await request;
+    if (badgeState.request === request) badgeState.request = null;
+}
+
+function badgeOverrideMatches(override, saved) {
+    if (!override) return false;
+    if (override.label !== saved.label || override.description !== saved.description) return false;
+    const expectedTiers = Array.isArray(saved.tiers) ? saved.tiers : [];
+    if (override.tiers.length !== expectedTiers.length) return false;
+    return expectedTiers.every((tier, index) => {
+        const persisted = override.tiers[index];
+        return (
+            persisted?.index === tier.index &&
+            persisted.name === tier.name &&
+            persisted.description === tier.description &&
+            persisted.target === tier.target &&
+            persisted.targetPerMap === tier.target_per_map
+        );
+    });
 }
 
 function badgeCatalogErrorMessage(error, fallback = "Badge editing is unavailable.") {

@@ -45,7 +45,7 @@ function brVehicle(timeMs) {
         return [
             {
                 vehicleId: "vehicle-tank-1",
-                vehicleType: "Tank",
+                vehicleType: "ashvehicle:m1a1abrams",
                 x: 58,
                 y: 65,
                 z: 55,
@@ -59,7 +59,7 @@ function brVehicle(timeMs) {
     return [
         {
             vehicleId: "vehicle-tank-1",
-            vehicleType: "Tank",
+            vehicleType: "ashvehicle:m1a1abrams",
             x: 58,
             y: 65,
             z: 55,
@@ -258,7 +258,7 @@ const brEvents = [
         attackerId: alpha,
         playerId: alpha,
         vehicleId: "vehicle-tank-1",
-        vehicleType: "Tank",
+        vehicleType: "ashvehicle:m1a1abrams",
         weaponId: "superbwarfare:javelin",
         weaponLabel: "FGM-148 Javelin",
         occupantPlayerIds: [delta],
