@@ -46,6 +46,45 @@ describe("match telemetry normalization", () => {
         expect(center).toEqual({ x: 50, y: 50, outsideBounds: false });
         expect(outside).toEqual({ x: 100, y: 50, outsideBounds: true });
     });
+
+    it("preserves lifecycle fields and discrete death-to-respawn snapshots", async () => {
+        const source = await fixture("fixture-dm");
+        source.events[0].phase = "active";
+        const elimination = source.events.find((event) => event.type === "elimination");
+        const respawn = source.events.find((event) => event.type === "respawn");
+        respawn.remainingRespawns = 2;
+        source.snapshots.push({
+            ...source.snapshots.find((snapshot) => snapshot.snapshotId === elimination.snapshotId),
+            snapshotId: "snapshot-dead-gap",
+            timeMs: 7_000,
+            reason: "periodic",
+            players: source.snapshots
+                .find((snapshot) => snapshot.snapshotId === elimination.snapshotId)
+                .players.filter((player) => player.playerId !== "p_alpha")
+        });
+        source.result.participants[0] = {
+            ...source.result.participants[0],
+            alive: true,
+            eliminated: false,
+            eliminatedAtMs: null,
+            finalPlacement: 1
+        };
+
+        const telemetry = normalizeMatchTelemetry(source, "fixture-dm");
+        const deadGap = telemetry.snapshots.find((snapshot) => snapshot.snapshotId === "snapshot-dead-gap");
+        const respawnSnapshot = telemetry.snapshots.find((snapshot) => snapshot.snapshotId === respawn.snapshotId);
+
+        expect(telemetry.events[0].phase).toBe("active");
+        expect(telemetry.events.find((event) => event.type === "respawn").remainingRespawns).toBe(2);
+        expect(deadGap.players.some((player) => player.playerId === "p_alpha")).toBe(false);
+        expect(respawnSnapshot.players.find((player) => player.playerId === "p_alpha")?.alive).toBe(true);
+        expect(telemetry.result.participants[0]).toMatchObject({
+            alive: true,
+            eliminated: false,
+            eliminatedAtMs: null,
+            finalPlacement: 1
+        });
+    });
 });
 
 describe("match tactical playback", () => {

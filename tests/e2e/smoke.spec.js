@@ -37,7 +37,6 @@ window.COB_SUPABASE_TABLE = "cob_stats_exports";
 window.COB_SUPABASE_ROW_ID = "live";
 window.COB_PUBLIC_SITE_URL = "http://127.0.0.1:4175/";
 window.COB_STATS_API_URL = "";
-window.COB_STATS_POLL_MS = 10000;
 `;
 
 const transparentPng = Buffer.from(
@@ -389,6 +388,27 @@ test("homepage and primary navigation load without fatal errors", async ({ page 
     expect(pageErrors).toEqual([]);
 });
 
+test("statistics refresh only on demand and preserves the active route on failure", async ({ page }) => {
+    let statsRequests = 0;
+    page.on("request", (request) => {
+        if (request.url().includes("/rest/v1/cob_stats_exports")) statsRequests += 1;
+    });
+
+    await openApp(page, "#view=leaderboards&board=players&mode=deathmatch&sort=kills");
+    await expect(page.locator("[data-stats-refresh-status]")).toContainText("Last updated");
+    const requestsAfterLoad = statsRequests;
+
+    await page.waitForTimeout(10_500);
+    expect(statsRequests).toBe(requestsAfterLoad);
+
+    const routeBeforeRefresh = await page.evaluate(() => window.location.hash);
+    await page.locator("[data-stats-refresh]").click();
+    await expect(page.locator("[data-stats-refresh-label]")).toHaveText("Retry");
+    expect(statsRequests).toBe(requestsAfterLoad + 1);
+    await expect.poll(() => page.evaluate(() => window.location.hash)).toBe(routeBeforeRefresh);
+    await expect(page.locator("#leaderboard-view")).toBeVisible();
+});
+
 test("existing public hash routes still open", async ({ page }) => {
     await openApp(page, "#playtests");
     await expect(page.locator("#playtests-view")).toBeVisible();
@@ -500,6 +520,7 @@ test("admin routes reject a logged-out visitor", async ({ page }) => {
         ["#admin-tickets", "#admin-tickets-view", /#feedback$/],
         ["#admin-help", "#admin-help-view", /\/$/],
         ["#admin-progression", "#admin-progression-view", /\/$/],
+        ["#admin-map-calibration", "#admin-map-calibration-view", /\/$/],
         ["#store", "#store-view", /\/$/],
         ["#community-dates", "#community-admin-view", /#playtests$/],
         ["#community-admin", "#community-admin-view", /#community-admin$/]
@@ -512,6 +533,32 @@ test("admin routes reject a logged-out visitor", async ({ page }) => {
         await expect(page.locator(selector)).toBeHidden();
     }
     await expect(page.getByRole("button", { name: "Admin documentation" })).toHaveCount(0);
+});
+
+test("administrators can collect and retain a candidate affine map calibration", async ({ page }) => {
+    await openAdminApp(page, "#admin-map-calibration");
+    const view = page.locator("#admin-map-calibration-view");
+    await expect(view).toBeVisible();
+    await expect(view).toContainText("Approximate / uncalibrated");
+
+    const addPoint = async (label, worldX, worldZ, x, y) => {
+        await view.locator("[data-map-calibration-stage]").click({ position: { x, y } });
+        const form = view.locator("[data-map-calibration-form]");
+        await form.locator("input[name='label']").fill(label);
+        await form.locator("input[name='worldX']").fill(String(worldX));
+        await form.locator("input[name='worldZ']").fill(String(worldZ));
+        await form.getByRole("button", { name: "Add point" }).click();
+    };
+
+    await addPoint("North west", 0, 0, 80, 80);
+    await addPoint("North east", 100, 0, 220, 80);
+    await addPoint("South west", 0, 100, 80, 220);
+    await expect(view).toContainText("Affine candidate available");
+    await expect(view.locator("[data-map-calibration-export]")).toBeEnabled();
+
+    await page.reload();
+    await expect(view).toBeVisible();
+    await expect(view).toContainText("3 collected");
 });
 
 test("admin routes reject a signed-in non-admin on direct navigation and refresh", async ({ page }) => {

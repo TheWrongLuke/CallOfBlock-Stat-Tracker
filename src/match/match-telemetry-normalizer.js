@@ -57,7 +57,7 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
     const durationMs = finiteNonNegative(raw.durationMs) ?? highestTime;
     const map = normalizeMap(raw.map);
     if (!map.calibrated || !map.imageUrl) {
-        warnings.push("A calibrated map image is unavailable; the viewer uses a coordinate grid.");
+        warnings.push("Map calibration is unavailable; marker positions use the approximate coordinate grid.");
     }
 
     return {
@@ -260,6 +260,8 @@ function normalizeEvent(value, index, participantIds, snapshotIds, warnings) {
         eventId: text(value.eventId) || `${type}-${index + 1}`,
         type,
         timeMs,
+        phase: text(value.phase),
+        remainingRespawns: finiteNonNegative(value.remainingRespawns),
         snapshotId: snapshotIds.has(text(value.snapshotId)) ? text(value.snapshotId) : "",
         engagementId: text(value.engagementId),
         engagementStartMs: finiteNonNegative(value.engagementStartMs),
@@ -400,7 +402,16 @@ function normalizeResult(value, participantIds, warnings) {
 function normalizeParticipantResult(value, participantIds) {
     const playerId = text(value?.playerId);
     if (!participantIds.has(playerId)) return null;
-    const output = { ...value, playerId, teamId: text(value.teamId), won: value.won === true };
+    const output = {
+        ...value,
+        playerId,
+        teamId: text(value.teamId),
+        won: value.won === true,
+        alive: value.alive === true,
+        eliminated: value.eliminated === true,
+        eliminatedAtMs: finiteNonNegative(value.eliminatedAtMs),
+        finalPlacement: finiteNonNegative(value.finalPlacement)
+    };
     for (const key of [
         "placement",
         "kills",

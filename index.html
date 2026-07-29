@@ -372,7 +372,16 @@
                     <h2 id="leaderboard-title">Loading...</h2>
                     <p class="leaderboard-count" id="leaderboard-count">0 tracked players</p>
                 </div>
-                <div class="tab-row" id="mode-tabs" role="group" aria-label="Leaderboard mode"></div>
+                <div class="leaderboard-header-actions">
+                    <div class="stats-refresh-control" aria-live="polite">
+                        <button type="button" class="stats-refresh-button" data-stats-refresh>
+                            <span class="stats-refresh-symbol" aria-hidden="true">&#8635;</span>
+                            <span data-stats-refresh-label>Refresh</span>
+                        </button>
+                        <small data-stats-refresh-status>Loading statistics...</small>
+                    </div>
+                    <div class="tab-row" id="mode-tabs" role="group" aria-label="Leaderboard mode"></div>
+                </div>
             </div>
 
             <div class="toolbar">
@@ -499,10 +508,26 @@
             <div class="admin-help-actions">
                 <button type="button" data-route="admin-tickets">Ticket dashboard</button>
                 <button type="button" data-route="admin-progression">Progression &amp; missions</button>
+                <button type="button" data-route="admin-map-calibration">Map calibration</button>
                 <a href="#help">Player help</a>
             </div>
         </section>
         <div id="admin-documentation-body" aria-live="polite"></div>
+    </main>
+
+    <main class="admin-map-calibration-view hidden" id="admin-map-calibration-view">
+        <section class="feedback-hero">
+            <div>
+                <p class="panel-kicker">Admin Map Tools</p>
+                <h2>Tactical map calibration.</h2>
+                <p>Collect known image and Minecraft X/Z pairs, inspect affine-fit error, and export a candidate configuration.</p>
+            </div>
+            <div class="admin-help-actions">
+                <button type="button" data-route="admin-help">Admin documentation</button>
+                <button type="button" data-route="admin-progression">Progression &amp; missions</button>
+            </div>
+        </section>
+        <div class="map-calibration-body" id="map-calibration-body" aria-live="polite"></div>
     </main>
 
     <main class="admin-progression-view hidden" id="admin-progression-view">

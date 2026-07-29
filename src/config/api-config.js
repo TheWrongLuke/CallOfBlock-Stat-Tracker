@@ -5,4 +5,3 @@ window.COB_SUPABASE_ROW_ID = "live";
 window.COB_PUBLIC_SITE_URL = "https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/";
 
 window.COB_STATS_API_URL = "";
-window.COB_STATS_POLL_MS = 10000;

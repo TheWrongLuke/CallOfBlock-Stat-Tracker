@@ -88,13 +88,19 @@ export class MatchMapRenderer {
         this.stage.tabIndex = 0;
         this.stage.setAttribute("aria-label", `${this.telemetry.map.label} tactical playback map`);
 
-        if (this.telemetry.map.imageUrl && this.telemetry.map.calibrated) {
+        if (this.telemetry.map.imageUrl) {
             const image = document.createElement("img");
             image.className = "tactical-map-image";
             image.src = this.telemetry.map.imageUrl;
             image.alt = `${this.telemetry.map.label} tactical map`;
             image.decoding = "async";
             this.stage.append(image);
+            if (!this.telemetry.map.calibrated) {
+                const status = document.createElement("span");
+                status.className = "tactical-map-calibration-status";
+                status.textContent = "Approximate playback - map uncalibrated";
+                this.stage.append(status);
+            }
         } else {
             const grid = document.createElement("div");
             grid.className = "tactical-map-grid";
@@ -104,7 +110,7 @@ export class MatchMapRenderer {
                 <span class="grid-east">E</span>
                 <span class="grid-south">S</span>
                 <span class="grid-west">W</span>
-                <span class="grid-fallback-label">No calibrated map image</span>
+                <span class="grid-fallback-label">Approximate playback - map uncalibrated</span>
             `;
             this.stage.append(grid);
         }
