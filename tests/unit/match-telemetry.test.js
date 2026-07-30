@@ -157,7 +157,7 @@ describe("match tactical playback", () => {
         expect(controller.sequence.some((moment) => moment.id === "vehicle-destroyed-1")).toBe(false);
 
         controller.selectEvent("elimination-1");
-        expect(controller.state().snapshot.timeMs).toBe(22_000);
+        expect(controller.state().snapshot.timeMs).toBe(28_000);
         expect(controller.state().currentEventId).toBe("elimination-1");
 
         controller.setSkipIdle(false);
@@ -191,17 +191,22 @@ describe("match tactical playback", () => {
         vi.useRealTimers();
     });
 
-    it("keeps the latest hit or elimination available for the tactical line", async () => {
+    it("shows a hit or elimination line for one second of replay time", async () => {
         const telemetry = normalizeMatchTelemetry(await fixture("fixture-br"), "fixture-br");
         const controller = new MatchPlaybackController(telemetry);
 
         controller.setSkipIdle(false);
-        controller.seek(27_000);
+        controller.seek(26_999);
         expect(controller.state().combatEvent?.eventId).toBe("damage-4");
+        controller.seek(27_000);
+        expect(controller.state().combatEvent).toBeNull();
 
-        controller.seek(34_000);
+        controller.seek(28_999);
         expect(controller.state().combatEvent?.eventId).toBe("elimination-1");
+        controller.seek(29_000);
+        expect(controller.state().combatEvent).toBeNull();
 
+        controller.seek(28_500);
         controller.setFilter("eliminations", false);
         expect(controller.state().combatEvent).toBeNull();
         controller.destroy();

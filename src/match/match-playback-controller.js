@@ -1,6 +1,7 @@
 const FRAME_INTERVAL_MS = 32;
 const MAX_FRAME_DELTA_MS = 250;
 const ISOLATED_EVENT_WINDOW_MS = 2000;
+const COMBAT_LINE_DURATION_MS = 1000;
 
 const DEFAULT_FILTERS = Object.freeze({
     engagements: true,
@@ -52,11 +53,12 @@ export class MatchPlaybackController {
         return events.sort((a, b) => a.timeMs - b.timeMs);
     }
 
-    latestCombatEvent() {
+    currentCombatEvent() {
         for (let index = this.telemetry.events.length - 1; index >= 0; index--) {
             const event = this.telemetry.events[index];
             if (event.timeMs > this.playheadMs) continue;
             if (event.type !== "damage" && event.type !== "elimination") continue;
+            if (this.playheadMs - event.timeMs >= COMBAT_LINE_DURATION_MS) return null;
             return eventVisible(event, this.filters) ? event : null;
         }
         return null;
@@ -78,7 +80,7 @@ export class MatchPlaybackController {
             snapshotIndex: this.currentSnapshotIndex,
             snapshotCount: this.telemetry.snapshots.length,
             events: this.currentEvents(),
-            combatEvent: this.latestCombatEvent(),
+            combatEvent: this.currentCombatEvent(),
             currentEventId: this.currentEventId,
             moment,
             momentIndex: this.skipIdle ? this.sequenceIndex : null,
@@ -154,8 +156,9 @@ export class MatchPlaybackController {
         const engagement = event.engagementId
             ? this.telemetry.engagements.find((candidate) => candidate.engagementId === event.engagementId)
             : null;
+        const isCombatEvent = event.type === "damage" || event.type === "elimination";
         const target =
-            this.skipIdle && this.filters.engagements && engagement?.qualifiesForSkipIdle
+            !isCombatEvent && this.skipIdle && this.filters.engagements && engagement?.qualifiesForSkipIdle
                 ? engagement.startMs
                 : event.timeMs;
         this.seek(target);

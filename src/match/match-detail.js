@@ -634,13 +634,11 @@ export function createMatchDetailPage({
     function renderEventCard(event, current = false) {
         const actorId = event.killerId || event.attackerId || event.playerId;
         const targetId = event.victimId;
+        const distance = eventDistance3d(event);
         const lines = [
             event.weaponLabel || labelFromId(event.weaponId),
             event.headshot ? "Headshot" : "",
-            event.distance3d === null ? "" : `${round(event.distance3d)} blocks`,
-            event.verticalDifference === null
-                ? ""
-                : `${round(Math.abs(event.verticalDifference))} blocks ${event.verticalDifference >= 0 ? "height advantage" : "below target"}`,
+            distance === null ? "" : `${round(distance)} blocks`,
             event.finalDamage === null ? "" : `${round(event.finalDamage)} final damage`,
             event.killerHealthAfter === null ? "" : `${round(event.killerHealthAfter)} HP remaining`
         ].filter(Boolean);
@@ -1212,6 +1210,16 @@ function ordinal(value) {
 
 function round(value) {
     return Math.round(Number(value) * 10) / 10;
+}
+
+function eventDistance3d(event) {
+    if (typeof event?.distance3d === "number" && Number.isFinite(event.distance3d)) return event.distance3d;
+    const start = event?.killerPosition || event?.attackerPosition;
+    const end = event?.victimPosition;
+    if (!start || !end) return null;
+    const values = [start.x, start.y, start.z, end.x, end.y, end.z].map(Number);
+    if (!values.every(Number.isFinite)) return null;
+    return Math.hypot(values[0] - values[3], values[1] - values[4], values[2] - values[5]);
 }
 
 function escapeHtml(value) {

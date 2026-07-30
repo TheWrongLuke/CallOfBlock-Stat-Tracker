@@ -379,15 +379,12 @@ export class MatchMapRenderer {
         line.classList.add(event.type === "elimination" ? "kill-line" : "engagement-line");
         this.lines.append(line);
 
-        if (event.type === "elimination" && event.distance3d !== null) {
+        const distance = eventDistance3d(event, start, end);
+        if (distance !== null) {
             const label = document.createElementNS(SVG_NS, "text");
             label.setAttribute("x", String(((startPoint.x + endPoint.x) / 2) * 10));
             label.setAttribute("y", String(((startPoint.y + endPoint.y) / 2) * 10));
-            const altitude =
-                event.verticalDifference === null
-                    ? ""
-                    : ` ${event.verticalDifference >= 0 ? "up" : "down"} ${round(Math.abs(event.verticalDifference))}`;
-            label.textContent = `${round(event.distance3d)} blocks${altitude}`;
+            label.textContent = `${round(distance)} blocks`;
             this.lines.append(label);
         }
     }
@@ -438,8 +435,8 @@ export class MatchMapRenderer {
             weapon.textContent = `Weapon: ${event.weaponLabel || labelFromId(event.weaponId)}`;
             this.tooltip.append(weapon);
         }
-        const distance = event?.distance3d ?? event?.horizontalDistance;
-        if (distance !== null && distance !== undefined) {
+        const distance = eventDistance3d(event);
+        if (distance !== null) {
             const range = document.createElement("span");
             range.textContent = `Shot range: ${round(distance)} blocks`;
             this.tooltip.append(range);
@@ -531,6 +528,14 @@ function normalizeMarkerOptions(value = {}) {
         showIcons: value.showIcons === undefined ? DEFAULT_MARKER_OPTIONS.showIcons : value.showIcons === true,
         showNames: value.showNames === undefined ? DEFAULT_MARKER_OPTIONS.showNames : value.showNames === true
     };
+}
+
+function eventDistance3d(event, start = event?.killerPosition || event?.attackerPosition, end = event?.victimPosition) {
+    if (typeof event?.distance3d === "number" && Number.isFinite(event.distance3d)) return event.distance3d;
+    if (!start || !end) return null;
+    const values = [start.x, start.y, start.z, end.x, end.y, end.z].map(Number);
+    if (!values.every(Number.isFinite)) return null;
+    return Math.hypot(values[0] - values[3], values[1] - values[4], values[2] - values[5]);
 }
 
 function teamColor(value) {

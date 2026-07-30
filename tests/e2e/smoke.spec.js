@@ -1026,19 +1026,30 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
 
     await matchView.locator('[data-match-event="elimination-1"]').first().click();
     await expect(matchView.locator(".tactical-event-lines .kill-line")).toBeVisible();
-    await expect(matchView.locator(".tactical-event-lines text")).toContainText("blocks");
+    await expect(matchView.locator(".tactical-event-lines text")).toHaveText(/^\d+(?:\.\d+)? blocks$/);
     await expect(matchView.locator("[data-match-event-feed]")).toContainText("Headshot");
-    await expect(matchView.locator("[data-match-event-feed]")).toContainText("height advantage");
+    await expect(matchView.locator("[data-match-event-feed]")).not.toContainText(/height advantage|below target/);
+    await matchView.locator("[data-match-timeline]").evaluate((element) => {
+        element.value = "26900";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator(".tactical-event-lines .engagement-line")).toBeVisible();
+    await expect(matchView.locator(".tactical-event-lines text")).toHaveText(/^\d+(?:\.\d+)? blocks$/);
     await matchView.locator("[data-match-timeline]").evaluate((element) => {
         element.value = "27000";
         element.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await expect(matchView.locator(".tactical-event-lines .engagement-line")).toBeVisible();
+    await expect(matchView.locator(".tactical-event-lines line")).toHaveCount(0);
     await matchView.locator("[data-match-timeline]").evaluate((element) => {
-        element.value = "34000";
+        element.value = "28900";
         element.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await expect(matchView.locator(".tactical-event-lines .kill-line")).toBeVisible();
+    await matchView.locator("[data-match-timeline]").evaluate((element) => {
+        element.value = "29000";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator(".tactical-event-lines line")).toHaveCount(0);
 
     const alphaMarker = matchView.locator('[data-tactical-player="p_alpha"]');
     await alphaMarker.focus();
