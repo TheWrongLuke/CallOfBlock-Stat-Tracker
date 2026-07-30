@@ -43,6 +43,8 @@ export function createMatchDetailPage({
     container.addEventListener("input", handleInput);
     container.addEventListener("submit", handleSubmit);
     container.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    document.addEventListener("webkitfullscreenchange", updateFullscreenState);
 
     return {
         open,
@@ -111,6 +113,7 @@ export function createMatchDetailPage({
     }
 
     function closePlayback() {
+        leaveReplayFullscreen();
         playback?.destroy();
         mapRenderer?.destroy();
         playback = null;
@@ -177,7 +180,10 @@ export function createMatchDetailPage({
                                 <p class="panel-kicker">Tactical playback</p>
                                 <h3 id="tactical-playback-title">${escapeHtml(telemetry.map.label)}</h3>
                             </div>
-                            <span data-match-time>${formatMatchTime(0)}</span>
+                            <div class="match-map-heading-actions">
+                                <span data-match-time>${formatMatchTime(0)}</span>
+                                <button type="button" class="match-fullscreen-button" data-match-fullscreen aria-label="Enter fullscreen replay" aria-pressed="false" title="Enter fullscreen replay">Fullscreen</button>
+                            </div>
                         </div>
                         <div data-match-map></div>
                         ${renderTimeline()}
@@ -289,7 +295,7 @@ export function createMatchDetailPage({
                 <fieldset class="match-marker-controls">
                     <legend>Players</legend>
                     <label class="match-marker-size">
-                        <span>Icon size</span>
+                        <span>Marker size</span>
                         <input type="range" min="0" max="4" step="1" value="${playbackPreferences.markers.size}" data-match-marker-size>
                         <output data-match-marker-size-output>${playbackPreferences.markers.size}/4</output>
                     </label>
@@ -562,7 +568,12 @@ export function createMatchDetailPage({
 
     function updatePlayback(playbackState) {
         if (!telemetry || !playbackState) return;
-        mapRenderer?.update(playbackState.snapshot, playbackState.events, playbackState.currentEventId);
+        mapRenderer?.update(
+            playbackState.snapshot,
+            playbackState.events,
+            playbackState.currentEventId,
+            playbackState.combatEvent
+        );
         setText("[data-match-time]", formatMatchTime(playbackState.snapshot?.timeMs || 0));
         setText("[data-match-status]", `${playbackState.statusLabel} - ${playbackState.moment?.label || "Snapshot"}`);
         setText("[data-match-play]", playbackState.playing ? "Pause" : "Play");
@@ -721,6 +732,10 @@ export function createMatchDetailPage({
         const remove = event.target.closest("[data-replay-delete]");
         if (remove) {
             await deleteReplay(remove.dataset.replayDelete);
+            return;
+        }
+        if (event.target.closest("[data-match-fullscreen]")) {
+            await toggleReplayFullscreen();
             return;
         }
         if (!playback) return;
@@ -886,6 +901,13 @@ export function createMatchDetailPage({
     }
 
     function handleKeyDown(event) {
+        if (
+            event.key === "Escape" &&
+            container.querySelector(".match-playback-layout")?.classList.contains("is-replay-fullscreen")
+        ) {
+            leaveReplayFullscreen();
+            return;
+        }
         if (!playback || !event.target.closest("[data-match-viewer-controls], [data-match-map]")) return;
         if (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(event.target.tagName) && event.key === " ") return;
         if (event.key === " ") {
@@ -900,6 +922,65 @@ export function createMatchDetailPage({
         } else if (event.key === "Escape") {
             mapRenderer?.closeTooltip();
         }
+    }
+
+    function replayFullscreenTarget() {
+        return container.querySelector(".match-playback-layout");
+    }
+
+    function isReplayFullscreen(target = replayFullscreenTarget()) {
+        if (!target) return false;
+        return (
+            document.fullscreenElement === target ||
+            document.webkitFullscreenElement === target ||
+            target.classList.contains("is-replay-fullscreen")
+        );
+    }
+
+    async function toggleReplayFullscreen() {
+        const target = replayFullscreenTarget();
+        if (!target) return;
+        if (isReplayFullscreen(target)) {
+            leaveReplayFullscreen();
+            return;
+        }
+        const requestFullscreen = target.requestFullscreen || target.webkitRequestFullscreen;
+        if (requestFullscreen) {
+            try {
+                await requestFullscreen.call(target);
+            } catch (_error) {
+                target.classList.add("is-replay-fullscreen");
+            }
+        } else {
+            target.classList.add("is-replay-fullscreen");
+        }
+        updateFullscreenState();
+    }
+
+    function leaveReplayFullscreen() {
+        const target = replayFullscreenTarget();
+        const isNativeFullscreen =
+            target && (document.fullscreenElement === target || document.webkitFullscreenElement === target);
+        target?.classList.remove("is-replay-fullscreen");
+        document.body.classList.remove("replay-fullscreen-open");
+        if (isNativeFullscreen) {
+            const exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
+            if (exitFullscreen) void Promise.resolve(exitFullscreen.call(document)).catch(() => {});
+        }
+        updateFullscreenState();
+    }
+
+    function updateFullscreenState() {
+        const target = replayFullscreenTarget();
+        const active = isReplayFullscreen(target);
+        document.body.classList.toggle("replay-fullscreen-open", active);
+        const button = container.querySelector("[data-match-fullscreen]");
+        if (!button) return;
+        const label = active ? "Exit fullscreen replay" : "Enter fullscreen replay";
+        button.textContent = active ? "Exit fullscreen" : "Fullscreen";
+        button.setAttribute("aria-label", label);
+        button.setAttribute("aria-pressed", String(active));
+        button.title = label;
     }
 
     async function downloadReplay(replayId, button) {

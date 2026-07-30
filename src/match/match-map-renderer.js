@@ -4,8 +4,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const CURRENT_ICON_SIZE_PX = 34;
 const DEFAULT_MARKER_OPTIONS = Object.freeze({
     size: 2,
-    showIcons: false,
-    showNames: false
+    showIcons: true,
+    showNames: true
 });
 const TEAM_COLORS = ["#7ec8ff", "#81d66d", "#ffcb6b", "#ff7f76", "#c79bff", "#65d8cb", "#ff9f62", "#f58fca"];
 const VEHICLE_LABELS = new Map([
@@ -47,13 +47,21 @@ export class MatchMapRenderer {
         this.renderBase();
     }
 
-    update(snapshot, events = [], currentEventId = "") {
+    update(snapshot, events = [], currentEventId = "", combatEvent = null) {
         if (!snapshot) return;
-        this.currentEvents = events;
+        this.currentEvents =
+            combatEvent && !events.some((event) => event.eventId === combatEvent.eventId)
+                ? [...events, combatEvent].sort((a, b) => a.timeMs - b.timeMs)
+                : events;
         this.currentTimeMs = snapshot.timeMs;
         this.playerStates = new Map(snapshot.players.map((player) => [player.playerId, player]));
         this.vehicleStates = new Map(snapshot.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
-        const activeEvent = events.find((event) => event.eventId === currentEventId) || events.at(-1) || null;
+        const selectedEvent = events.find((event) => event.eventId === currentEventId) || null;
+        const activeEvent = selectedEvent || combatEvent || events.at(-1) || null;
+        const selectedCombatEvent =
+            selectedEvent && (selectedEvent.type === "damage" || selectedEvent.type === "elimination")
+                ? selectedEvent
+                : null;
         const highlighted = new Set(
             events.flatMap((event) => [
                 event.attackerId,
@@ -93,7 +101,7 @@ export class MatchMapRenderer {
         this.updateVehicles(snapshot.vehicles);
         this.updateZone(snapshot.zone);
         this.updateScore(snapshot.scores);
-        this.updateEventLines(events, activeEvent);
+        this.updateEventLines(selectedCombatEvent || combatEvent);
         if (this.lockedPlayerId) this.showTooltip(this.lockedPlayerId);
         else if (this.lockedVehicleId) this.showVehicleTooltip(this.lockedVehicleId);
     }
@@ -269,12 +277,12 @@ export class MatchMapRenderer {
         const zSpan = Math.abs(Number(this.telemetry.map.worldMaxZ) - Number(this.telemetry.map.worldMinZ));
         const xScale = xSpan > 0 ? this.stage.clientWidth / xSpan : 1;
         const zScale = zSpan > 0 ? this.stage.clientHeight / zSpan : xScale;
-        const blockScale = Math.max(1, Math.min(xScale || 1, zScale || xScale || 1));
+        const blockScale = Math.max(0.1, Math.min(xScale || 1, zScale || xScale || 1));
         const linearStep = Math.max(0, (CURRENT_ICON_SIZE_PX - blockScale) / 3);
         const iconSize = blockScale + linearStep * this.markerOptions.size;
-        const dotSize = Math.max(3, blockScale * 3);
+        const dotSize = blockScale * (1 + (9 * this.markerOptions.size) / 4);
         this.stage.style.setProperty("--tactical-player-icon-size", `${round(iconSize)}px`);
-        this.stage.style.setProperty("--tactical-player-dot-size", `${round(dotSize)}px`);
+        this.stage.style.setProperty("--tactical-player-dot-size", `${dotSize}px`);
         this.stage.classList.toggle("show-player-icons", this.markerOptions.showIcons);
         this.stage.classList.toggle("show-player-names", this.markerOptions.showNames);
     }
@@ -350,12 +358,8 @@ export class MatchMapRenderer {
             : `Target ${scores.target ?? "unavailable"}`;
     }
 
-    updateEventLines(events, activeEvent) {
+    updateEventLines(event) {
         this.lines.replaceChildren();
-        const event =
-            activeEvent ||
-            events.find((candidate) => candidate.type === "elimination") ||
-            events.find((candidate) => candidate.type === "damage" || candidate.type === "engagement_start");
         if (!event) return;
         const start =
             event.killerPosition ||
@@ -524,8 +528,8 @@ function normalizeMarkerOptions(value = {}) {
     const rawSize = Number(value.size);
     return {
         size: Number.isFinite(rawSize) ? Math.max(0, Math.min(4, Math.round(rawSize))) : DEFAULT_MARKER_OPTIONS.size,
-        showIcons: value.showIcons === true,
-        showNames: value.showNames === true
+        showIcons: value.showIcons === undefined ? DEFAULT_MARKER_OPTIONS.showIcons : value.showIcons === true,
+        showNames: value.showNames === undefined ? DEFAULT_MARKER_OPTIONS.showNames : value.showNames === true
     };
 }
 

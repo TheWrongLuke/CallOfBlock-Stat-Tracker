@@ -52,6 +52,16 @@ export class MatchPlaybackController {
         return events.sort((a, b) => a.timeMs - b.timeMs);
     }
 
+    latestCombatEvent() {
+        for (let index = this.telemetry.events.length - 1; index >= 0; index--) {
+            const event = this.telemetry.events[index];
+            if (event.timeMs > this.playheadMs) continue;
+            if (event.type !== "damage" && event.type !== "elimination") continue;
+            return eventVisible(event, this.filters) ? event : null;
+        }
+        return null;
+    }
+
     currentMoment() {
         return this.sequence[this.sequenceIndex] || null;
     }
@@ -68,6 +78,7 @@ export class MatchPlaybackController {
             snapshotIndex: this.currentSnapshotIndex,
             snapshotCount: this.telemetry.snapshots.length,
             events: this.currentEvents(),
+            combatEvent: this.latestCombatEvent(),
             currentEventId: this.currentEventId,
             moment,
             momentIndex: this.skipIdle ? this.sequenceIndex : null,

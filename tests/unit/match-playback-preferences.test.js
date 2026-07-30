@@ -42,7 +42,19 @@ describe("match playback preferences", () => {
             speed: 0.5,
             skipIdle: true,
             filters: { zone: false, vehicles: true },
-            markers: { size: 2, showIcons: false, showNames: false }
+            markers: { size: 2, showIcons: true, showNames: true }
+        });
+    });
+
+    it("preserves an explicit choice to hide icons and names", () => {
+        expect(
+            normalizeMatchPlaybackPreferences({
+                markers: { showIcons: false, showNames: false }
+            }).markers
+        ).toEqual({
+            size: 2,
+            showIcons: false,
+            showNames: false
         });
     });
 });

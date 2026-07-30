@@ -953,10 +953,17 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     await expect(matchView.locator(".tactical-zone")).toBeVisible();
     await expect(matchView.locator(".tactical-marker-tooltip")).toBeHidden();
     await expect(matchView.locator("[data-match-marker-size]")).toHaveValue("2");
-    await expect(matchView.locator("[data-match-player-icons]")).not.toBeChecked();
-    await expect(matchView.locator("[data-match-player-names]")).not.toBeChecked();
-    await expect(matchView.locator(".tactical-map-stage")).not.toHaveClass(/show-player-icons|show-player-names/);
-    const defaultMarkerGeometry = await matchView.locator('[data-tactical-player="p_alpha"]').evaluate((marker) => {
+    await expect(matchView.locator("[data-match-player-icons]")).toBeChecked();
+    await expect(matchView.locator("[data-match-player-names]")).toBeChecked();
+    await expect(matchView.locator(".tactical-map-stage")).toHaveClass(/show-player-icons/);
+    await expect(matchView.locator(".tactical-map-stage")).toHaveClass(/show-player-names/);
+
+    await matchView.locator("[data-match-player-icons]").uncheck();
+    await matchView.locator("[data-match-marker-size]").evaluate((element) => {
+        element.value = "0";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const minimumDotGeometry = await matchView.locator('[data-tactical-player="p_alpha"]').evaluate((marker) => {
         const markerBounds = marker.getBoundingClientRect();
         const iconBounds = marker.querySelector(".tactical-player-icon").getBoundingClientRect();
         return {
@@ -966,13 +973,28 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
             centerOffsetY: Math.abs(
                 markerBounds.top + markerBounds.height / 2 - (iconBounds.top + iconBounds.height / 2)
             ),
-            dotSize: iconBounds.width
+            dotSize: iconBounds.width,
+            configuredSize: Number.parseFloat(
+                getComputedStyle(marker.closest(".tactical-map-stage")).getPropertyValue("--tactical-player-dot-size")
+            )
         };
     });
-    expect(defaultMarkerGeometry.centerOffsetX).toBeLessThanOrEqual(0.5);
-    expect(defaultMarkerGeometry.centerOffsetY).toBeLessThanOrEqual(0.5);
-    expect(defaultMarkerGeometry.dotSize).toBeGreaterThanOrEqual(3);
-    expect(defaultMarkerGeometry.dotSize).toBeLessThanOrEqual(6);
+    await matchView.locator("[data-match-marker-size]").evaluate((element) => {
+        element.value = "4";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const maximumDotSize = await matchView.locator('[data-tactical-player="p_alpha"]').evaluate((marker) => ({
+        dotSize: marker.querySelector(".tactical-player-icon").getBoundingClientRect().width,
+        configuredSize: Number.parseFloat(
+            getComputedStyle(marker.closest(".tactical-map-stage")).getPropertyValue("--tactical-player-dot-size")
+        )
+    }));
+    expect(minimumDotGeometry.centerOffsetX).toBeLessThanOrEqual(0.5);
+    expect(minimumDotGeometry.centerOffsetY).toBeLessThanOrEqual(0.5);
+    expect(minimumDotGeometry.dotSize).toBeGreaterThan(0);
+    expect(maximumDotSize.dotSize).toBeGreaterThan(minimumDotGeometry.dotSize);
+    expect(maximumDotSize.configuredSize / minimumDotGeometry.configuredSize).toBeCloseTo(10, 1);
+    await matchView.locator("[data-match-player-icons]").check();
     await expect(matchView.locator("[data-match-skip-idle]")).toBeChecked();
     await expect(matchView.locator("[data-match-status]")).toContainText("Engagement");
     const timelineFollowsMap = await matchView.evaluate((element) => {
@@ -981,6 +1003,19 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
         return Boolean(map && timeline && map.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING);
     });
     expect(timelineFollowsMap).toBe(true);
+
+    const fullscreenLayout = matchView.locator(".match-playback-layout");
+    const fullscreenButton = matchView.locator("[data-match-fullscreen]");
+    await fullscreenLayout.evaluate((element) => {
+        Object.defineProperty(element, "requestFullscreen", { configurable: true, value: undefined });
+        Object.defineProperty(element, "webkitRequestFullscreen", { configurable: true, value: undefined });
+    });
+    await fullscreenButton.click();
+    await expect(fullscreenLayout).toHaveClass(/is-replay-fullscreen/);
+    await expect(fullscreenButton).toHaveAttribute("aria-label", "Exit fullscreen replay");
+    await fullscreenButton.click();
+    await expect(fullscreenLayout).not.toHaveClass(/is-replay-fullscreen/);
+    await expect(fullscreenButton).toHaveAttribute("aria-label", "Enter fullscreen replay");
 
     await matchView.locator(".tactical-map-stage").evaluate((element) => {
         element.scrollIntoView({ block: "center" });
@@ -994,6 +1029,16 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     await expect(matchView.locator(".tactical-event-lines text")).toContainText("blocks");
     await expect(matchView.locator("[data-match-event-feed]")).toContainText("Headshot");
     await expect(matchView.locator("[data-match-event-feed]")).toContainText("height advantage");
+    await matchView.locator("[data-match-timeline]").evaluate((element) => {
+        element.value = "27000";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator(".tactical-event-lines .engagement-line")).toBeVisible();
+    await matchView.locator("[data-match-timeline]").evaluate((element) => {
+        element.value = "34000";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator(".tactical-event-lines .kill-line")).toBeVisible();
 
     const alphaMarker = matchView.locator('[data-tactical-player="p_alpha"]');
     await alphaMarker.focus();

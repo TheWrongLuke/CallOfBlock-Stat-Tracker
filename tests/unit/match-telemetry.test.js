@@ -191,6 +191,22 @@ describe("match tactical playback", () => {
         vi.useRealTimers();
     });
 
+    it("keeps the latest hit or elimination available for the tactical line", async () => {
+        const telemetry = normalizeMatchTelemetry(await fixture("fixture-br"), "fixture-br");
+        const controller = new MatchPlaybackController(telemetry);
+
+        controller.setSkipIdle(false);
+        controller.seek(27_000);
+        expect(controller.state().combatEvent?.eventId).toBe("damage-4");
+
+        controller.seek(34_000);
+        expect(controller.state().combatEvent?.eventId).toBe("elimination-1");
+
+        controller.setFilter("eliminations", false);
+        expect(controller.state().combatEvent).toBeNull();
+        controller.destroy();
+    });
+
     it("restores a Deathmatch player at the recorded respawn snapshot", async () => {
         const telemetry = normalizeMatchTelemetry(await fixture("fixture-dm"), "fixture-dm");
         const controller = new MatchPlaybackController(telemetry);

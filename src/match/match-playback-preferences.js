@@ -7,8 +7,8 @@ export const DEFAULT_MATCH_PLAYBACK_PREFERENCES = Object.freeze({
     filters: Object.freeze(Object.fromEntries(FILTER_KEYS.map((key) => [key, true]))),
     markers: Object.freeze({
         size: 2,
-        showIcons: false,
-        showNames: false
+        showIcons: true,
+        showNames: true
     })
 });
 
@@ -42,8 +42,14 @@ export function normalizeMatchPlaybackPreferences(value = {}) {
         filters: Object.fromEntries(FILTER_KEYS.map((key) => [key, value?.filters?.[key] !== false])),
         markers: {
             size: value?.markers?.size === undefined ? 2 : markerSize,
-            showIcons: value?.markers?.showIcons === true,
-            showNames: value?.markers?.showNames === true
+            showIcons:
+                value?.markers?.showIcons === undefined
+                    ? DEFAULT_MATCH_PLAYBACK_PREFERENCES.markers.showIcons
+                    : value.markers.showIcons === true,
+            showNames:
+                value?.markers?.showNames === undefined
+                    ? DEFAULT_MATCH_PLAYBACK_PREFERENCES.markers.showNames
+                    : value.markers.showNames === true
         }
     };
 }

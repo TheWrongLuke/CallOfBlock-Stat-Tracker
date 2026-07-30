@@ -1457,6 +1457,24 @@
     gap: 18px;
 }
 
+.match-playback-layout:fullscreen,
+.match-playback-layout:-webkit-full-screen,
+.match-playback-layout.is-replay-fullscreen {
+    position: fixed;
+    z-index: 10000;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    align-content: start;
+    overflow: auto;
+    padding: 12px;
+    background: #080d14;
+}
+
+body.replay-fullscreen-open {
+    overflow: hidden;
+}
+
 .match-map-panel,
 .match-event-panel,
 .match-scoreboard,
@@ -1488,6 +1506,30 @@
 .match-section-heading [data-match-time] {
     color: var(--gold);
     font: 700 1rem "Chakra Petch", sans-serif;
+}
+
+.match-map-heading-actions {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.match-fullscreen-button {
+    min-width: 92px;
+    min-height: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.045);
+    color: var(--text);
+    cursor: pointer;
+    font: 700 0.72rem "Chakra Petch", sans-serif;
+}
+
+.match-fullscreen-button:hover,
+.match-fullscreen-button:focus-visible {
+    border-color: var(--gold);
+    color: var(--gold);
 }
 
 .tactical-map-stage {
@@ -1622,12 +1664,14 @@
     place-items: center;
     overflow: hidden;
     transform: translate(-50%, -50%);
-    border: 1px solid rgba(5, 9, 14, 0.96);
+    border: 0;
     border-radius: 50%;
     background: var(--player-marker-color, var(--blue));
     color: var(--text);
     font: 700 0.65rem "Chakra Petch", sans-serif;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.68);
+    box-shadow:
+        0 0 0 1px rgba(5, 9, 14, 0.96),
+        0 0 0 2px rgba(255, 255, 255, 0.68);
 }
 
 .tactical-map-stage.show-player-icons .tactical-player-icon {
