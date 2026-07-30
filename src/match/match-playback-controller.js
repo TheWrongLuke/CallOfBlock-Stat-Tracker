@@ -1,5 +1,5 @@
-const BASE_SLIDE_MS = 850;
-const EVENT_SLIDE_MS = 1100;
+const FRAME_INTERVAL_MS = 32;
+const MAX_FRAME_DELTA_MS = 250;
 const ISOLATED_EVENT_WINDOW_MS = 2000;
 
 const DEFAULT_FILTERS = Object.freeze({
@@ -23,16 +23,19 @@ export class MatchPlaybackController {
         };
         this.playing = false;
         this.timer = 0;
+        this.timerType = "";
+        this.lastFrameAt = 0;
         this.sequence = [];
         this.sequenceIndex = 0;
         this.sequenceSnapshotIndex = 0;
         this.currentSnapshotIndex = 0;
         this.currentEventId = "";
+        this.playheadMs = telemetry.snapshots[0]?.timeMs || 0;
         this.rebuildSequence(0);
     }
 
     snapshot() {
-        return this.telemetry.snapshots[this.currentSnapshotIndex] || null;
+        return interpolateSnapshotAtTime(this.telemetry.snapshots, this.playheadMs);
     }
 
     currentEvents() {
@@ -83,14 +86,14 @@ export class MatchPlaybackController {
     play() {
         if (this.playing || !this.snapshot()) return;
         this.playing = true;
+        this.lastFrameAt = Date.now();
         this.emit();
         this.schedule();
     }
 
     pause() {
         this.playing = false;
-        globalThis.clearTimeout(this.timer);
-        this.timer = 0;
+        this.cancelTimer();
         this.emit();
     }
 
@@ -103,6 +106,7 @@ export class MatchPlaybackController {
         } else {
             this.currentSnapshotIndex = Math.max(0, this.currentSnapshotIndex - 1);
             this.sequenceIndex = this.currentSnapshotIndex;
+            this.playheadMs = this.telemetry.snapshots[this.currentSnapshotIndex]?.timeMs || 0;
         }
         this.currentEventId = "";
         this.emit();
@@ -117,6 +121,7 @@ export class MatchPlaybackController {
         } else {
             this.currentSnapshotIndex = Math.min(this.telemetry.snapshots.length - 1, this.currentSnapshotIndex + 1);
             this.sequenceIndex = this.currentSnapshotIndex;
+            this.playheadMs = this.telemetry.snapshots[this.currentSnapshotIndex]?.timeMs || 0;
         }
         this.currentEventId = "";
         this.emit();
@@ -125,18 +130,8 @@ export class MatchPlaybackController {
     seek(timeMs) {
         this.stopTimer();
         const target = Math.max(0, Math.min(this.telemetry.durationMs, Number(timeMs) || 0));
-        this.currentSnapshotIndex = nearestSnapshotIndex(this.telemetry.snapshots, target);
-        if (this.skipIdle) {
-            const containing = this.sequence.findIndex((moment) => target >= moment.startMs && target <= moment.endMs);
-            this.sequenceIndex = containing >= 0 ? containing : nearestMomentIndex(this.sequence, target);
-            const indices = this.currentMoment()?.snapshotIndices || [];
-            const currentIndex = indices.indexOf(this.currentSnapshotIndex);
-            this.sequenceSnapshotIndex =
-                currentIndex >= 0 ? currentIndex : nearestIndexWithin(indices, this.currentSnapshotIndex);
-            this.syncSnapshotFromSequence();
-        } else {
-            this.sequenceIndex = this.currentSnapshotIndex;
-        }
+        this.playheadMs = target;
+        this.syncIndicesFromTime(target);
         this.currentEventId = "";
         this.emit();
     }
@@ -158,37 +153,38 @@ export class MatchPlaybackController {
     }
 
     setSkipIdle(enabled) {
-        const currentTime = this.snapshot()?.timeMs || 0;
+        const currentTime = this.playheadMs;
         const wasPlaying = this.playing;
-        globalThis.clearTimeout(this.timer);
-        this.timer = 0;
+        this.cancelTimer();
         this.skipIdle = Boolean(enabled);
         this.rebuildSequence(currentTime);
         this.emit();
-        if (wasPlaying) this.schedule();
+        if (wasPlaying) {
+            this.lastFrameAt = Date.now();
+            this.schedule();
+        }
     }
 
     setSpeed(speed) {
         const normalized = Number(speed);
         if (![0.5, 1, 2].includes(normalized)) return;
         this.speed = normalized;
-        if (this.playing) {
-            globalThis.clearTimeout(this.timer);
-            this.schedule();
-        }
+        if (this.playing) this.lastFrameAt = Date.now();
         this.emit();
     }
 
     setFilter(filter, enabled) {
         if (!(filter in this.filters)) return;
-        const currentTime = this.snapshot()?.timeMs || 0;
+        const currentTime = this.playheadMs;
         const wasPlaying = this.playing;
-        globalThis.clearTimeout(this.timer);
-        this.timer = 0;
+        this.cancelTimer();
         this.filters[filter] = Boolean(enabled);
         this.rebuildSequence(currentTime);
         this.emit();
-        if (wasPlaying) this.schedule();
+        if (wasPlaying) {
+            this.lastFrameAt = Date.now();
+            this.schedule();
+        }
     }
 
     destroy() {
@@ -227,36 +223,80 @@ export class MatchPlaybackController {
         }
         this.sequenceIndex = nearestMomentIndex(this.sequence, currentTime);
         const indices = this.currentMoment()?.snapshotIndices || [];
+        const insideMoment =
+            this.currentMoment() &&
+            currentTime >= this.currentMoment().startMs &&
+            currentTime <= this.currentMoment().endMs;
         this.sequenceSnapshotIndex = nearestIndexWithin(
             indices,
             nearestSnapshotIndex(this.telemetry.snapshots, currentTime)
         );
-        this.syncSnapshotFromSequence();
+        if (this.skipIdle && !insideMoment && indices.length) {
+            this.currentSnapshotIndex = indices[this.sequenceSnapshotIndex];
+            this.playheadMs = this.telemetry.snapshots[this.currentSnapshotIndex]?.timeMs || 0;
+        } else {
+            this.playheadMs = Math.max(0, Math.min(this.telemetry.durationMs, currentTime));
+            this.syncIndicesFromTime(this.playheadMs);
+        }
     }
 
     advancePlayback() {
         if (!this.playing) return;
-        if (this.skipIdle) {
-            const indices = this.currentMoment()?.snapshotIndices || [];
-            if (this.sequenceSnapshotIndex < indices.length - 1) {
-                this.sequenceSnapshotIndex++;
-                this.syncSnapshotFromSequence();
-            } else if (this.sequenceIndex < this.sequence.length - 1) {
-                this.sequenceIndex++;
-                this.sequenceSnapshotIndex = 0;
-                this.syncSnapshotFromSequence();
-            } else {
-                this.playing = false;
-            }
-        } else if (this.currentSnapshotIndex < this.telemetry.snapshots.length - 1) {
-            this.currentSnapshotIndex++;
-            this.sequenceIndex = this.currentSnapshotIndex;
-        } else {
-            this.playing = false;
+        const now = Date.now();
+        const elapsed = Math.max(0, now - this.lastFrameAt);
+        if (elapsed < FRAME_INTERVAL_MS) {
+            this.schedule();
+            return;
         }
+        this.lastFrameAt = now;
+        this.advancePlayhead(Math.min(elapsed, MAX_FRAME_DELTA_MS) * this.speed);
         this.currentEventId = "";
         this.emit();
         if (this.playing) this.schedule();
+    }
+
+    advancePlayhead(elapsedMs) {
+        let remaining = Math.max(0, elapsedMs);
+        if (!this.skipIdle) {
+            this.playheadMs = Math.min(this.telemetry.durationMs, this.playheadMs + remaining);
+            if (this.playheadMs >= this.telemetry.durationMs) this.playing = false;
+            this.syncIndicesFromTime(this.playheadMs);
+            return;
+        }
+
+        while (remaining > 0 && this.playing) {
+            const moment = this.currentMoment();
+            if (!moment) {
+                this.playing = false;
+                break;
+            }
+            if (this.playheadMs < moment.startMs) this.playheadMs = moment.startMs;
+            if (this.playheadMs > moment.endMs) {
+                if (!this.moveToNextMoment()) break;
+                continue;
+            }
+            const available = Math.max(0, moment.endMs - this.playheadMs);
+            if (available >= remaining) {
+                this.playheadMs += remaining;
+                break;
+            }
+            this.playheadMs = moment.endMs;
+            remaining -= available;
+            if (!this.moveToNextMoment()) break;
+        }
+        this.syncIndicesFromTime(this.playheadMs, { preserveMoment: true });
+    }
+
+    moveToNextMoment() {
+        let nextIndex = this.sequenceIndex + 1;
+        while (nextIndex < this.sequence.length && this.sequence[nextIndex].endMs <= this.playheadMs) nextIndex++;
+        if (nextIndex >= this.sequence.length) {
+            this.playing = false;
+            return false;
+        }
+        this.sequenceIndex = nextIndex;
+        this.playheadMs = Math.max(this.playheadMs, this.currentMoment().startMs);
+        return true;
     }
 
     syncSnapshotFromSequence() {
@@ -264,24 +304,82 @@ export class MatchPlaybackController {
         if (!indices.length) return;
         this.sequenceSnapshotIndex = Math.max(0, Math.min(indices.length - 1, this.sequenceSnapshotIndex));
         this.currentSnapshotIndex = indices[this.sequenceSnapshotIndex];
+        this.playheadMs = this.telemetry.snapshots[this.currentSnapshotIndex]?.timeMs || 0;
+    }
+
+    syncIndicesFromTime(timeMs, { preserveMoment = false } = {}) {
+        this.currentSnapshotIndex = snapshotIndexAtOrBefore(this.telemetry.snapshots, timeMs);
+        if (!this.skipIdle) {
+            this.sequenceIndex = this.currentSnapshotIndex;
+            this.sequenceSnapshotIndex = 0;
+            return;
+        }
+        if (!preserveMoment) {
+            const containing = this.sequence.findIndex((moment) => timeMs >= moment.startMs && timeMs <= moment.endMs);
+            this.sequenceIndex = containing >= 0 ? containing : nearestMomentIndex(this.sequence, timeMs);
+        }
+        const indices = this.currentMoment()?.snapshotIndices || [];
+        this.sequenceSnapshotIndex = nearestIndexWithin(indices, this.currentSnapshotIndex);
     }
 
     schedule() {
-        globalThis.clearTimeout(this.timer);
-        const snapshot = this.snapshot();
-        const hold = snapshot?.reason === "periodic" ? BASE_SLIDE_MS : EVENT_SLIDE_MS;
-        this.timer = globalThis.setTimeout(() => this.advancePlayback(), hold / this.speed);
+        this.cancelTimer();
+        if (typeof globalThis.requestAnimationFrame === "function") {
+            this.timerType = "animation";
+            this.timer = globalThis.requestAnimationFrame(() => this.advancePlayback());
+            return;
+        }
+        this.timerType = "timeout";
+        this.timer = globalThis.setTimeout(() => this.advancePlayback(), FRAME_INTERVAL_MS);
     }
 
     stopTimer() {
         this.playing = false;
-        globalThis.clearTimeout(this.timer);
+        this.cancelTimer();
+    }
+
+    cancelTimer() {
+        if (this.timerType === "animation" && typeof globalThis.cancelAnimationFrame === "function") {
+            globalThis.cancelAnimationFrame(this.timer);
+        } else {
+            globalThis.clearTimeout(this.timer);
+        }
         this.timer = 0;
+        this.timerType = "";
     }
 
     emit() {
         this.onChange(this.state());
     }
+}
+
+export function interpolateSnapshotAtTime(snapshots, timeMs) {
+    if (!snapshots.length) return null;
+    const target = Math.max(snapshots[0].timeMs, Math.min(snapshots.at(-1).timeMs, Number(timeMs) || 0));
+    const lowerIndex = snapshotIndexAtOrBefore(snapshots, target);
+    const lower = snapshots[lowerIndex];
+    const upper = snapshots[lowerIndex + 1];
+    if (!upper || target <= lower.timeMs) return lower;
+    if (target >= upper.timeMs) return upper;
+    const progress = (target - lower.timeMs) / (upper.timeMs - lower.timeMs);
+    const upperPlayers = new Map(upper.players.map((player) => [player.playerId, player]));
+    const upperVehicles = new Map(upper.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
+    return {
+        ...lower,
+        timeMs: target,
+        reason: "interpolated",
+        players: lower.players.map((player) =>
+            upperPlayers.has(player.playerId)
+                ? interpolatePlayerState(player, upperPlayers.get(player.playerId), progress)
+                : player
+        ),
+        vehicles: lower.vehicles.map((vehicle) =>
+            upperVehicles.has(vehicle.vehicleId)
+                ? interpolateVehicleState(vehicle, upperVehicles.get(vehicle.vehicleId), progress)
+                : vehicle
+        ),
+        zone: interpolateZone(lower.zone, upper.zone, progress)
+    };
 }
 
 export function buildMeaningfulMoments(telemetry, filters = DEFAULT_FILTERS) {
@@ -362,6 +460,60 @@ function nearestSnapshotIndex(snapshots, timeMs) {
         }
     }
     return bestIndex;
+}
+
+function snapshotIndexAtOrBefore(snapshots, timeMs) {
+    if (!snapshots.length || timeMs <= snapshots[0].timeMs) return 0;
+    let low = 0;
+    let high = snapshots.length - 1;
+    while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        if (snapshots[middle].timeMs <= timeMs) low = middle + 1;
+        else high = middle - 1;
+    }
+    return Math.max(0, Math.min(snapshots.length - 1, high));
+}
+
+function interpolatePlayerState(from, to, progress) {
+    return {
+        ...from,
+        x: lerp(from.x, to.x, progress),
+        y: lerp(from.y, to.y, progress),
+        z: lerp(from.z, to.z, progress),
+        health: lerpNullable(from.health, to.health, progress),
+        maxHealth: lerpNullable(from.maxHealth, to.maxHealth, progress),
+        armor: lerpNullable(from.armor, to.armor, progress)
+    };
+}
+
+function interpolateVehicleState(from, to, progress) {
+    return {
+        ...from,
+        x: lerp(from.x, to.x, progress),
+        y: lerp(from.y, to.y, progress),
+        z: lerp(from.z, to.z, progress),
+        health: lerpNullable(from.health, to.health, progress),
+        maxHealth: lerpNullable(from.maxHealth, to.maxHealth, progress)
+    };
+}
+
+function interpolateZone(from, to, progress) {
+    if (!from || !to || from.phase !== to.phase) return from;
+    return {
+        ...from,
+        centerX: lerp(from.centerX, to.centerX, progress),
+        centerZ: lerp(from.centerZ, to.centerZ, progress),
+        radius: lerp(from.radius, to.radius, progress),
+        damagePerSecond: lerpNullable(from.damagePerSecond, to.damagePerSecond, progress)
+    };
+}
+
+function lerp(from, to, progress) {
+    return Number(from) + (Number(to) - Number(from)) * progress;
+}
+
+function lerpNullable(from, to, progress) {
+    return from === null || to === null ? from : lerp(from, to, progress);
 }
 
 function nearestMomentIndex(moments, timeMs) {

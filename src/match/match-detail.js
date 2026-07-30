@@ -34,6 +34,7 @@ export function createMatchDetailPage({
     let playback = null;
     let mapRenderer = null;
     let playbackPreferences = loadMatchPlaybackPreferences();
+    let lastEventFeedKey = "";
     let requestToken = 0;
     let replayState = { loading: false, available: null, replays: [], error: "", message: "" };
 
@@ -74,6 +75,7 @@ export function createMatchDetailPage({
         summary = getSummary(id, playerId);
         viewerSummary = getViewerSummary(id);
         telemetry = null;
+        lastEventFeedKey = "";
         replayState = { loading: false, available: null, replays: [], error: "", message: "" };
         const token = ++requestToken;
         if (summary && summary.hasTelemetry === false) {
@@ -200,7 +202,7 @@ export function createMatchDetailPage({
             </section>
         `;
         const mapHost = container.querySelector("[data-match-map]");
-        mapRenderer = new MatchMapRenderer(mapHost, telemetry, getPlayerPresentation);
+        mapRenderer = new MatchMapRenderer(mapHost, telemetry, getPlayerPresentation, playbackPreferences.markers);
         playback = new MatchPlaybackController(telemetry, updatePlayback, playbackPreferences);
         updatePlayback(playback.state());
     }
@@ -283,6 +285,22 @@ export function createMatchDetailPage({
                         `
                         )
                         .join("")}
+                </fieldset>
+                <fieldset class="match-marker-controls">
+                    <legend>Players</legend>
+                    <label class="match-marker-size">
+                        <span>Icon size</span>
+                        <input type="range" min="0" max="4" step="1" value="${playbackPreferences.markers.size}" data-match-marker-size>
+                        <output data-match-marker-size-output>${playbackPreferences.markers.size}/4</output>
+                    </label>
+                    <label>
+                        <input type="checkbox" data-match-player-icons ${playbackPreferences.markers.showIcons ? "checked" : ""}>
+                        <span>Icons</span>
+                    </label>
+                    <label>
+                        <input type="checkbox" data-match-player-names ${playbackPreferences.markers.showNames ? "checked" : ""}>
+                        <span>Nicknames</span>
+                    </label>
                 </fieldset>
                 <fieldset class="match-event-filters">
                     <legend>Events</legend>
@@ -573,6 +591,14 @@ export function createMatchDetailPage({
         const host = container.querySelector("[data-match-event-feed]");
         if (!host) return;
         const time = playbackState.snapshot?.timeMs || 0;
+        const renderKey = [
+            Math.floor(time / 250),
+            playbackState.currentEventId,
+            playbackState.moment?.id,
+            Object.values(playbackState.filters).join("")
+        ].join(":");
+        if (renderKey === lastEventFeedKey) return;
+        lastEventFeedKey = renderKey;
         const visible = telemetry.events.filter((event) => eventPassesFilters(event, playbackState.filters));
         const current =
             visible.find((event) => event.eventId === playbackState.currentEventId) ||
@@ -729,6 +755,13 @@ export function createMatchDetailPage({
             playback.setFilter(event.target.dataset.matchFilter, event.target.checked);
             rememberPlaybackPreferences();
         }
+        if (event.target.matches("[data-match-player-icons], [data-match-player-names]")) {
+            mapRenderer?.setMarkerOptions({
+                showIcons: Boolean(container.querySelector("[data-match-player-icons]")?.checked),
+                showNames: Boolean(container.querySelector("[data-match-player-names]")?.checked)
+            });
+            rememberPlaybackPreferences();
+        }
     }
 
     function rememberPlaybackPreferences() {
@@ -737,12 +770,22 @@ export function createMatchDetailPage({
         playbackPreferences = saveMatchPlaybackPreferences({
             speed: playbackState.speed,
             skipIdle: playbackState.skipIdle,
-            filters: playbackState.filters
+            filters: playbackState.filters,
+            markers: mapRenderer?.getMarkerOptions() || playbackPreferences.markers
         });
     }
 
     function handleInput(event) {
-        if (playback && event.target.matches("[data-match-timeline]")) playback.seek(event.target.value);
+        if (playback && event.target.matches("[data-match-timeline]")) {
+            playback.seek(event.target.value);
+            return;
+        }
+        if (event.target.matches("[data-match-marker-size]")) {
+            const size = Math.max(0, Math.min(4, Math.round(Number(event.target.value) || 0)));
+            mapRenderer?.setMarkerOptions({ size });
+            setText("[data-match-marker-size-output]", `${size}/4`);
+            rememberPlaybackPreferences();
+        }
     }
 
     async function handleSubmit(event) {

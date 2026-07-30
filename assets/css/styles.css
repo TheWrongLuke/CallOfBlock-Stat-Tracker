@@ -1597,19 +1597,14 @@
     transform: translate(-50%, -50%);
     pointer-events: auto;
     transition:
-        left 520ms linear,
-        top 520ms linear,
         opacity 180ms ease,
         filter 180ms ease;
 }
 
 .tactical-player-marker {
-    width: 54px;
-    height: 66px;
-    display: grid;
-    justify-items: center;
-    align-content: start;
-    gap: 2px;
+    width: max(32px, calc(var(--tactical-player-icon-size, 23px) + 10px));
+    height: max(32px, calc(var(--tactical-player-icon-size, 23px) + 10px));
+    display: block;
     border: 0;
     padding: 0;
     background: transparent;
@@ -1618,17 +1613,28 @@
 }
 
 .tactical-player-icon {
-    position: relative;
-    width: 34px;
-    height: 34px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--tactical-player-dot-size, 3px);
+    height: var(--tactical-player-dot-size, 3px);
     display: grid;
     place-items: center;
     overflow: hidden;
-    border: 2px solid var(--blue);
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(5, 9, 14, 0.96);
     border-radius: 50%;
-    background: #182538;
+    background: var(--player-marker-color, var(--blue));
     color: var(--text);
     font: 700 0.65rem "Chakra Petch", sans-serif;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.68);
+}
+
+.tactical-map-stage.show-player-icons .tactical-player-icon {
+    width: var(--tactical-player-icon-size, 23px);
+    height: var(--tactical-player-icon-size, 23px);
+    border: 2px solid var(--player-marker-color, var(--blue));
+    background: #182538;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.52);
 }
 
@@ -1641,9 +1647,19 @@
     image-rendering: pixelated;
 }
 
+.tactical-map-stage:not(.show-player-icons) .tactical-player-icon img,
+.tactical-map-stage:not(.show-player-icons) .tactical-player-initials {
+    display: none;
+}
+
 .tactical-player-name {
+    position: absolute;
+    top: calc(50% + (var(--tactical-player-dot-size, 3px) / 2) + 4px);
+    left: 50%;
+    display: none;
     max-width: 82px;
     overflow: hidden;
+    transform: translateX(-50%);
     color: #fff;
     font: 700 0.62rem "Chakra Petch", sans-serif;
     text-overflow: ellipsis;
@@ -1651,44 +1667,24 @@
     text-shadow: 0 1px 3px #000;
 }
 
-.tactical-marker-meters {
-    width: 42px;
-    display: grid;
-    gap: 1px;
-}
-
-.tactical-health-track,
-.tactical-armor-track {
-    height: 3px;
-    overflow: hidden;
-    background: rgba(0, 0, 0, 0.72);
-}
-
-.tactical-health-track > span,
-.tactical-armor-track > span {
+.tactical-map-stage.show-player-names .tactical-player-name {
     display: block;
-    width: 0;
-    height: 100%;
-    transition: width 180ms ease;
 }
 
-.tactical-health-track > span {
-    background: var(--green);
-}
-
-.tactical-armor-track > span {
-    background: var(--blue);
-}
-
-.tactical-health-track.is-unavailable,
-.tactical-armor-track.is-unavailable {
-    opacity: 0.25;
+.tactical-map-stage.show-player-icons .tactical-player-name {
+    top: calc(50% + (var(--tactical-player-icon-size, 23px) / 2) + 4px);
 }
 
 .tactical-player-marker.is-combatant .tactical-player-icon {
     box-shadow:
         0 0 0 3px rgba(255, 203, 107, 0.26),
         0 2px 10px rgba(0, 0, 0, 0.52);
+}
+
+.tactical-map-stage:not(.show-player-icons) .tactical-player-marker.is-combatant .tactical-player-icon {
+    box-shadow:
+        0 0 0 1px rgba(255, 203, 107, 0.74),
+        0 0 0 2px rgba(5, 9, 14, 0.78);
 }
 
 .tactical-player-marker.is-combatant {
@@ -1729,7 +1725,7 @@
     opacity: 0.28;
 }
 
-.tactical-player-marker.is-in-vehicle .tactical-player-icon::after {
+.tactical-map-stage.show-player-icons .tactical-player-marker.is-in-vehicle .tactical-player-icon::after {
     content: "V";
     position: absolute;
     right: -2px;
@@ -1779,11 +1775,6 @@
     border-radius: 50%;
     background: rgba(126, 200, 255, 0.055);
     pointer-events: none;
-    transition:
-        left 520ms linear,
-        top 520ms linear,
-        width 520ms linear,
-        height 520ms linear;
 }
 
 .tactical-zone span {
@@ -1861,6 +1852,53 @@
     color: var(--text);
 }
 
+.tactical-tooltip-player {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: 9px;
+    align-items: center;
+}
+
+.tactical-tooltip-player > div {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+}
+
+.tactical-tooltip-player strong,
+.tactical-tooltip-player small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tactical-tooltip-player small {
+    color: var(--muted);
+}
+
+.tactical-tooltip-avatar {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: 50%;
+    background: #182538;
+    color: var(--text);
+    font: 700 0.72rem "Chakra Petch", sans-serif;
+}
+
+.tactical-tooltip-avatar img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    image-rendering: pixelated;
+}
+
 .match-end-overlay {
     position: absolute;
     z-index: 11;
@@ -1900,6 +1938,7 @@
 
 .match-control-row button,
 .match-speed-control label,
+.match-marker-controls > label:not(.match-marker-size),
 .match-event-filters label,
 .match-skip-control > label,
 .match-event-list button,
@@ -1940,6 +1979,7 @@
 }
 
 .match-speed-control,
+.match-marker-controls,
 .match-event-filters {
     display: flex;
     align-items: center;
@@ -1951,6 +1991,7 @@
 }
 
 .match-speed-control legend,
+.match-marker-controls legend,
 .match-event-filters legend {
     width: 88px;
     color: var(--muted);
@@ -1958,6 +1999,7 @@
 }
 
 .match-speed-control label,
+.match-marker-controls > label:not(.match-marker-size),
 .match-event-filters label,
 .match-skip-control > label {
     position: relative;
@@ -1971,9 +2013,30 @@
 }
 
 .match-speed-control input,
+.match-marker-controls input,
 .match-event-filters input,
 .match-skip-control input {
     accent-color: var(--gold);
+}
+
+.match-marker-size {
+    min-height: 34px;
+    display: grid;
+    grid-template-columns: auto minmax(100px, 180px) 28px;
+    gap: 8px;
+    align-items: center;
+    color: var(--muted);
+    font-size: 0.76rem;
+}
+
+.match-marker-size input {
+    width: 100%;
+}
+
+.match-marker-size output {
+    color: var(--text);
+    font: 700 0.72rem "Chakra Petch", sans-serif;
+    text-align: right;
 }
 
 .match-skip-control {
@@ -2480,6 +2543,7 @@
     }
 
     .match-speed-control legend,
+    .match-marker-controls legend,
     .match-event-filters legend {
         width: 100%;
     }
@@ -2534,21 +2598,11 @@
         grid-template-columns: 1fr;
     }
 
-    .tactical-player-marker {
-        width: 46px;
-    }
-
-    .tactical-player-icon {
-        width: 30px;
-        height: 30px;
-    }
 }
 
 @media (prefers-reduced-motion: reduce) {
     .tactical-player-marker,
-    .tactical-zone,
-    .tactical-health-track > span,
-    .tactical-armor-track > span {
+    .tactical-zone {
         transition-duration: 1ms;
     }
 

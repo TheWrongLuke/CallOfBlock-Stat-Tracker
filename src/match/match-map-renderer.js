@@ -1,6 +1,13 @@
 import { mapCoordinateToPercent } from "./match-telemetry-normalizer.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
+const CURRENT_ICON_SIZE_PX = 34;
+const DEFAULT_MARKER_OPTIONS = Object.freeze({
+    size: 2,
+    showIcons: false,
+    showNames: false
+});
+const TEAM_COLORS = ["#7ec8ff", "#81d66d", "#ffcb6b", "#ff7f76", "#c79bff", "#65d8cb", "#ff9f62", "#f58fca"];
 const VEHICLE_LABELS = new Map([
     ["ah-64", "AH-64"],
     ["ah_6", "AH-6"],
@@ -19,17 +26,21 @@ const VEHICLE_LABELS = new Map([
 ]);
 
 export class MatchMapRenderer {
-    constructor(container, telemetry, getPlayerPresentation = () => ({})) {
+    constructor(container, telemetry, getPlayerPresentation = () => ({}), markerOptions = {}) {
         this.container = container;
         this.telemetry = telemetry;
         this.getPlayerPresentation = getPlayerPresentation;
+        this.markerOptions = normalizeMarkerOptions(markerOptions);
         this.playerMarkers = new Map();
         this.vehicleMarkers = new Map();
         this.playerStates = new Map();
         this.vehicleStates = new Map();
         this.currentEvents = [];
+        this.currentTimeMs = 0;
         this.lockedPlayerId = "";
         this.lockedVehicleId = "";
+        this.resizeObserver = null;
+        this.handleResize = () => this.applyMarkerOptions();
         this.handleKeyDown = (event) => {
             if (event.key === "Escape") this.closeTooltip();
         };
@@ -39,6 +50,7 @@ export class MatchMapRenderer {
     update(snapshot, events = [], currentEventId = "") {
         if (!snapshot) return;
         this.currentEvents = events;
+        this.currentTimeMs = snapshot.timeMs;
         this.playerStates = new Map(snapshot.players.map((player) => [player.playerId, player]));
         this.vehicleStates = new Map(snapshot.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
         const activeEvent = events.find((event) => event.eventId === currentEventId) || events.at(-1) || null;
@@ -75,8 +87,6 @@ export class MatchMapRenderer {
                 "is-mvp",
                 activeEvent?.type === "match_end" && this.telemetry.result?.mvp?.playerId === participant.playerId
             );
-            updateMeter(marker.querySelector("[data-marker-health]"), state.health, state.maxHealth);
-            updateMeter(marker.querySelector("[data-marker-armor]"), state.armor, 20);
             marker.setAttribute("aria-label", this.playerTooltipText(participant, state));
         }
 
@@ -98,6 +108,8 @@ export class MatchMapRenderer {
 
     destroy() {
         document.removeEventListener("keydown", this.handleKeyDown);
+        this.resizeObserver?.disconnect();
+        globalThis.removeEventListener?.("resize", this.handleResize);
         this.container.replaceChildren();
         this.playerMarkers.clear();
         this.vehicleMarkers.clear();
@@ -209,6 +221,8 @@ export class MatchMapRenderer {
         });
         document.addEventListener("keydown", this.handleKeyDown);
         this.container.append(this.stage);
+        this.observeStageSize();
+        this.applyMarkerOptions();
     }
 
     createPlayerMarker(participant) {
@@ -219,37 +233,50 @@ export class MatchMapRenderer {
         marker.dataset.tacticalPlayer = participant.playerId;
         marker.setAttribute("aria-pressed", "false");
         marker.title = "";
+        marker.style.setProperty("--player-marker-color", teamColor(participant.teamId || participant.playerId));
 
-        const icon = document.createElement("span");
-        icon.className = "tactical-player-icon";
-        if (presentation.avatarUrl) {
-            const image = document.createElement("img");
-            image.src = presentation.avatarUrl;
-            image.alt = "";
-            image.loading = "lazy";
-            image.referrerPolicy = "no-referrer";
-            image.addEventListener("error", () => image.remove(), { once: true });
-            icon.append(image);
-        }
-        const initials = document.createElement("span");
-        initials.textContent = initialsFor(presentation.name || participant.name);
-        icon.append(initials);
-        marker.append(icon);
+        marker.append(createPlayerAvatar(presentation, participant, "tactical-player-icon"));
 
         const label = document.createElement("span");
         label.className = "tactical-player-name";
         label.textContent = presentation.name || participant.name;
         marker.append(label);
-
-        const meters = document.createElement("span");
-        meters.className = "tactical-marker-meters";
-        meters.innerHTML = `
-            <span class="tactical-health-track"><span data-marker-health></span></span>
-            <span class="tactical-armor-track"><span data-marker-armor></span></span>
-        `;
-        marker.append(meters);
         this.playerLayer.append(marker);
         this.playerMarkers.set(participant.playerId, marker);
+    }
+
+    setMarkerOptions(value) {
+        this.markerOptions = normalizeMarkerOptions({ ...this.markerOptions, ...value });
+        this.applyMarkerOptions();
+    }
+
+    getMarkerOptions() {
+        return { ...this.markerOptions };
+    }
+
+    observeStageSize() {
+        if (typeof ResizeObserver === "function") {
+            this.resizeObserver = new ResizeObserver(this.handleResize);
+            this.resizeObserver.observe(this.stage);
+            return;
+        }
+        globalThis.addEventListener?.("resize", this.handleResize);
+    }
+
+    applyMarkerOptions() {
+        if (!this.stage) return;
+        const xSpan = Math.abs(Number(this.telemetry.map.worldMaxX) - Number(this.telemetry.map.worldMinX));
+        const zSpan = Math.abs(Number(this.telemetry.map.worldMaxZ) - Number(this.telemetry.map.worldMinZ));
+        const xScale = xSpan > 0 ? this.stage.clientWidth / xSpan : 1;
+        const zScale = zSpan > 0 ? this.stage.clientHeight / zSpan : xScale;
+        const blockScale = Math.max(1, Math.min(xScale || 1, zScale || xScale || 1));
+        const linearStep = Math.max(0, (CURRENT_ICON_SIZE_PX - blockScale) / 3);
+        const iconSize = blockScale + linearStep * this.markerOptions.size;
+        const dotSize = Math.max(3, blockScale * 3);
+        this.stage.style.setProperty("--tactical-player-icon-size", `${round(iconSize)}px`);
+        this.stage.style.setProperty("--tactical-player-dot-size", `${round(dotSize)}px`);
+        this.stage.classList.toggle("show-player-icons", this.markerOptions.showIcons);
+        this.stage.classList.toggle("show-player-names", this.markerOptions.showNames);
     }
 
     updateVehicles(vehicles) {
@@ -371,11 +398,37 @@ export class MatchMapRenderer {
         );
         const event = playerEvents.find((item) => item.type === "elimination") || playerEvents[0];
         this.tooltip.replaceChildren();
+        const identity = document.createElement("div");
+        identity.className = "tactical-tooltip-player";
+        identity.append(createPlayerAvatar(presentation, participant, "tactical-tooltip-avatar"));
+        const nameTag = document.createElement("div");
         const heading = document.createElement("strong");
         heading.textContent = presentation.name || participant.name;
-        const details = document.createElement("span");
-        details.textContent = this.playerTooltipText(participant, state);
-        this.tooltip.append(heading, details);
+        const team = document.createElement("small");
+        team.textContent = teamLabel(participant.teamId);
+        nameTag.append(heading, team);
+        identity.append(nameTag);
+
+        const status = !state.connected ? "Disconnected" : state.alive ? "Alive" : "Eliminated";
+        const vitals = document.createElement("span");
+        const health =
+            state.health === null
+                ? "HP unavailable"
+                : `${round(state.health)}${state.maxHealth === null ? "" : ` / ${round(state.maxHealth)}`} HP`;
+        const armor = state.armor === null ? "armor unavailable" : `${round(state.armor)} armor`;
+        vitals.textContent = `${status} - ${health} - ${armor}`;
+        const position = document.createElement("span");
+        position.textContent = `X ${round(state.x)}, Y ${round(state.y)}, Z ${round(state.z)}`;
+        const kd = this.playerKDAt(playerId);
+        const currentKd = document.createElement("span");
+        currentKd.textContent = `Current K/D: ${kd.kills} / ${kd.deaths}`;
+        this.tooltip.append(identity, vitals, position, currentKd);
+        const vehicleState = state.vehicleId ? this.vehicleStates.get(state.vehicleId) : null;
+        if (vehicleState) {
+            const vehicle = document.createElement("span");
+            vehicle.textContent = `Vehicle: ${labelFromId(vehicleState.vehicleType)}`;
+            this.tooltip.append(vehicle);
+        }
         if (event?.weaponLabel || event?.weaponId) {
             const weapon = document.createElement("span");
             weapon.textContent = `Weapon: ${event.weaponLabel || labelFromId(event.weaponId)}`;
@@ -420,7 +473,20 @@ export class MatchMapRenderer {
         const armor = state.armor === null ? "armor unavailable" : `${round(state.armor)} armor`;
         const vehicleState = state.vehicleId ? this.vehicleStates.get(state.vehicleId) : null;
         const vehicle = vehicleState ? `, in ${labelFromId(vehicleState.vehicleType)}` : "";
-        return `${teamLabel(participant.teamId)}, ${health}, ${armor}, X ${round(state.x)}, Y ${round(state.y)}, Z ${round(state.z)}, ${status}${vehicle}`;
+        const kd = this.playerKDAt(participant.playerId);
+        return `${teamLabel(participant.teamId)}, ${health}, ${armor}, X ${round(state.x)}, Y ${round(state.y)}, Z ${round(state.z)}, ${status}, current K/D ${kd.kills}/${kd.deaths}${vehicle}`;
+    }
+
+    playerKDAt(playerId) {
+        let kills = 0;
+        let deaths = 0;
+        for (const event of this.telemetry.events) {
+            if (event.timeMs > this.currentTimeMs) break;
+            if (event.type !== "elimination") continue;
+            if (event.killerId === playerId) kills++;
+            if (event.victimId === playerId) deaths++;
+        }
+        return { kills, deaths };
     }
 
     positionForPlayer(playerId) {
@@ -435,11 +501,39 @@ export class MatchMapRenderer {
     }
 }
 
-function updateMeter(element, value, maximum) {
-    if (!element) return;
-    const normalized = value === null || !(maximum > 0) ? 0 : Math.min(100, Math.max(0, (value / maximum) * 100));
-    element.style.width = `${normalized}%`;
-    element.parentElement?.classList.toggle("is-unavailable", value === null);
+function createPlayerAvatar(presentation, participant, className) {
+    const avatar = document.createElement("span");
+    avatar.className = className;
+    const initials = document.createElement("span");
+    initials.className = "tactical-player-initials";
+    initials.textContent = initialsFor(presentation.name || participant.name);
+    avatar.append(initials);
+    if (presentation.avatarUrl) {
+        const image = document.createElement("img");
+        image.src = presentation.avatarUrl;
+        image.alt = "";
+        image.loading = "lazy";
+        image.referrerPolicy = "no-referrer";
+        image.addEventListener("error", () => image.remove(), { once: true });
+        avatar.prepend(image);
+    }
+    return avatar;
+}
+
+function normalizeMarkerOptions(value = {}) {
+    const rawSize = Number(value.size);
+    return {
+        size: Number.isFinite(rawSize) ? Math.max(0, Math.min(4, Math.round(rawSize))) : DEFAULT_MARKER_OPTIONS.size,
+        showIcons: value.showIcons === true,
+        showNames: value.showNames === true
+    };
+}
+
+function teamColor(value) {
+    const text = String(value || "solo");
+    let hash = 0;
+    for (let index = 0; index < text.length; index++) hash = (hash * 31 + text.charCodeAt(index)) | 0;
+    return TEAM_COLORS[Math.abs(hash) % TEAM_COLORS.length];
 }
 
 function initialsFor(name) {

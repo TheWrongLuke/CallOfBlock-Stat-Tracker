@@ -11,7 +11,8 @@ describe("match playback preferences", () => {
             normalizeMatchPlaybackPreferences({
                 speed: 2,
                 skipIdle: false,
-                filters: { vehicles: false }
+                filters: { vehicles: false },
+                markers: { size: 4, showIcons: true, showNames: true }
             })
         ).toMatchObject({
             speed: 2,
@@ -20,6 +21,11 @@ describe("match playback preferences", () => {
                 engagements: true,
                 vehicles: false,
                 eliminations: true
+            },
+            markers: {
+                size: 4,
+                showIcons: true,
+                showNames: true
             }
         });
     });
@@ -35,7 +41,8 @@ describe("match playback preferences", () => {
         expect(loadMatchPlaybackPreferences(storage)).toMatchObject({
             speed: 0.5,
             skipIdle: true,
-            filters: { zone: false, vehicles: true }
+            filters: { zone: false, vehicles: true },
+            markers: { size: 2, showIcons: false, showNames: false }
         });
     });
 });

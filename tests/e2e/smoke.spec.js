@@ -952,6 +952,27 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     await expect(matchView.locator(".tactical-vehicle-marker")).toHaveText("T");
     await expect(matchView.locator(".tactical-zone")).toBeVisible();
     await expect(matchView.locator(".tactical-marker-tooltip")).toBeHidden();
+    await expect(matchView.locator("[data-match-marker-size]")).toHaveValue("2");
+    await expect(matchView.locator("[data-match-player-icons]")).not.toBeChecked();
+    await expect(matchView.locator("[data-match-player-names]")).not.toBeChecked();
+    await expect(matchView.locator(".tactical-map-stage")).not.toHaveClass(/show-player-icons|show-player-names/);
+    const defaultMarkerGeometry = await matchView.locator('[data-tactical-player="p_alpha"]').evaluate((marker) => {
+        const markerBounds = marker.getBoundingClientRect();
+        const iconBounds = marker.querySelector(".tactical-player-icon").getBoundingClientRect();
+        return {
+            centerOffsetX: Math.abs(
+                markerBounds.left + markerBounds.width / 2 - (iconBounds.left + iconBounds.width / 2)
+            ),
+            centerOffsetY: Math.abs(
+                markerBounds.top + markerBounds.height / 2 - (iconBounds.top + iconBounds.height / 2)
+            ),
+            dotSize: iconBounds.width
+        };
+    });
+    expect(defaultMarkerGeometry.centerOffsetX).toBeLessThanOrEqual(0.5);
+    expect(defaultMarkerGeometry.centerOffsetY).toBeLessThanOrEqual(0.5);
+    expect(defaultMarkerGeometry.dotSize).toBeGreaterThanOrEqual(3);
+    expect(defaultMarkerGeometry.dotSize).toBeLessThanOrEqual(6);
     await expect(matchView.locator("[data-match-skip-idle]")).toBeChecked();
     await expect(matchView.locator("[data-match-status]")).toContainText("Engagement");
     const timelineFollowsMap = await matchView.evaluate((element) => {
@@ -979,10 +1000,37 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     await page.keyboard.press("Enter");
     await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("Alpha");
     await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("HP");
+    await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("Current K/D");
     await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("Shot range");
+    await expect(matchView.locator(".tactical-tooltip-avatar")).toBeVisible();
+
+    await matchView.locator("[data-match-player-icons]").check();
+    await matchView.locator("[data-match-player-names]").check();
+    await matchView.locator("[data-match-marker-size]").evaluate((element) => {
+        element.value = "4";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator("[data-match-marker-size-output]")).toHaveText("4/4");
+    await expect(matchView.locator(".tactical-map-stage")).toHaveClass(/show-player-icons/);
+    await expect(matchView.locator(".tactical-map-stage")).toHaveClass(/show-player-names/);
+    const largeIconSize = await matchView
+        .locator('[data-tactical-player="p_alpha"] .tactical-player-icon')
+        .evaluate((icon) => icon.getBoundingClientRect().width);
+    expect(largeIconSize).toBeGreaterThan(34);
+    await expect(matchView.locator('[data-tactical-player="p_alpha"] .tactical-player-name')).toBeVisible();
 
     await matchView.locator("[data-match-skip-idle]").uncheck();
     await expect(matchView.locator("[data-match-status]")).toContainText("Snapshot");
+    await matchView.locator("[data-match-timeline]").evaluate((element) => {
+        element.value = "0";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await matchView.locator("[data-match-play]").click();
+    await page.waitForTimeout(300);
+    const continuousTime = Number(await matchView.locator("[data-match-timeline]").inputValue());
+    expect(continuousTime).toBeGreaterThan(0);
+    expect(continuousTime).toBeLessThan(1000);
+    await matchView.locator("[data-match-play]").click();
     await matchView.locator('[name="match-speed"][value="2"]').check();
     await expect(matchView.locator('[name="match-speed"][value="2"]')).toBeChecked();
 
@@ -1002,6 +1050,9 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     await expect(matchView.locator("[data-match-skip-idle]")).not.toBeChecked();
     await expect(matchView.locator('[name="match-speed"][value="2"]')).toBeChecked();
     await expect(matchView.locator('[data-match-filter="vehicles"]')).not.toBeChecked();
+    await expect(matchView.locator("[data-match-marker-size]")).toHaveValue("4");
+    await expect(matchView.locator("[data-match-player-icons]")).toBeChecked();
+    await expect(matchView.locator("[data-match-player-names]")).toBeChecked();
 
     const horizontalOverflow = await page.evaluate(
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth

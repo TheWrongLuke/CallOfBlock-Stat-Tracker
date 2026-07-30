@@ -167,6 +167,30 @@ describe("match tactical playback", () => {
         controller.destroy();
     });
 
+    it("interpolates continuously between recorded snapshots", async () => {
+        vi.useFakeTimers();
+        const telemetry = normalizeMatchTelemetry(await fixture("fixture-br"), "fixture-br");
+        const controller = new MatchPlaybackController(telemetry);
+        const first = telemetry.snapshots[0].players.find((player) => player.playerId === "p_alpha");
+        const second = telemetry.snapshots[1].players.find((player) => player.playerId === "p_alpha");
+
+        controller.setSkipIdle(false);
+        controller.seek(1000);
+        const midpoint = controller.state().snapshot.players.find((player) => player.playerId === "p_alpha");
+        expect(controller.state().snapshot.timeMs).toBe(1000);
+        expect(midpoint.x).toBeCloseTo((first.x + second.x) / 2);
+        expect(midpoint.z).toBeCloseTo((first.z + second.z) / 2);
+
+        controller.seek(0);
+        controller.play();
+        await vi.advanceTimersByTimeAsync(512);
+        expect(controller.state().snapshot.timeMs).toBeGreaterThan(400);
+        expect(controller.state().snapshot.timeMs).toBeLessThan(650);
+
+        controller.destroy();
+        vi.useRealTimers();
+    });
+
     it("restores a Deathmatch player at the recorded respawn snapshot", async () => {
         const telemetry = normalizeMatchTelemetry(await fixture("fixture-dm"), "fixture-dm");
         const controller = new MatchPlaybackController(telemetry);
