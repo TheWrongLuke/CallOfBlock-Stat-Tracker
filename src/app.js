@@ -5923,16 +5923,15 @@ async function submitBadgeEditor(form) {
         };
         const result = await progression.api.saveBadgeOverride(savedBadge);
         if (result.error) throw result.error;
+        const persisted = applyBadgeCatalogOverride(result.data);
+        if (!badgeOverrideMatches(persisted, savedBadge)) {
+            throw new Error("Supabase did not return the badge values that were just saved.");
+        }
 
         progression.badgeEditorId = badgeId;
         progression.badgeMessage = `${label} and ${tiers.length || "its"} ${tiers.length === 1 ? "level were" : "levels were"} saved.`;
         progression.badgeEditorStatus = progression.badgeMessage;
         progression.badgeEditorStatusError = "";
-        await loadBadgeCatalogOverrides({ force: true });
-        const persisted = state.badges.overrides.find((override) => override.badgeId === badgeId);
-        if (!state.badges.ready || !badgeOverrideMatches(persisted, savedBadge)) {
-            throw new Error("Supabase returned the previous badge values after saving. Retry after the current load finishes.");
-        }
         clearBadgeEditorDraft({ resetExpanded: false });
     } catch (error) {
         console.error("Could not save badge catalogue override", error);
@@ -6188,6 +6187,23 @@ function badgeCatalog() {
     return state.badges.catalog?.length ? state.badges.catalog : BADGE_CATALOG;
 }
 
+function applyBadgeCatalogOverride(data) {
+    const row = Array.isArray(data) ? data[0] : data;
+    const override = normalizeBadgeCatalogOverride(row);
+    if (!override) return null;
+
+    const badgeState = state.badges;
+    badgeState.overrides = [
+        ...badgeState.overrides.filter((entry) => entry.badgeId !== override.badgeId),
+        override
+    ].sort((first, second) => first.badgeId.localeCompare(second.badgeId));
+    badgeState.catalog = mergeBadgeCatalog(BADGE_CATALOG, badgeState.overrides);
+    badgeState.loaded = true;
+    badgeState.ready = true;
+    badgeState.error = "";
+    return override;
+}
+
 async function loadBadgeCatalogOverrides({ force = false } = {}) {
     const badgeState = state.badges;
     if (badgeState.loading) {
@@ -6236,6 +6252,7 @@ async function loadBadgeCatalogOverrides({ force = false } = {}) {
 function badgeOverrideMatches(override, saved) {
     if (!override) return false;
     if (override.label !== saved.label || override.description !== saved.description) return false;
+    if ((override.iconUrl || "") !== (saved.icon_url || "")) return false;
     const expectedTiers = Array.isArray(saved.tiers) ? saved.tiers : [];
     if (override.tiers.length !== expectedTiers.length) return false;
     return expectedTiers.every((tier, index) => {
@@ -6245,7 +6262,8 @@ function badgeOverrideMatches(override, saved) {
             persisted.name === tier.name &&
             persisted.description === tier.description &&
             persisted.target === tier.target &&
-            persisted.targetPerMap === tier.target_per_map
+            persisted.targetPerMap === tier.target_per_map &&
+            (persisted.iconUrl || "") === (tier.icon_url || "")
         );
     });
 }

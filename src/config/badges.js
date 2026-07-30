@@ -100,7 +100,7 @@ const LIVE_COUNTER_BADGES = [
         badgeType: "live-counter",
         metric: { scope: "deathmatch", stat: "kills" },
         unit: "DM kills",
-        description: "Score Deathmatch eliminations.",
+        description: "Score eliminations in Team Deathmatch or Free For All.",
         liveValueAtFinalTier: true,
         tiers: [
             tier("common", "Arena Combatant", 100),
@@ -130,7 +130,7 @@ const LIVE_COUNTER_BADGES = [
         badgeType: "live-counter",
         metric: { scope: "deathmatch", stat: "wins" },
         unit: "DM wins",
-        description: "Win Deathmatch matches.",
+        description: "Win Team Deathmatch or Free For All matches.",
         liveValueAtFinalTier: true,
         tiers: [
             tier("common", "Team Victor", 1),
@@ -160,7 +160,7 @@ const LIVE_COUNTER_BADGES = [
         badgeType: "live-counter",
         metric: { scope: "deathmatch", stat: "mvp" },
         unit: "DM MVPs",
-        description: "Earn Deathmatch MVP awards.",
+        description: "Earn MVP awards in Team Deathmatch or Free For All.",
         liveValueAtFinalTier: true,
         tiers: [
             tier("common", "Standout Fighter", 1),
@@ -205,7 +205,7 @@ const LIVE_COUNTER_BADGES = [
         badgeType: "live-counter",
         metric: { scope: "deathmatch", stat: "playtimeSeconds", transform: "hours" },
         unit: "DM hours",
-        description: "Spend time in Deathmatch matches.",
+        description: "Spend time in Team Deathmatch or Free For All matches.",
         liveValueAtFinalTier: true,
         tiers: [
             tier("common", "Recruit", 2),
@@ -255,7 +255,7 @@ const LIMITED_UPGRADABLE_BADGES = [
         badgeType: "limited",
         metric: { scope: "deathmatch", stat: "topMatchKills" },
         unit: "DM kills",
-        description: "Set a Deathmatch single-match kill record.",
+        description: "Set a single-match kill record in Team Deathmatch or Free For All.",
         personalBest: {
             metric: { scope: "deathmatch", stat: "topMatchKills" },
             label: "Personal best",
@@ -273,7 +273,7 @@ const LIMITED_UPGRADABLE_BADGES = [
         badgeType: "limited",
         metric: { scope: "deathmatch", stat: "bestFlawlessWinKills" },
         unit: "kills in a flawless DM win",
-        description: "Win Deathmatch without dying.",
+        description: "Win Team Deathmatch or Free For All without dying.",
         personalBest: {
             metric: { scope: "deathmatch", stat: "bestFlawlessWinKills" },
             label: "Best flawless win",
@@ -292,7 +292,7 @@ const LIMITED_UPGRADABLE_BADGES = [
         badgeType: "limited",
         metric: { scope: "deathmatch", stat: "longestWinStreak" },
         unit: "consecutive DM wins",
-        description: "Build a Deathmatch-only winning streak.",
+        description: "Build a winning streak across Team Deathmatch and Free For All.",
         personalBest: {
             metric: { scope: "deathmatch", stat: "longestWinStreak" },
             label: "Longest DM win streak",
@@ -508,16 +508,22 @@ const PERMANENT_GAMEPLAY_BADGES = [
         "epic",
         "Personally eliminate every member of one enemy Battle Royale squad."
     ),
-    permanentBadge("comeback", "Comeback", "epic", "Win Deathmatch after your team trailed by at least 10 points.", {
-        metric: { scope: "deathmatch", stat: "largestComebackDeficit" },
-        label: "Largest recovered deficit",
-        unit: "points"
-    }),
+    permanentBadge(
+        "comeback",
+        "Comeback",
+        "epic",
+        "Win Team Deathmatch after your team trailed by at least 10 points.",
+        {
+            metric: { scope: "deathmatch", stat: "largestComebackDeficit" },
+            label: "Largest recovered deficit",
+            unit: "points"
+        }
+    ),
     permanentBadge(
         "photo_finish",
         "Photo Finish",
         "epic",
-        "Score the match-winning Deathmatch elimination in the final five seconds."
+        "Score the match-winning elimination in the final five seconds of Team Deathmatch or Free For All."
     ),
     permanentBadge("barely_standing", "Barely Standing", "legendary", "Win Battle Royale at or below 2 HP.", {
         metric: { scope: "battleRoyale", stat: "lowestWinningHealth", zeroIsValue: true },
