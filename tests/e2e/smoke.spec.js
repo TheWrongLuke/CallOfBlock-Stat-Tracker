@@ -428,6 +428,18 @@ test("existing public hash routes still open", async ({ page }) => {
     await expect(page.locator("#leaderboard-view")).toBeVisible();
 });
 
+test("Duel and Zombie Survival have separate public leaderboard routes", async ({ page }) => {
+    await openApp(page, "#view=leaderboards&mode=zombieSurvival&board=players&sort=survivalDurationMs");
+
+    await expect(page.locator("#leaderboard-view")).toBeVisible();
+    await expect(page.locator("#leaderboard-title")).toHaveText("Longest Survival");
+    await expect(page.getByRole("button", { name: "Zombie Survival mode, selected" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Duel mode" }).click();
+    await expect(page.locator("#leaderboard-title")).toHaveText("Duel ranking");
+    await expect(page.getByRole("button", { name: "Duel mode, selected" })).toBeVisible();
+});
+
 test("creator trust section and footer trust links are visible to public visitors", async ({ page }) => {
     await openApp(page);
 

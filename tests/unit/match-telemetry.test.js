@@ -115,6 +115,59 @@ describe("match telemetry normalization", () => {
         const telemetry = normalizeMatchTelemetry(source, "fixture-br");
         expect(telemetry.snapshots[0].vehicles.map((vehicle) => vehicle.vehicleId)).toEqual(["vehicle-tank-1"]);
     });
+
+    it("accepts Duel and Zombie Survival lifecycle telemetry without mixing their mode identifiers", async () => {
+        const base = await fixture("fixture-partial");
+        const duel = normalizeMatchTelemetry(
+            {
+                ...base,
+                matchId: "fixture-duel",
+                mode: "duel",
+                events: [
+                    { eventId: "duel-start", type: "duel_match_start", timeMs: 0 },
+                    {
+                        eventId: "round-start",
+                        type: "round_start",
+                        timeMs: 1_000,
+                        roundNumber: 2,
+                        teamAScore: 1,
+                        teamBScore: 0
+                    },
+                    { eventId: "duel-end", type: "duel_match_end", timeMs: 2_000 }
+                ]
+            },
+            "fixture-duel"
+        );
+        const zombie = normalizeMatchTelemetry(
+            {
+                ...base,
+                matchId: "fixture-zombie",
+                mode: "zombieSurvival",
+                events: [
+                    { eventId: "survival-start", type: "survival_timer_start", timeMs: 0 },
+                    {
+                        eventId: "population",
+                        type: "population_pressure",
+                        timeMs: 1_000,
+                        activeZombieCount: 18,
+                        dynamicZombieTarget: 24,
+                        runtimePopulationCap: 100
+                    },
+                    { eventId: "survival-end", type: "zombie_survival_match_end", timeMs: 2_000 }
+                ]
+            },
+            "fixture-zombie"
+        );
+
+        expect(duel.mode).toBe("duel");
+        expect(duel.events[1]).toMatchObject({ roundNumber: 2, teamAScore: 1, teamBScore: 0 });
+        expect(zombie.mode).toBe("zombieSurvival");
+        expect(zombie.events[1]).toMatchObject({
+            activeZombieCount: 18,
+            dynamicZombieTarget: 24,
+            runtimePopulationCap: 100
+        });
+    });
 });
 
 describe("match tactical playback", () => {

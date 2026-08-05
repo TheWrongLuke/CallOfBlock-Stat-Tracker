@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Call of Block 2 | Stats, Playtests and Community Support</title>
-    <meta name="description" content="Call of Block 2 community hub with Battle Royale and Deathmatch statistics, player profiles, playtest scheduling, and support tickets.">
+    <meta name="description" content="Call of Block 2 community hub with Battle Royale, Deathmatch, Duel, and Zombie Survival statistics, player profiles, playtest scheduling, and support tickets.">
     <meta name="theme-color" content="#090d10">
     <link rel="canonical" href="https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Call of Block 2">
     <meta property="og:title" content="Call of Block 2 | Stats, Playtests and Community Support">
-    <meta property="og:description" content="Track Battle Royale and Deathmatch statistics, manage your player profile, schedule playtests, and contact support.">
+    <meta property="og:description" content="Track Battle Royale, Deathmatch, Duel, and Zombie Survival statistics, manage your player profile, schedule playtests, and contact support.">
     <meta property="og:url" content="https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/">
     <meta property="og:image" content="https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/assets/home-hero-bg.png">
     <meta name="twitter:card" content="summary_large_image">
@@ -108,7 +108,8 @@
                     Battle Royale drops players over Shmar with custom guns, upgrades, explosives, and possible vehicles
                     scattered through the map. The zone keeps moving, forcing squads and solo players into fights until one
                     side is left standing. Deathmatch is the faster mode: pick a kit, spawn with your team, and keep trading
-                    rounds until the final score decides the winner.
+                    rounds until the final score decides the winner. Duel adds round-based small-team fights, while Zombie
+                    Survival is an endless cooperative endurance run with escalating threats.
                 </p>
             </article>
             <aside class="latest-panel">
@@ -132,12 +133,24 @@
             </article>
             <article class="info-panel">
                 <span>03</span>
+                <h3>Duel</h3>
+                <p>Choose kits between rounds, fight without mid-round respawns, and push your team to the required round-win score.</p>
+                <a href="#view=leaderboards&mode=duel&board=players&sort=wins">Duel stats</a>
+            </article>
+            <article class="info-panel">
+                <span>04</span>
+                <h3>Zombie Survival</h3>
+                <p>Enter together, scavenge sparse supplies, survive escalating local hordes, and compete for the longest verified survival time.</p>
+                <a href="#view=leaderboards&mode=zombieSurvival&board=players&sort=survivalDurationMs">Survival stats</a>
+            </article>
+            <article class="info-panel">
+                <span>05</span>
                 <h3>Tracker</h3>
                 <p>Check rankings, player profiles, match history, weapons, maps, headshots, playtime, win rates, and the last completed games from the live server stats.</p>
                 <a href="#view=leaderboards&mode=battleRoyale&board=players&sort=wins">Leaderboards</a>
             </article>
             <article class="info-panel">
-                <span>04</span>
+                <span>06</span>
                 <h3>Playtests</h3>
                 <p>Pick the best community match time with transparent availability, preferred dates, mode interest, and a ranked winner.</p>
                 <a href="#playtests">Open scheduler</a>
@@ -262,6 +275,24 @@
                             <li>Help your team reach the kill target before the other team or finish ahead when the timer expires.</li>
                         </ul>
                     </section>
+                    <section class="mode-guide" aria-labelledby="how-to-play-duel">
+                        <span>Duel</span>
+                        <h3 id="how-to-play-duel">Prepare, fight, reset.</h3>
+                        <ul>
+                            <li>Duel supports balanced 1v1 or 2v2 teams on dedicated small maps.</li>
+                            <li>Select a kit during each frozen preparation phase, then fight when every player unlocks together.</li>
+                            <li>A death lasts for the rest of that round. The first team to the configured round-win target takes the match.</li>
+                        </ul>
+                    </section>
+                    <section class="mode-guide" aria-labelledby="how-to-play-zombie-survival">
+                        <span>Zombie Survival</span>
+                        <h3 id="how-to-play-zombie-survival">Scavenge, move, endure.</h3>
+                        <ul>
+                            <li>The run begins at a safe random insertion area with sparse chests and rare ground vehicles.</li>
+                            <li>Threats spawn around living participants and scale through capped difficulty phases for as long as anyone survives.</li>
+                            <li>Your personal timer stops when your survival ends. The match continues until the final survivor is gone.</li>
+                        </ul>
+                    </section>
                 </div>
                 <div class="guide-account-note">
                     <strong>After the match</strong>
@@ -291,8 +322,8 @@
                     <p>The server can support cracked accounts during community sessions, but the current whitelist and access instructions still apply. Check Discord before joining, and use the same required modpack.</p>
                 </details>
                 <details>
-                    <summary>What is the difference between the two modes?</summary>
-                    <p>Battle Royale is a survival match built around dropping, looting, the moving zone, and being the final surviving player or team. Deathmatch is a team mode with map voting, selectable kits, respawns, and a kill target or time limit.</p>
+                    <summary>What is the difference between the modes?</summary>
+                    <p>Battle Royale uses dropping, looting, and a moving zone. Deathmatch uses kits, respawns, and a score target. Duel is a round-based 1v1 or 2v2 mode without mid-round respawns. Zombie Survival is an endless cooperative endurance mode ranked by verified survival time.</p>
                 </details>
                 <details>
                     <summary>Do I need to log in with Discord?</summary>
@@ -429,7 +460,7 @@
             </div>
             <div id="profile-body" class="profile-body">
                 <div class="profile-placeholder">
-                    <p>Pick a player row to inspect their Battle Royale and Deathmatch stats side by side.</p>
+                    <p>Pick a player row to inspect their Battle Royale, Deathmatch, Duel, and Zombie Survival stats.</p>
                 </div>
             </div>
         </aside>
@@ -590,7 +621,7 @@
                             <h2>Call of Block</h2>
                         </div>
                     </div>
-                    <p>Modded Battle Royale and Deathmatch for Minecraft 1.20.1 Forge.</p>
+                    <p>Modded Battle Royale, Deathmatch, Duel, and Zombie Survival for Minecraft 1.20.1 Forge.</p>
                     <p class="footer-project-meta">Call of Block 2.3 Community Hub</p>
                 </section>
                 <nav class="footer-column" aria-labelledby="footer-explore-title">

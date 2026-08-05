@@ -12,6 +12,25 @@ const FILTER_LABELS = {
     respawns: "Respawns"
 };
 
+const MODE_EVENT_TYPES = new Set([
+    "duel_match_start",
+    "round_preparation",
+    "round_start",
+    "round_draw",
+    "round_end",
+    "duel_match_end",
+    "zombie_survival_match_start",
+    "preparation_start",
+    "survival_timer_start",
+    "difficulty_phase_change",
+    "population_pressure",
+    "population_override_changed",
+    "player_disconnect",
+    "player_reconnect",
+    "final_survivor",
+    "zombie_survival_match_end"
+]);
+
 export function createMatchDetailPage({
     container,
     api,
@@ -665,8 +684,9 @@ export function createMatchDetailPage({
         if (!stage) return;
         let overlay = stage.querySelector("[data-match-end-overlay]");
         const matchEnded =
-            playbackState.events.some((event) => event.type === "match_end") ||
-            playbackState.snapshot?.timeMs >= telemetry.durationMs;
+            playbackState.events.some((event) =>
+                ["match_end", "duel_match_end", "zombie_survival_match_end"].includes(event.type)
+            ) || playbackState.snapshot?.timeMs >= telemetry.durationMs;
         if (!matchEnded) {
             overlay?.remove();
             return;
@@ -1034,7 +1054,16 @@ export function createMatchDetailPage({
         const actor = event.killerId || event.attackerId || event.playerId;
         if (event.type === "zone_phase_changed") return `Zone phase ${event.zone?.phase ?? "changed"}`;
         if (event.type === "team_eliminated") return `${event.teamId || "Team"} eliminated`;
-        if (event.type === "match_end") return "Match complete";
+        if (["match_end", "duel_match_end", "zombie_survival_match_end"].includes(event.type)) return "Match complete";
+        if (["round_preparation", "round_start", "round_draw", "round_end"].includes(event.type)) {
+            const score = `Team A ${event.teamAScore ?? 0} / ${event.teamBScore ?? 0} Team B`;
+            return `Round ${event.roundNumber ?? "-"} - ${score}`;
+        }
+        if (["population_pressure", "population_override_changed"].includes(event.type)) {
+            return `${event.activeZombieCount ?? 0} active / ${event.dynamicZombieTarget ?? 0} target / ${event.runtimePopulationCap ?? 0} cap`;
+        }
+        if (event.type === "final_survivor" && event.playerId)
+            return `${playerName(event.playerId)} is the final survivor`;
         return (
             [actor ? playerName(actor) : "", event.victimId ? playerName(event.victimId) : ""]
                 .filter(Boolean)
@@ -1118,7 +1147,7 @@ function finalScoreText(scores) {
 
 function filterForEventType(type) {
     if (["engagement_start", "damage"].includes(type)) return "engagements";
-    if (["elimination", "team_eliminated"].includes(type)) return "eliminations";
+    if (["elimination", "team_eliminated", "player_eliminated", "player_death"].includes(type)) return "eliminations";
     if (type === "vehicle_destroyed") return "vehicles";
     if (type === "zone_phase_changed") return "zone";
     if (["rapid_streak", "ace"].includes(type)) return "streaks";
@@ -1128,12 +1157,14 @@ function filterForEventType(type) {
 
 function eventPassesFilters(event, filters) {
     const filter = filterForEventType(event.type);
-    return filter ? filters[filter] : event.type === "match_end";
+    return filter ? filters[filter] : event.type === "match_end" || MODE_EVENT_TYPES.has(event.type);
 }
 
 function modeLabel(mode) {
     if (mode === "battleRoyale") return "Battle Royale";
     if (mode === "deathmatch") return "Deathmatch";
+    if (mode === "duel") return "Duel";
+    if (mode === "zombieSurvival") return "Zombie Survival";
     return "Match";
 }
 

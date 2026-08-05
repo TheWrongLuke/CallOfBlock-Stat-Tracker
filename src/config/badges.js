@@ -21,10 +21,13 @@ function tieredBadge({
     description,
     tiers,
     personalBest = null,
-    liveValueAtFinalTier = false
+    liveValueAtFinalTier = false,
+    showInGame = true,
+    announceInChat = showInGame
 }) {
     return {
         id,
+        advancementId: id,
         badgeType,
         metric,
         unit,
@@ -35,23 +38,30 @@ function tieredBadge({
         tiers: tiers.map((entry) => ({
             ...entry,
             iconKey: entry.iconKey || `${id}_${entry.rarity}`,
+            advancementId: entry.iconKey || `${id}_${entry.rarity}`,
             description: entry.description || `${entry.name}: ${description}`
         })),
         personalBest,
         liveValueAtFinalTier,
+        showInGame,
+        announceInChat,
         progress: { type: "tiered" }
     };
 }
 
-function permanentBadge(id, label, rarity, description, personalBest = null) {
+function permanentBadge(id, label, rarity, description, personalBest = null, options = {}) {
+    const showInGame = options.showInGame ?? true;
     return {
         id,
+        advancementId: id,
         badgeType: "permanent",
         label,
         rarity,
         description,
         icon: DEFAULT_BADGE_ICON,
         personalBest,
+        showInGame,
+        announceInChat: options.announceInChat ?? showInGame,
         progress: { type: "achievement" }
     };
 }
@@ -59,12 +69,15 @@ function permanentBadge(id, label, rarity, description, personalBest = null) {
 function specialBadge(id, label, rarity, description, specialRule = "") {
     return {
         id,
+        advancementId: id,
         badgeType: "special",
         label,
         rarity,
         description,
         icon: DEFAULT_BADGE_ICON,
         specialRule,
+        showInGame: false,
+        announceInChat: false,
         progress: { type: "special" }
     };
 }
@@ -311,6 +324,8 @@ const LIMITED_UPGRADABLE_BADGES = [
         metric: { scope: "account", stat: "weekly_missions_completed" },
         unit: "weekly missions",
         description: "Complete renewable weekly missions.",
+        showInGame: false,
+        announceInChat: false,
         tiers: [
             tier("common", "Assignment Accepted", 1),
             tier("rare", "Contract Runner", 25),
@@ -324,6 +339,8 @@ const LIMITED_UPGRADABLE_BADGES = [
         metric: { scope: "account", stat: "hard_missions_completed" },
         unit: "Hard missions",
         description: "Complete Hard weekly missions.",
+        showInGame: false,
+        announceInChat: false,
         tiers: [
             tier("rare", "Challenge Accepted", 5),
             tier("epic", "High-Risk Operative", 25),
@@ -553,7 +570,9 @@ const PERMANENT_GAMEPLAY_BADGES = [
         "perfect_week",
         "Perfect Week",
         "epic",
-        "Complete all seven assigned missions in one weekly rotation."
+        "Complete all seven assigned missions in one weekly rotation.",
+        null,
+        { showInGame: false, announceInChat: false }
     ),
     permanentBadge(
         "minimalist",

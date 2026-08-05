@@ -8922,6 +8922,18 @@ img.identity-avatar {
     color: var(--red);
 }
 
+.duel-history-card .history-row {
+    grid-template-columns: minmax(0, 1.5fr) minmax(82px, 0.45fr) minmax(150px, 0.65fr);
+}
+
+.zombie-history-card .history-row {
+    grid-template-columns: minmax(240px, 1.65fr) minmax(92px, 0.45fr) minmax(110px, 0.55fr) minmax(150px, 0.7fr);
+}
+
+.special-history-card .history-row > div:first-child span {
+    line-height: 1.35;
+}
+
 .primary-action,
 .back-button {
     border: 1px solid rgba(255, 203, 107, 0.32);
@@ -11376,9 +11388,23 @@ code {
 }
 
 @media (max-width: 700px) {
+    .leaderboard-panel > .panel-header {
+        display: grid;
+        width: 100%;
+    }
+
     .leaderboard-header-actions {
         width: 100%;
+        min-width: 0;
         justify-content: stretch;
+        overflow: hidden;
+    }
+
+    #mode-tabs {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        flex-wrap: nowrap;
     }
 
     .mode-guide-grid {
@@ -11503,6 +11529,11 @@ code {
 
     .history-row,
     .roster-row {
+        grid-template-columns: 1fr;
+    }
+
+    .duel-history-card .history-row,
+    .zombie-history-card .history-row {
         grid-template-columns: 1fr;
     }
 

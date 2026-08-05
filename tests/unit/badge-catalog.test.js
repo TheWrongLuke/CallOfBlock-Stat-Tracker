@@ -56,4 +56,37 @@ describe("badge catalog", () => {
             "supporter"
         ]);
     });
+
+    it("uses stable advancement IDs and keeps account or special badges website-only", () => {
+        const visible = BADGE_CATALOG.filter((badge) => badge.showInGame);
+        const visibleAwards = visible.flatMap((badge) =>
+            badge.tiers?.length ? badge.tiers.map((tier) => tier.advancementId) : [badge.advancementId]
+        );
+
+        expect(visible).toHaveLength(57);
+        expect(visibleAwards).toHaveLength(117);
+        expect(new Set(visibleAwards).size).toBe(117);
+        expect(BADGE_CATALOG.find((badge) => badge.id === "first_blood")).toMatchObject({
+            advancementId: "first_blood",
+            showInGame: true,
+            announceInChat: true
+        });
+        expect(BADGE_CATALOG.find((badge) => badge.id === "br_wins_counter").tiers[0].advancementId).toBe(
+            "br_wins_counter_common"
+        );
+        for (const id of [
+            "weekly_missions_progress",
+            "hard_missions_progress",
+            "perfect_week",
+            "admin",
+            "owner",
+            "playtester",
+            "supporter"
+        ]) {
+            expect(BADGE_CATALOG.find((badge) => badge.id === id)).toMatchObject({
+                showInGame: false,
+                announceInChat: false
+            });
+        }
+    });
 });

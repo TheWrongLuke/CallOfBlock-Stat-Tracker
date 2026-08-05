@@ -13,7 +13,25 @@ const EVENT_TYPES = new Set([
     "ace",
     "respawn",
     "team_eliminated",
-    "match_end"
+    "match_end",
+    "duel_match_start",
+    "round_preparation",
+    "round_start",
+    "player_eliminated",
+    "round_draw",
+    "round_end",
+    "duel_match_end",
+    "zombie_survival_match_start",
+    "preparation_start",
+    "survival_timer_start",
+    "difficulty_phase_change",
+    "population_pressure",
+    "population_override_changed",
+    "player_death",
+    "player_disconnect",
+    "player_reconnect",
+    "final_survivor",
+    "zombie_survival_match_end"
 ]);
 
 export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
@@ -65,7 +83,7 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
     return {
         telemetryVersion: MATCH_TELEMETRY_VERSION,
         matchId,
-        mode: enumText(raw.mode, ["battleRoyale", "deathmatch"], "unknown"),
+        mode: enumText(raw.mode, ["battleRoyale", "deathmatch", "duel", "zombieSurvival"], "unknown"),
         startedAt: validDateText(raw.startedAt),
         endedAt: validDateText(raw.endedAt),
         durationMs: Math.max(durationMs, highestTime),
@@ -313,7 +331,16 @@ function normalizeEvent(value, index, participantIds, snapshotIds, warnings) {
         "finalDamage",
         "horizontalDistance",
         "distance3d",
-        "verticalDifference"
+        "verticalDifference",
+        "roundNumber",
+        "teamAScore",
+        "teamBScore",
+        "activeZombieCount",
+        "dynamicZombieTarget",
+        "runtimePopulationCap",
+        "specialZombieCount",
+        "graceExpiresAtMs",
+        "offlineDurationMs"
     ]) {
         event[key] = finite(value[key]);
     }

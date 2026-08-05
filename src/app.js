@@ -66,12 +66,26 @@ import { createReplayApi } from "./match/replay-downloads.js";
 const MODE_LABELS = {
     overall: "Overall",
     battleRoyale: "Battle Royale",
-    deathmatch: "Deathmatch"
+    deathmatch: "Deathmatch",
+    duel: "Duel",
+    zombieSurvival: "Zombie Survival"
 };
 
 const PUBLIC_MODE_LABELS = {
     battleRoyale: "Battle Royale",
-    deathmatch: "Deathmatch"
+    deathmatch: "Deathmatch",
+    duel: "Duel",
+    zombieSurvival: "Zombie Survival"
+};
+
+const STANDARD_MODE_LABELS = {
+    battleRoyale: PUBLIC_MODE_LABELS.battleRoyale,
+    deathmatch: PUBLIC_MODE_LABELS.deathmatch
+};
+
+const SPECIAL_MODE_DEFAULT_SORTS = {
+    duel: "wins",
+    zombieSurvival: "survivalDurationMs"
 };
 
 const SORT_LABELS = {
@@ -87,7 +101,17 @@ const SORT_LABELS = {
     hits: "Hits",
     headshotKills: "Headshot Kills",
     utilityKills: "Utility Kills",
-    vehicleKills: "Vehicle Kills"
+    vehicleKills: "Vehicle Kills",
+    losses: "Losses",
+    roundWins: "Round Wins",
+    roundLosses: "Round Losses",
+    damage: "Damage",
+    flawlessRounds: "Flawless Rounds",
+    survivalDurationMs: "Survival Time",
+    zombieKills: "Zombie Kills",
+    specialZombieKills: "Special Zombie Kills",
+    damageTaken: "Damage Taken",
+    matchDate: "Match Date"
 };
 
 const PROFILE_WEAPON_SORTS = {
@@ -112,6 +136,8 @@ const PLAYER_TABS = {
     overview: "Overview",
     battleRoyale: "Battle Royale",
     deathmatch: "Deathmatch",
+    duel: "Duel",
+    zombieSurvival: "Zombie Survival",
     maps: "Maps",
     weapons: "Weapons",
     history: "History"
@@ -2198,8 +2224,11 @@ function applyRoute() {
         const mode = params.get("mode");
         if (PUBLIC_MODE_LABELS[mode]) state.mode = mode;
         if (!PUBLIC_MODE_LABELS[state.mode]) state.mode = "battleRoyale";
+        if (isSpecialMode(state.mode)) state.mainView = "players";
         const sort = params.get("sort");
         if (SORT_LABELS[sort]) state.sort = sort;
+        else state.sort = defaultSortForMode(state.mode);
+        state.sort = normalizedLeaderboardSort(state.sort);
         state.page = 1;
         return;
     }
@@ -2454,7 +2483,10 @@ function routeToLeaderboardWithOptions(options) {
     if (MAIN_VIEWS[options.mainView]) state.mainView = options.mainView;
     if (PUBLIC_MODE_LABELS[options.mode]) state.mode = options.mode;
     if (!PUBLIC_MODE_LABELS[state.mode]) state.mode = "battleRoyale";
+    if (isSpecialMode(state.mode)) state.mainView = "players";
     if (SORT_LABELS[options.sort]) state.sort = options.sort;
+    else if (options.mode) state.sort = defaultSortForMode(state.mode);
+    state.sort = normalizedLeaderboardSort(state.sort);
     state.page = 1;
     const hash = `view=leaderboards&board=${encodeURIComponent(state.mainView)}&mode=${encodeURIComponent(state.mode)}&sort=${encodeURIComponent(state.sort)}`;
     if (!setRouteHash(hash)) render();
@@ -3346,6 +3378,9 @@ function exportSignature(data) {
                 )
                 .join(";");
             const last = (profile.recentMatches || [])[0]?.endedAt || "";
+            const specialLast = (profile.specialRecentMatches || [])[0]?.completedAt || "";
+            const duel = normalizeDuelProfile(profile.duel);
+            const zombie = normalizeZombieSurvivalProfile(profile.zombieSurvival);
             const badgeStats = [br, dm]
                 .map((stats) =>
                     [
@@ -3366,7 +3401,7 @@ function exportSignature(data) {
                 )
                 .join(":");
             const achievements = [...profileAwardedBadgeIds(profile)].sort().join(".");
-            return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.hits}:${br.headshots}:${br.headshotKills}:${br.mvp}:${br.playtimeSeconds}:${br.utilityKills}:${br.vehicleKills}:${dm.games}:${dm.kills}:${dm.wins}:${dm.hits}:${dm.headshots}:${dm.headshotKills}:${dm.mvp}:${dm.playtimeSeconds}:${dm.utilityKills}:${dm.vehicleKills}:${badgeStats}:${achievements}:${profile.recentMatches?.length || 0}:${last}:${weaponParts}`;
+            return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.hits}:${br.headshots}:${br.headshotKills}:${br.mvp}:${br.playtimeSeconds}:${br.utilityKills}:${br.vehicleKills}:${dm.games}:${dm.kills}:${dm.wins}:${dm.hits}:${dm.headshots}:${dm.headshotKills}:${dm.mvp}:${dm.playtimeSeconds}:${dm.utilityKills}:${dm.vehicleKills}:${duel.games}:${duel.wins}:${duel.roundWins}:${duel.kills}:${duel.deaths}:${zombie.games}:${zombie.longestSurvivalMs}:${zombie.zombieKills}:${zombie.lastSurvivorCount}:${badgeStats}:${achievements}:${profile.recentMatches?.length || 0}:${last}:${profile.specialRecentMatches?.length || 0}:${specialLast}:${weaponParts}`;
         })
         .join(",");
     const live = data.liveStatus || {};
@@ -3392,7 +3427,16 @@ function emptyExport() {
                 leaderboards: {},
                 players: []
             },
-            deathmatch: { id: "deathmatch", label: "Deathmatch", totalPlayers: 0, leaderboards: {}, players: [] }
+            deathmatch: { id: "deathmatch", label: "Deathmatch", totalPlayers: 0, leaderboards: {}, players: [] },
+            duel: { id: "duel", label: "Duel", totalPlayers: 0, leaderboards: { wins: [] }, players: [], matches: [] },
+            zombieSurvival: {
+                id: "zombieSurvival",
+                label: "Zombie Survival",
+                totalPlayers: 0,
+                leaderboards: { longestSurvival: [] },
+                players: [],
+                matches: []
+            }
         },
         profiles: []
     };
@@ -3404,7 +3448,7 @@ function emptyCache() {
         profileMap: new Map(),
         overallMode: { id: "overall", label: "Overall", totalPlayers: 0, players: [] },
         overallById: new Map(),
-        weaponsByMode: { overall: [], battleRoyale: [], deathmatch: [] },
+        weaponsByMode: { overall: [], battleRoyale: [], deathmatch: [], duel: [], zombieSurvival: [] },
         maps: [],
         lastMatch: null
     };
@@ -12120,6 +12164,10 @@ function liveStatusHeadline(status) {
         if (status.state === "preparing") return "BR preparing";
         return status.state === "ending" ? "BR ending" : "BR live";
     }
+    if (status.mode === "duel") return status.state === "preparing" ? "Duel preparing" : "Duel live";
+    if (status.mode === "zombieSurvival") {
+        return status.state === "preparing" ? "Survival preparing" : "Survival live";
+    }
     return status.label || "Idle";
 }
 
@@ -12140,6 +12188,19 @@ function liveStatusText(status) {
         const countText = alive > 0 ? `${alive}/${players || alive} alive` : `${players} players`;
         return `${stateLabel} - ${teamMode} - ${countText}`;
     }
+    if (status.mode === "duel") {
+        const map = status.mapName || status.mapId || "Unknown map";
+        const teamA = number(status.redScore);
+        const teamB = number(status.blueScore);
+        const players = number(status.matchPlayers);
+        return `${map} - Team A ${teamA} / ${teamB} Team B${players ? ` - ${players} players` : ""}`;
+    }
+    if (status.mode === "zombieSurvival") {
+        const map = status.mapName || status.mapId || "Unknown map";
+        const alive = number(status.alivePlayers);
+        const players = number(status.matchPlayers);
+        return `${map} - ${alive}/${players || alive} survivors alive`;
+    }
     return status.label || "Idle";
 }
 
@@ -12149,10 +12210,41 @@ function isExportStale() {
     return Date.now() - generated > 90000;
 }
 
+function isSpecialMode(mode = state.mode) {
+    return Object.hasOwn(SPECIAL_MODE_DEFAULT_SORTS, mode);
+}
+
+function defaultSortForMode(mode = state.mode) {
+    return SPECIAL_MODE_DEFAULT_SORTS[mode] || "wins";
+}
+
+function normalizedLeaderboardSort(sort) {
+    if (state.mainView !== "players") return SORT_LABELS[sort] ? sort : state.mainView === "maps" ? "games" : "kills";
+    const allowed =
+        state.mode === "duel"
+            ? new Set([
+                  "wins",
+                  "losses",
+                  "roundWins",
+                  "roundLosses",
+                  "kills",
+                  "deaths",
+                  "games",
+                  "damage",
+                  "flawlessRounds"
+              ])
+            : state.mode === "zombieSurvival"
+              ? new Set(["survivalDurationMs", "zombieKills", "specialZombieKills", "damageTaken", "matchDate"])
+              : null;
+    return allowed && !allowed.has(sort) ? defaultSortForMode(state.mode) : sort;
+}
+
 function renderMainViewTabs() {
     const container = document.getElementById("main-view-tabs");
     container.innerHTML = "";
-    for (const [viewId, label] of Object.entries(MAIN_VIEWS)) {
+    if (isSpecialMode()) state.mainView = "players";
+    const views = isSpecialMode() ? { players: MAIN_VIEWS.players } : MAIN_VIEWS;
+    for (const [viewId, label] of Object.entries(views)) {
         const button = createPill(label, state.mainView === viewId, () => {
             state.mainView = viewId;
             state.selectedId = null;
@@ -12160,7 +12252,7 @@ function renderMainViewTabs() {
             state.page = 1;
             state.query = "";
             document.getElementById("player-search").value = "";
-            if (viewId === "players") state.sort = "wins";
+            if (viewId === "players") state.sort = defaultSortForMode();
             if (viewId === "weapons") state.sort = "kills";
             if (viewId === "maps") state.sort = "games";
             state.sortDirection = "desc";
@@ -12176,10 +12268,14 @@ function renderModeTabs() {
     const container = document.getElementById("mode-tabs");
     container.innerHTML = "";
     container.classList.toggle("hidden", state.mainView === "maps");
-    if (!PUBLIC_MODE_LABELS[state.mode]) state.mode = "battleRoyale";
-    for (const modeId of Object.keys(PUBLIC_MODE_LABELS)) {
+    const availableModes = state.mainView === "players" ? PUBLIC_MODE_LABELS : STANDARD_MODE_LABELS;
+    if (!availableModes[state.mode]) state.mode = "battleRoyale";
+    for (const modeId of Object.keys(availableModes)) {
         const button = createPill(PUBLIC_MODE_LABELS[modeId], state.mode === modeId, () => {
             state.mode = modeId;
+            if (isSpecialMode(modeId)) state.mainView = "players";
+            state.sort = defaultSortForMode(modeId);
+            state.sortDirection = "desc";
             state.page = 1;
             render();
         });
@@ -12192,7 +12288,9 @@ function renderModeTabs() {
     }
     const title =
         state.mainView === "players"
-            ? `${PUBLIC_MODE_LABELS[state.mode]} ranking`
+            ? state.mode === "zombieSurvival"
+                ? "Longest Survival"
+                : `${PUBLIC_MODE_LABELS[state.mode]} ranking`
             : state.mainView === "weapons"
               ? `${PUBLIC_MODE_LABELS[state.mode]} weapon stats`
               : "Deathmatch map stats";
@@ -12293,6 +12391,20 @@ function renderTable() {
         return;
     }
 
+    if (state.mode === "duel") {
+        pageRows.forEach((entry, index) => body.appendChild(renderDuelLeaderboardRow(entry, start + index + 1)));
+        renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+        return;
+    }
+
+    if (state.mode === "zombieSurvival") {
+        pageRows.forEach((entry, index) =>
+            body.appendChild(renderZombieSurvivalLeaderboardRow(entry, start + index + 1))
+        );
+        renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+        return;
+    }
+
     pageRows.forEach((player, index) => {
         const displayRank = start + index + 1;
         const stats = normalizeStats(player.stats);
@@ -12366,6 +12478,39 @@ function renderTableHead() {
         `;
     }
 
+    if (state.mode === "duel") {
+        return `
+            <tr>
+                <th>#</th>
+                <th>Player</th>
+                ${sortColumn("wins")}
+                ${sortColumn("losses")}
+                ${sortColumn("roundWins")}
+                ${sortColumn("roundLosses")}
+                ${sortColumn("kills")}
+                ${sortColumn("deaths")}
+                ${sortColumn("games")}
+                ${sortColumn("flawlessRounds", "Flawless")}
+            </tr>
+        `;
+    }
+
+    if (state.mode === "zombieSurvival") {
+        return `
+            <tr>
+                <th>#</th>
+                <th>Player</th>
+                ${sortColumn("survivalDurationMs", "Survival")}
+                ${sortColumn("zombieKills", "Zombie Kills")}
+                ${sortColumn("specialZombieKills", "Special Kills")}
+                ${sortColumn("matchDate", "Match Date")}
+                <th>Map</th>
+                <th>Team Size</th>
+                <th>Final Threat Phase</th>
+            </tr>
+        `;
+    }
+
     return `
         <tr>
             <th>#</th>
@@ -12425,9 +12570,69 @@ function renderMapLeaderboardRow(entry, rank) {
     return tr;
 }
 
+function renderDuelLeaderboardRow(entry, rank) {
+    const tr = document.createElement("tr");
+    tr.dataset.playerId = entry.playerId;
+    if (entry.playerId === state.selectedId) tr.classList.add("selected");
+    tr.innerHTML = `
+        <td><span class="rank-badge rank-${Math.min(rank, 3)}">${rank}</span></td>
+        <td>${renderSpecialLeaderboardPlayer(entry, "duel")}</td>
+        <td>${number(entry.wins)}</td>
+        <td>${number(entry.losses)}</td>
+        <td>${number(entry.roundWins)}</td>
+        <td>${number(entry.roundLosses)}</td>
+        <td>${number(entry.kills)}</td>
+        <td>${number(entry.deaths)}</td>
+        <td>${number(entry.games)}</td>
+        <td>${number(entry.flawlessRounds)}</td>
+    `;
+    return tr;
+}
+
+function renderZombieSurvivalLeaderboardRow(entry, displayRank) {
+    const rank =
+        state.sort === "survivalDurationMs" && state.sortDirection === "desc" && !state.query
+            ? number(entry.rank) || displayRank
+            : displayRank;
+    const tr = document.createElement("tr");
+    tr.dataset.playerId = entry.playerId;
+    if (entry.playerId === state.selectedId) tr.classList.add("selected");
+    tr.innerHTML = `
+        <td><span class="rank-badge rank-${Math.min(rank, 3)}">${rank}</span></td>
+        <td>${renderSpecialLeaderboardPlayer(entry, "zombieSurvival")}</td>
+        <td>${escapeHtml(formatDuration(number(entry.survivalDurationMs) / 1000))}</td>
+        <td>${number(entry.zombieKills)}</td>
+        <td>${number(entry.specialZombieKills)}</td>
+        <td><time datetime="${escapeHtml(entry.matchDate || "")}">${escapeHtml(formatCompactDate(entry.matchDate))}</time></td>
+        <td>${escapeHtml(entry.mapName || entry.mapId || "Unknown")}</td>
+        <td>${number(entry.teamSize)}</td>
+        <td>${escapeHtml(labelFromIdentifier(entry.finalPhase || "Unknown"))}</td>
+    `;
+    return tr;
+}
+
+function renderSpecialLeaderboardPlayer(player, tab) {
+    const profile = profileById(player.playerId);
+    const name = playerDisplayName(player, profile);
+    return `
+        <div class="leaderboard-player">
+            ${renderPlayerAvatar(player, profile, 42, "leaderboard-avatar")}
+            <div class="player-name">
+                <div class="player-identity-copy">
+                    <strong>${escapeHtml(name)}</strong>
+                    ${renderProfileTitle(accountProfileForPlayer(player, profile), { compact: true })}
+                </div>
+                <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=${escapeHtml(tab)}" aria-label="${escapeHtml(`Open ${name} profile`)}">Profile</a>
+            </div>
+        </div>
+    `;
+}
+
 function emptyStateText() {
     if (state.mainView === "weapons") return "No weapon stats have been tracked yet";
     if (state.mainView === "maps") return "No Deathmatch map stats have been tracked yet";
+    if (state.mode === "duel") return "No Duel matches have been played yet";
+    if (state.mode === "zombieSurvival") return "No Zombie Survival matches have been played yet";
     return "No games have been played yet";
 }
 
@@ -13756,6 +13961,8 @@ function renderProfilePreview() {
         <button class="primary-action" type="button" id="open-full-profile">Open Full Profile</button>
         ${renderModeBlock("Battle Royale", profile.battleRoyale, { compact: true })}
         ${renderModeBlock("Deathmatch", profile.deathmatch, { compact: true })}
+        ${renderDuelModeBlock(profile.duel, { compact: true })}
+        ${renderZombieSurvivalModeBlock(profile.zombieSurvival, { compact: true })}
     `;
     document.getElementById("open-full-profile").addEventListener("click", () => routeToPlayer(profile.playerId));
 }
@@ -13786,6 +13993,8 @@ function renderPlayerProfileHero(profile) {
     const name = playerDisplayName(profile, profile);
     const br = normalizePlayer(profile.battleRoyale);
     const dm = normalizePlayer(profile.deathmatch);
+    const duel = normalizeDuelProfile(profile.duel);
+    const zombie = normalizeZombieSurvivalProfile(profile.zombieSurvival);
     const badgeState = accountBadgeState(account, profile);
     const badges = selectedAccountBadges(account, badgeState);
     return `
@@ -13809,6 +14018,8 @@ function renderPlayerProfileHero(profile) {
                 ${renderStatCard("BR Kills", br.stats.kills)}
                 ${renderStatCard("DM Wins", dm.stats.wins)}
                 ${renderStatCard("DM Kills", dm.stats.kills)}
+                ${duel.exists ? renderStatCard("Duel Wins", duel.wins) : ""}
+                ${zombie.exists ? renderStatCard("Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000)) : ""}
             </div>
         </section>
     `;
@@ -13835,6 +14046,10 @@ function renderPlayerTabContent(profile) {
             return renderBattleRoyaleTab(profile);
         case "deathmatch":
             return renderDeathmatchTab(profile);
+        case "duel":
+            return renderDuelTab(profile);
+        case "zombieSurvival":
+            return renderZombieSurvivalTab(profile);
         case "maps":
             return renderMapsTab(profile);
         case "weapons":
@@ -13850,6 +14065,8 @@ function renderPlayerTabContent(profile) {
 function renderOverviewTab(profile) {
     const br = normalizePlayer(profile.battleRoyale);
     const dm = normalizePlayer(profile.deathmatch);
+    const duel = normalizeDuelProfile(profile.duel);
+    const zombie = normalizeZombieSurvivalProfile(profile.zombieSurvival);
     const brWeapon = cleanWeaponEntries(br.details?.weapons || [])[0] || null;
     const dmWeapon = cleanWeaponEntries(dm.details?.weapons || [])[0] || null;
 
@@ -13867,6 +14084,10 @@ function renderOverviewTab(profile) {
             ${renderStatCard("DM HS%", formatPercent(dm.derived.headshotRate))}
             ${renderStatCard("DM Highest Streak", dm.stats.bestKillStreak)}
             ${renderStatCard("Top DM Kills", dm.stats.topMatchKills)}
+            ${duel.exists ? renderStatCard("Duel Wins", duel.wins) : ""}
+            ${duel.exists ? renderStatCard("Duel Round Wins", duel.roundWins) : ""}
+            ${zombie.exists ? renderStatCard("Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000)) : ""}
+            ${zombie.exists ? renderStatCard("Zombie Kills", zombie.zombieKills) : ""}
         </section>
         <section class="detail-section">
             <h3>Profile Snapshot</h3>
@@ -13921,6 +14142,25 @@ function renderDeathmatchTab(profile) {
         </section>
         ${renderBreakdownTable("Maps", player.details?.deathmatchMaps || [], { wide: true, tableId: "maps", itemLabel: "Map" })}
         ${renderBreakdownTable("Kits", player.details?.deathmatchKits || [], { wide: true, tableId: "kits", itemLabel: "Kit" })}
+    `;
+}
+
+function renderDuelTab(profile) {
+    const duel = normalizeDuelProfile(profile.duel);
+    if (!duel.exists) return renderEmptyDetail("No Duel matches have been played yet.");
+    return `
+        ${renderDuelModeBlock(duel)}
+        ${renderNumberMapSection("Kits Used", duel.kitsUsed, "No Duel kit usage has been recorded yet.")}
+    `;
+}
+
+function renderZombieSurvivalTab(profile) {
+    const zombie = normalizeZombieSurvivalProfile(profile.zombieSurvival);
+    if (!zombie.exists) return renderEmptyDetail("No Zombie Survival matches have been played yet.");
+    return `
+        ${renderZombieSurvivalModeBlock(zombie)}
+        ${renderNumberMapSection("Variant Kills", zombie.variantKills, "No special zombie kills have been recorded yet.")}
+        ${renderNumberMapSection("Survival End Reasons", zombie.deathReasons, "No survival end reasons have been recorded yet.")}
     `;
 }
 
@@ -13983,6 +14223,8 @@ function renderHistoryList(matches, { expandable, playerId = "" }) {
 }
 
 function renderMatchHistoryRow(match, { expandable, playerId = "" }) {
+    if (match.mode === "duel") return renderDuelHistoryRow(match, { expandable, playerId });
+    if (match.mode === "zombieSurvival") return renderZombieSurvivalHistoryRow(match, { expandable, playerId });
     const result = match.won ? "Win" : "Loss";
     const resultClass = match.won ? "win" : "loss";
     const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
@@ -14029,6 +14271,89 @@ function renderMatchHistoryRow(match, { expandable, playerId = "" }) {
     `;
 }
 
+function renderDuelHistoryRow(match, { expandable, playerId = "" }) {
+    const expanded = state.expandedMatchIds.has(match.matchId);
+    const result = match.won ? "Win" : "Loss";
+    const resultClass = match.won ? "win" : "loss";
+    const winningTeam = match.winningTeam ? `Team ${match.winningTeam === 1 ? "A" : "B"}` : "Draw";
+    const kit = dominantMapKey(match.kitsUsed);
+    const buttonAttrs = expandable
+        ? `button type="button" data-match-toggle="${escapeHtml(match.matchId)}"`
+        : "article";
+    const closeTag = expandable ? "button" : "article";
+    return `
+        <article class="history-card special-history-card duel-history-card ${expanded ? "expanded" : ""}">
+            <${buttonAttrs} class="history-row">
+                <div>
+                    <strong class="${resultClass}">${result}</strong>
+                    <span>Duel - ${escapeHtml(match.mapName || match.mapId || "Unknown map")}</span>
+                    <span>Final score Team A ${number(match.teamAScore)} - ${number(match.teamBScore)} Team B</span>
+                    <span>${number(match.totalRounds)} rounds - Winner: ${escapeHtml(winningTeam)}</span>
+                    <span>${number(match.playerCount)} participants${kit ? ` - Kit: ${escapeHtml(labelFromIdentifier(kit))}` : ""}</span>
+                </div>
+                <div>
+                    <strong>${number(match.kills)} / ${number(match.deaths)}</strong>
+                    <span>K / D</span>
+                </div>
+                <time datetime="${escapeHtml(match.endedAt || "")}" title="${escapeHtml(formatFullLocalDate(match.endedAt))}">${escapeHtml(formatShortDate(match.endedAt))}</time>
+            </${closeTag}>
+            <div class="history-card-actions">
+                <span>${match.hasTelemetry ? `Tactical playback v${escapeHtml(String(match.telemetryVersion || 1))}` : "Summary only"}</span>
+                <a href="${escapeHtml(matchRouteHash(match.matchId, playerId))}">View details</a>
+            </div>
+            ${expanded ? renderMatchParticipants(match) : ""}
+        </article>
+    `;
+}
+
+function renderZombieSurvivalHistoryRow(match, { expandable, playerId = "" }) {
+    const expanded = state.expandedMatchIds.has(match.matchId);
+    const result = match.won ? "Last survivor" : "Survived";
+    const resultClass = match.won ? "win" : "loss";
+    const teammates = match.teammates?.length ? match.teammates.join(", ") : "None";
+    const buttonAttrs = expandable
+        ? `button type="button" data-match-toggle="${escapeHtml(match.matchId)}"`
+        : "article";
+    const closeTag = expandable ? "button" : "article";
+    return `
+        <article class="history-card special-history-card zombie-history-card ${expanded ? "expanded" : ""}">
+            <${buttonAttrs} class="history-row">
+                <div>
+                    <strong class="${resultClass}">${escapeHtml(result)}</strong>
+                    <span>Zombie Survival - ${escapeHtml(match.mapName || match.mapId || "Unknown map")}</span>
+                    <span>Personal survival: ${escapeHtml(formatDuration(number(match.survivalDurationMs) / 1000))}</span>
+                    <span>Match duration: ${escapeHtml(formatDuration(number(match.matchDurationMs) / 1000))}</span>
+                    <span>Last survivor: ${escapeHtml(match.lastSurvivorName || "Unavailable")}</span>
+                    <span>Death reason: ${escapeHtml(labelFromIdentifier(match.endReason || "Unavailable"))}</span>
+                    <span>Teammates: ${escapeHtml(teammates)}</span>
+                </div>
+                <div>
+                    <strong>${number(match.zombieKills)}</strong>
+                    <span>Zombie kills</span>
+                </div>
+                <div>
+                    <strong>${escapeHtml(labelFromIdentifier(match.finalPhase || "Unknown"))}</strong>
+                    <span>Final phase</span>
+                </div>
+                <time datetime="${escapeHtml(match.endedAt || "")}" title="${escapeHtml(formatFullLocalDate(match.endedAt))}">${escapeHtml(formatShortDate(match.endedAt))}</time>
+            </${closeTag}>
+            <div class="history-card-actions">
+                <span>${match.hasTelemetry ? `Tactical playback v${escapeHtml(String(match.telemetryVersion || 1))}` : "Summary only"}</span>
+                <a href="${escapeHtml(matchRouteHash(match.matchId, playerId))}">View details</a>
+            </div>
+            ${expanded ? renderMatchParticipants(match) : ""}
+        </article>
+    `;
+}
+
+function dominantMapKey(values) {
+    return (
+        Object.entries(values || {})
+            .filter(([, value]) => number(value) > 0)
+            .sort((a, b) => number(b[1]) - number(a[1]) || a[0].localeCompare(b[0]))[0]?.[0] || ""
+    );
+}
+
 function renderMatchParticipants(match) {
     const participants = match.participants || [];
     if (participants.length === 0) {
@@ -14046,6 +14371,30 @@ function renderMatchParticipants(match) {
 function renderMatchParticipant(player, index, match) {
     const profile = player.playerId ? profileById(player.playerId) : null;
     const name = player.playerId ? playerDisplayName(player, profile) : String(player.name || "Unknown");
+    if (match.mode === "duel") {
+        return `
+            <article class="roster-row ${player.won ? "winner" : ""}">
+                <strong>Team ${number(player.team) === 2 ? "B" : "A"}</strong>
+                ${player.playerId ? `<a class="roster-player-link" href="#player=${encodeURIComponent(player.playerId)}&tab=duel">${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}
+                <span>${number(player.kills)} K</span>
+                <span>${number(player.deaths)} D</span>
+                <span>${number(player.roundWins)} rounds</span>
+                <span>${escapeHtml(labelFromIdentifier(dominantMapKey(player.kitsUsed) || "No kit"))}</span>
+            </article>
+        `;
+    }
+    if (match.mode === "zombieSurvival") {
+        return `
+            <article class="roster-row ${player.lastSurvivor ? "winner" : ""}">
+                <strong>#${index + 1}</strong>
+                ${player.playerId ? `<a class="roster-player-link" href="#player=${encodeURIComponent(player.playerId)}&tab=zombieSurvival">${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}
+                <span>${escapeHtml(formatDuration(number(player.survivalDurationMs) / 1000))}</span>
+                <span>${number(player.zombieKills)} kills</span>
+                <span>${number(player.specialZombieKills)} special</span>
+                <span>${escapeHtml(labelFromIdentifier(player.endReason || "Unknown"))}</span>
+            </article>
+        `;
+    }
     return `
         <article class="roster-row ${player.won ? "winner" : ""}">
             <strong>${escapeHtml(match.mode === "battleRoyale" && player.placement ? formatPlacement(player.placement) : `#${index + 1}`)}</strong>
@@ -14055,6 +14404,78 @@ function renderMatchParticipant(player, index, match) {
             <span>${formatPercent(rate(player.headshots, player.hits))} HS</span>
             <span>${escapeHtml(player.topWeapon || "-")}</span>
         </article>
+    `;
+}
+
+function renderDuelModeBlock(payload, options = {}) {
+    const duel = normalizeDuelProfile(payload);
+    if (!duel.exists) return options.compact ? "" : renderEmptyDetail("No Duel matches have been played yet.");
+    return renderSpecialModeBlock(
+        "Duel",
+        [
+            ["Games", duel.games],
+            ["Wins", duel.wins],
+            ["Losses", duel.losses],
+            ["Round Wins", duel.roundWins],
+            ["Round Losses", duel.roundLosses],
+            ["Kills", duel.kills],
+            ["Deaths", duel.deaths],
+            ["Damage", formatNumber(duel.damage)],
+            ["Flawless Rounds", duel.flawlessRounds]
+        ],
+        options
+    );
+}
+
+function renderZombieSurvivalModeBlock(payload, options = {}) {
+    const zombie = normalizeZombieSurvivalProfile(payload);
+    if (!zombie.exists)
+        return options.compact ? "" : renderEmptyDetail("No Zombie Survival matches have been played yet.");
+    return renderSpecialModeBlock(
+        "Zombie Survival",
+        [
+            ["Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000)],
+            ["Total Survival", formatDuration(zombie.totalSurvivalMs / 1000)],
+            ["Average Survival", formatDuration(zombie.averageSurvivalMs / 1000)],
+            ["Games", zombie.games],
+            ["Zombie Kills", zombie.zombieKills],
+            ["Highest Match Kills", zombie.highestMatchKills],
+            ["Special Zombie Kills", specialZombieKillCount(zombie.variantKills)],
+            ["Times Last Survivor", zombie.lastSurvivorCount],
+            ["Chests Opened", zombie.chestsOpened],
+            ["Vehicles Used", zombie.vehiclesUsed]
+        ],
+        options
+    );
+}
+
+function renderSpecialModeBlock(label, statItems, options = {}) {
+    const compact = options.compact === true;
+    const visibleItems = compact ? statItems.slice(0, 6) : statItems;
+    return `
+        <section class="mode-block special-mode-block">
+            <h3>${escapeHtml(label)}</h3>
+            <div class="profile-stats ${compact ? "profile-stats-compact" : "profile-stats-detail"}">
+                ${visibleItems.map(([statLabel, value]) => renderProfileStat(statLabel, value)).join("")}
+            </div>
+        </section>
+    `;
+}
+
+function renderNumberMapSection(title, values, emptyText) {
+    const entries = Object.entries(values || {}).filter(([, value]) => number(value) > 0);
+    return `
+        <section class="detail-section">
+            <h3>${escapeHtml(title)}</h3>
+            ${
+                entries.length
+                    ? `<div class="snapshot-grid">${entries
+                          .sort(([a], [b]) => a.localeCompare(b))
+                          .map(([key, value]) => renderSnapshotItem(labelFromIdentifier(key), number(value)))
+                          .join("")}</div>`
+                    : `<p class="mode-empty">${escapeHtml(emptyText)}</p>`
+            }
+        </section>
     `;
 }
 
@@ -14328,7 +14749,7 @@ function renderEmptyDetail(text) {
 
 function filteredLeaderboardRows() {
     const rows = [...currentLeaderboardRows()];
-    rows.sort(comparePlayers(state.sort));
+    rows.sort(compareLeaderboardRows(state.sort));
     if (!state.query) return rows;
     return rows.filter((row) => rowSearchText(row).includes(state.query));
 }
@@ -14336,6 +14757,7 @@ function filteredLeaderboardRows() {
 function currentLeaderboardRows() {
     if (state.mainView === "weapons") return state.cache.weaponsByMode[state.mode] || [];
     if (state.mainView === "maps") return state.cache.maps;
+    if (state.mode === "zombieSurvival") return currentMode().leaderboards?.longestSurvival || [];
     return currentMode().players || [];
 }
 
@@ -14428,6 +14850,51 @@ function normalizePlayer(player) {
         derived: normalizeDerived(player.derived, stats),
         details: player.details || {}
     };
+}
+
+function normalizeDuelProfile(value) {
+    return {
+        exists: Boolean(value && number(value.games) > 0),
+        playerId: String(value?.playerId || ""),
+        name: String(value?.name || ""),
+        games: number(value?.games),
+        wins: number(value?.wins),
+        losses: number(value?.losses),
+        roundWins: number(value?.roundWins),
+        roundLosses: number(value?.roundLosses),
+        kills: number(value?.kills),
+        deaths: number(value?.deaths),
+        damage: number(value?.damage),
+        flawlessRounds: number(value?.flawlessRounds),
+        kitsUsed: normalizeNumberMap(value?.kitsUsed)
+    };
+}
+
+function normalizeZombieSurvivalProfile(value) {
+    return {
+        exists: Boolean(value && number(value.games) > 0),
+        playerId: String(value?.playerId || ""),
+        name: String(value?.name || ""),
+        games: number(value?.games),
+        longestSurvivalMs: number(value?.longestSurvivalMs),
+        totalSurvivalMs: number(value?.totalSurvivalMs),
+        averageSurvivalMs: number(value?.averageSurvivalMs),
+        zombieKills: number(value?.zombieKills),
+        highestMatchKills: number(value?.highestMatchKills),
+        variantKills: normalizeNumberMap(value?.variantKills),
+        damageDealtToZombies: number(value?.damageDealtToZombies),
+        damageTaken: number(value?.damageTaken),
+        lastSurvivorCount: number(value?.lastSurvivorCount),
+        chestsOpened: number(value?.chestsOpened),
+        vehiclesUsed: number(value?.vehiclesUsed),
+        deathReasons: normalizeNumberMap(value?.deathReasons)
+    };
+}
+
+function specialZombieKillCount(variantKills) {
+    return Object.entries(variantKills || {})
+        .filter(([variant]) => String(variant).toUpperCase() !== "NORMAL")
+        .reduce((total, [, count]) => total + number(count), 0);
 }
 
 function normalizeStats(stats) {
@@ -14623,20 +15090,115 @@ function aggregateDeathmatchMaps(profiles) {
 }
 
 function filteredHistory(profile, mode) {
-    const matches = profile?.recentMatches || [];
+    const matches = profileHistoryMatches(profile);
     if (mode === "overall") return matches;
     return matches.filter((match) => match.mode === mode);
+}
+
+function profileHistoryMatches(profile) {
+    if (!profile) return [];
+    const regular = Array.isArray(profile.recentMatches) ? profile.recentMatches : [];
+    const special = (Array.isArray(profile.specialRecentMatches) ? profile.specialRecentMatches : []).map((entry) =>
+        normalizeSpecialHistoryEntry(entry, profile.playerId)
+    );
+    return [...regular, ...special].sort((a, b) => dateValue(b.endedAt) - dateValue(a.endedAt));
+}
+
+function normalizeSpecialHistoryEntry(entry, playerId) {
+    const mode = String(entry?.mode || "");
+    const fullMatch = specialModeMatch(mode, entry?.matchId);
+    const participants = (fullMatch?.participants || []).map((participant) =>
+        normalizeSpecialParticipant(participant, mode)
+    );
+    const ownParticipant = participants.find((participant) => participant.playerId === playerId);
+    const telemetry = fullMatch?.telemetry || {};
+    const lastSurvivor =
+        mode === "zombieSurvival"
+            ? participants.find(
+                  (participant) => participant.lastSurvivor || participant.playerId === fullMatch?.lastSurvivorId
+              )
+            : null;
+    return {
+        ...entry,
+        mode,
+        modeLabel: MODE_LABELS[mode] || "Match",
+        endedAt: entry?.completedAt || fullMatch?.completedAt || "",
+        mapId: entry?.mapId || fullMatch?.mapId || "",
+        mapName: entry?.mapName || fullMatch?.mapName || "",
+        won: entry?.won === true,
+        result: entry?.won === true ? "Win" : "Loss",
+        kills: number(entry?.kills ?? ownParticipant?.kills),
+        deaths: number(entry?.deaths ?? ownParticipant?.deaths),
+        survivalDurationMs: number(entry?.survivalDurationMs ?? ownParticipant?.survivalDurationMs),
+        zombieKills: number(entry?.zombieKills ?? ownParticipant?.zombieKills),
+        finalPhase: entry?.finalPhase || fullMatch?.finalPhase || "",
+        endReason: entry?.endReason || ownParticipant?.endReason || "",
+        teamAScore: number(entry?.teamAScore ?? fullMatch?.teamAScore),
+        teamBScore: number(entry?.teamBScore ?? fullMatch?.teamBScore),
+        totalRounds: number(fullMatch?.totalRounds),
+        winningTeam: number(fullMatch?.winningTeam),
+        teamSize: number(fullMatch?.teamSize),
+        matchDurationMs: number(fullMatch?.durationMs),
+        lastSurvivorName: lastSurvivor?.name || "Unavailable",
+        kitsUsed: ownParticipant?.kitsUsed || {},
+        teammates: participants
+            .filter((participant) => participant.playerId !== playerId)
+            .map((participant) => participant.name),
+        playerCount: participants.length,
+        participants,
+        hasTelemetry: telemetry.hasTelemetry === true,
+        telemetryVersion: number(telemetry.telemetryVersion) || null,
+        telemetryStatus: telemetry.status || "",
+        snapshotCount: number(telemetry.snapshotCount),
+        eventCount: number(telemetry.eventCount)
+    };
+}
+
+function normalizeSpecialParticipant(participant, mode) {
+    if (mode === "zombieSurvival") {
+        return {
+            ...participant,
+            playerId: String(participant?.playerId || ""),
+            name: String(participant?.name || "Unknown player"),
+            survivalDurationMs: number(participant?.survivalDurationMs),
+            zombieKills: number(participant?.zombieKills),
+            specialZombieKills: specialZombieKillCount(participant?.variantKills),
+            damageTaken: number(participant?.damageTaken),
+            lastSurvivor: participant?.lastSurvivor === true,
+            endReason: String(participant?.endReason || "")
+        };
+    }
+    return {
+        ...participant,
+        playerId: String(participant?.playerId || ""),
+        name: String(participant?.name || "Unknown player"),
+        team: number(participant?.team),
+        won: participant?.won === true,
+        kills: number(participant?.kills),
+        deaths: number(participant?.deaths),
+        damage: number(participant?.damage),
+        roundWins: number(participant?.roundWins),
+        roundLosses: number(participant?.roundLosses),
+        kitsUsed: normalizeNumberMap(participant?.kitsUsed)
+    };
+}
+
+function specialModeMatch(mode, matchId) {
+    const matches = state.data?.modes?.[mode]?.matches;
+    return Array.isArray(matches) ? matches.find((match) => match.matchId === matchId) || null : null;
 }
 
 function findMatchSummary(matchId, preferredPlayerId = "") {
     if (!matchId) return null;
     const preferredId = String(preferredPlayerId || "").trim();
     if (preferredId) {
-        const preferredMatch = (profileById(preferredId)?.recentMatches || []).find((entry) => entry.matchId === matchId);
+        const preferredMatch = profileHistoryMatches(profileById(preferredId)).find(
+            (entry) => entry.matchId === matchId
+        );
         if (preferredMatch) return preferredMatch;
     }
     for (const profile of state.cache.profiles || []) {
-        const match = (profile.recentMatches || []).find((entry) => entry.matchId === matchId);
+        const match = profileHistoryMatches(profile).find((entry) => entry.matchId === matchId);
         if (match) return match;
     }
     return null;
@@ -14646,7 +15208,7 @@ function findViewerMatchSummary(matchId) {
     if (!matchId) return null;
     const viewerProfile = linkedStatsProfile();
     if (!viewerProfile) return null;
-    return (viewerProfile.recentMatches || []).find((entry) => entry.matchId === matchId) || null;
+    return profileHistoryMatches(viewerProfile).find((entry) => entry.matchId === matchId) || null;
 }
 
 function matchRouteHash(matchId, playerId = "") {
@@ -14672,7 +15234,7 @@ function matchPlayerPresentation(playerId, participant = null) {
 function findLastMatch(profiles) {
     const matches = new Map();
     for (const profile of profiles) {
-        for (const match of profile.recentMatches || []) {
+        for (const match of profileHistoryMatches(profile)) {
             const key = match.matchId || `${match.mode || "match"}-${match.endedAt || ""}`;
             const current = matches.get(key);
             if (!current || dateValue(match.endedAt) > dateValue(current.endedAt)) matches.set(key, match);
@@ -14700,6 +15262,12 @@ function matchWinnerText(match) {
         if (red === blue) return "Draw";
         return red > blue ? "Red won" : "Blue won";
     }
+    if (match.mode === "duel") {
+        return match.winningTeam ? `Team ${number(match.winningTeam) === 2 ? "B" : "A"} won` : "Draw";
+    }
+    if (match.mode === "zombieSurvival" && match.lastSurvivorName) {
+        return `Last survivor: ${match.lastSurvivorName}`;
+    }
     return "";
 }
 
@@ -14719,6 +15287,25 @@ function comparePlayers(sort) {
     return comparePlayersBy(sort, state.sortDirection);
 }
 
+function compareLeaderboardRows(sort) {
+    if (state.mode === "zombieSurvival" && sort === "survivalDurationMs" && state.sortDirection === "desc") {
+        return (a, b) =>
+            number(b.survivalDurationMs) - number(a.survivalDurationMs) ||
+            number(b.zombieKills) - number(a.zombieKills) ||
+            number(a.damageTaken) - number(b.damageTaken) ||
+            dateValue(a.matchDate) - dateValue(b.matchDate) ||
+            rowSearchText(a).localeCompare(rowSearchText(b));
+    }
+    if (state.mode === "duel" && sort === "wins" && state.sortDirection === "desc") {
+        return (a, b) =>
+            number(b.wins) - number(a.wins) ||
+            number(b.roundWins) - number(a.roundWins) ||
+            number(b.kills) - number(a.kills) ||
+            rowSearchText(a).localeCompare(rowSearchText(b));
+    }
+    return comparePlayers(sort);
+}
+
 function comparePlayersBy(sort, directionId) {
     return (a, b) => {
         const direction = directionId === "asc" ? 1 : -1;
@@ -14733,6 +15320,22 @@ function comparePlayersBy(sort, directionId) {
 }
 
 function sortValue(player, sort) {
+    if (sort === "matchDate") return dateValue(player?.matchDate);
+    if (
+        [
+            "losses",
+            "roundWins",
+            "roundLosses",
+            "damage",
+            "flawlessRounds",
+            "survivalDurationMs",
+            "zombieKills",
+            "specialZombieKills",
+            "damageTaken"
+        ].includes(sort)
+    ) {
+        return number(player?.[sort]);
+    }
     const stats = normalizeStats(player.stats);
     const derived = normalizeDerived(player.derived, stats);
     switch (sort) {
@@ -14904,6 +15507,8 @@ function compactModeLabel(value) {
     const text = String(value || "").toLowerCase();
     if (text.includes("battle")) return "BR";
     if (text.includes("death")) return "DM";
+    if (text.includes("duel")) return "Duel";
+    if (text.includes("zombie") || text.includes("survival")) return "Survival";
     return value || "Match";
 }
 
