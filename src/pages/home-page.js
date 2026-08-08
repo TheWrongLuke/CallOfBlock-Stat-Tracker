@@ -27,6 +27,10 @@ export async function initializeHomePage() {
     const publicViewerProfile = profiles.find((profile) => profile.id === shell.session?.user?.id) || null;
     const viewerProfile = ownProfileResult.error ? publicViewerProfile : ownProfileResult.data || publicViewerProfile;
     shell.setProfile(resolveShellProfile(viewerProfile, catalog));
+    if (shell.session?.user && viewerProfile) {
+        const { initializeHomeWeeklyMissions } = await import("../features/home-weekly-missions.js");
+        initializeHomeWeeklyMissions(shell);
+    }
     renderHome(data, profiles, catalog);
     if (shell.session?.user) {
         const { initializeHomeNotifications } = await import("../features/home-notifications.js");

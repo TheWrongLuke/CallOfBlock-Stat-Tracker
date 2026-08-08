@@ -107,7 +107,21 @@ const adminSupabaseStub = `
         user_id: profile.id,
         cycle_key: currentCycleKey(),
         cycle_ends_at: new Date(Date.now() + 7 * 86400000).toISOString(),
-        missions: [],
+        missions: [{
+            id: "easy_kills:test-cycle:1",
+            family: "kills_any",
+            difficulty: "easy",
+            label: "On the Board",
+            description: "Get 5 kills in any mode.",
+            metric: "kills",
+            target: 5,
+            xp: 350,
+            mode: "overall",
+            baseline: 0,
+            requirements: { type: "stat" },
+            carried: false,
+            swapUsed: false
+        }],
         claimed_ids: [],
         swapped_ids: [],
         awaiting_link: false,
@@ -468,6 +482,8 @@ test("the signed-in homepage account pill opens the profile drawer and reveals a
     await expect(drawer.getByRole("heading", { name: "PROFILE" })).toBeVisible();
     await expect(drawer.getByRole("link", { name: "Customize profile" })).toHaveAttribute("href", "/stats/#account");
     await expect(drawer.getByRole("link", { name: "Open store admin" })).toHaveAttribute("href", "/stats/#store");
+    await expect(drawer.getByText("Renewable Missions")).toBeVisible();
+    await expect(drawer.getByText("On the Board")).toBeVisible();
 
     await drawer.getByRole("button", { name: "Close profile panel" }).click();
     await expect(drawer).toBeHidden();

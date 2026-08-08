@@ -14,6 +14,7 @@ export async function initializeSiteShell({ loadStatus = true } = {}) {
         session: null,
         profile: null,
         accountPanelOpen: false,
+        accountPanelAddon: null,
         signIn() {
             return client ? signIn(client) : Promise.resolve();
         },
@@ -25,6 +26,14 @@ export async function initializeSiteShell({ loadStatus = true } = {}) {
         },
         setProfile(profile) {
             shell.profile = profile || null;
+            renderAccountWidget(shell);
+            renderAccountPanel(shell);
+        },
+        setAccountPanelAddon(renderer) {
+            shell.accountPanelAddon = typeof renderer === "function" ? renderer : null;
+            renderAccountPanel(shell);
+        },
+        refreshAccountPanel() {
             renderAccountWidget(shell);
             renderAccountPanel(shell);
         }
@@ -286,6 +295,7 @@ function renderAccountPanel(shell) {
                         : ""
                 }
             </div>
+            ${shell.accountPanelAddon?.() || ""}
         </aside>
     </div>`;
     host.querySelector("[data-shell-account-close]")?.addEventListener("click", () => closeAccountPanel(shell));
