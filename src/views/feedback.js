@@ -16,6 +16,7 @@ import { formatDateTime } from "../utils/dates.js";
 import { escapeHtml } from "../utils/sanitization.js";
 import { validateExternalUrl } from "../utils/feedback-validation.js";
 import { FEEDBACK_ATTACHMENT_ACCEPT, feedbackAttachmentPathFromUrl } from "../services/feedback-attachments.js";
+import { CURRENT_SERVER_COMMAND_SECTIONS } from "../config/server-commands.js";
 
 function renderOptions(options, selected, allLabel = "") {
     return [
@@ -484,11 +485,14 @@ function renderAdminTicketRow(ticket) {
 }
 
 export function renderAdminDocumentationContent({ loading, sections, error }) {
-    if (loading) return renderLoadingState("Loading protected documentation...");
-    if (error)
-        return `<div class="feedback-notice error" role="alert"><span>${escapeHtml(error)}</span><button type="button" data-admin-docs-retry>Retry</button></div>`;
-    if (!sections.length) return renderEmptyState("No protected documentation sections have been installed yet.");
-    return `<section class="admin-command-grid">${sections
+    const installedSections = Array.isArray(sections) ? sections : [];
+    const allSections = [...CURRENT_SERVER_COMMAND_SECTIONS, ...installedSections];
+    const status = loading
+        ? renderLoadingState("Loading additional protected notes...")
+        : error
+          ? `<div class="feedback-notice error" role="alert"><span>${escapeHtml(error)}</span><button type="button" data-admin-docs-retry>Retry</button></div>`
+          : "";
+    return `${status}<section class="admin-command-grid">${allSections
         .map(
             (section) => `
         <article class="admin-command-group">

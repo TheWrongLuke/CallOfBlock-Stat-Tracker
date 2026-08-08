@@ -767,6 +767,23 @@ test("protected admin content waits for profile verification", async ({ page }) 
     await expect
         .poll(() => page.evaluate(() => window.__queriedSupabaseTables || []))
         .toContain("admin_documentation_sections");
+    await expect(page.locator("#admin-documentation-body")).toContainText(
+        "/cob destruction <status|on|off|toggle|reset>"
+    );
+    await expect(page.locator("#admin-documentation-body")).toContainText(
+        "/cob match invalidate <matchId> --dry-run <reason>"
+    );
+    await expect(page.locator("#admin-documentation-body")).not.toContainText("/bradmin");
+});
+
+test("public command help uses only the canonical cob command root", async ({ page }) => {
+    await openApp(page, "#help");
+    const help = page.locator("#help");
+    await expect(help).toContainText("/cob help");
+    await expect(help).toContainText("/cob br queue join");
+    await expect(help).toContainText("/cob dm queue ffa join");
+    await expect(help).not.toContainText("/brmenu");
+    await expect(help).not.toContainText("/joindm");
 });
 
 test("the cosmetic editor stays open until its X button is used", async ({ page }) => {

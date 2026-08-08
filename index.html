@@ -126,11 +126,10 @@
                 <p class="panel-kicker">Main Modes</p>
                 <h2>Drop, loot, survive.</h2>
                 <p>
-                    Battle Royale drops players over Shmar with custom guns, upgrades, explosives, and possible vehicles
-                    scattered through the map. The zone keeps moving, forcing squads and solo players into fights until one
-                    side is left standing. Deathmatch is the faster mode: pick a kit, spawn with your team, and keep trading
-                    rounds until the final score decides the winner. Duel adds round-based small-team fights, while Zombie
-                    Survival is an endless cooperative endurance run with escalating threats.
+                    Battle Royale drops solo players and teams over Shmar to loot TacZ weapons, explosives, and Superb Warfare
+                    vehicles before the moving zone closes. Team Deathmatch and Free For All provide faster kit-based combat.
+                    Duel adds round-based fights for teams of one or two, while experimental Zombie Survival uses full-map
+                    scavenging and escalating server-controlled pressure.
                 </p>
             </article>
             <aside class="latest-panel">
@@ -143,25 +142,25 @@
             <article class="info-panel">
                 <span>01</span>
                 <h3>Battle Royale</h3>
-                <p>Queue up, fly over Shmar, drop where you want, loot weapons and upgrades, use explosives or vehicles when you find them, and stay ahead of the moving zone.</p>
+                <p>Fly over Shmar, choose a drop, loot TacZ guns and Superb Warfare vehicles, use the destructible environment, and stay ahead of the moving zone. Team play, reconnect grace, configurable air-drop respawns, and an experimental Lights Out variant are supported.</p>
                 <a href="/stats/?mode=battleRoyale&amp;view=players&amp;sort=wins">BR stats</a>
             </article>
             <article class="info-panel">
                 <span>02</span>
                 <h3>Deathmatch</h3>
-                <p>Vote maps, pick kits, chase team score, and build a profile with map stats, kit stats, top match kills, accuracy, and favorite weapons.</p>
+                <p>Choose Team Deathmatch or Free For All, vote for a map, select a kit, prepare for five seconds, then respawn and chase the configured score target.</p>
                 <a href="/stats/?mode=deathmatch&amp;view=players&amp;sort=wins">DM stats</a>
             </article>
             <article class="info-panel">
                 <span>03</span>
                 <h3>Duel</h3>
-                <p>Choose kits between rounds, fight without mid-round respawns, and push your team to the required round-win score.</p>
+                <p>Fight 1v1, 1v2, 2v1, or 2v2. Choose kits between rounds, spectate a living teammate after death, and reach the configured round-win target without mid-round respawns.</p>
                 <a href="/stats/?mode=duel&amp;view=players&amp;sort=wins">Duel stats</a>
             </article>
             <article class="info-panel">
                 <span>04</span>
                 <h3>Zombie Survival</h3>
-                <p>Enter together, scavenge sparse supplies, survive escalating local hordes, and compete for the longest verified survival time.</p>
+                <p>Experimental: deploy solo or in teams, loot across Shmar, use vehicles and revival, and survive escalating server-controlled hordes. The Hordes infection and Mob Control access integration remain in development.</p>
                 <a href="/stats/?mode=zombieSurvival&amp;view=players&amp;sort=survivalDurationMs">Survival stats</a>
             </article>
             <article class="info-panel">
@@ -273,7 +272,7 @@
                 <ol class="step-list">
                     <li><strong>Install the official modpack.</strong><span>Use its CurseForge or Modrinth launcher profile for Minecraft 1.20.1 Forge so every required mod stays on the matching version.</span></li>
                     <li><strong>Check the current session.</strong><span>Join Discord for the server address, whitelist or access instructions, announcements, rules, and scheduled playtest time.</span></li>
-                    <li><strong>Open the game menu.</strong><span>Bind <code>Open Call of Block Menu</code> under Minecraft Controls, or type <code>/brmenu</code>, then join the Battle Royale or Deathmatch queue.</span></li>
+                    <li><strong>Open the game menu.</strong><span>Bind <code>Open Call of Block Menu</code> under Minecraft Controls, or type <code>/cob menu</code>, then choose a player or spectator queue.</span></li>
                 </ol>
                 <div class="mode-guide-grid">
                     <section class="mode-guide" aria-labelledby="how-to-play-br">
@@ -282,42 +281,45 @@
                         <ul>
                             <li>Choose solo or team play from the Call of Block menu. You can create a team before joining the queue.</li>
                             <li>Ride the fly-by over Shmar, choose your drop, then search chests for weapons, attachments, healing, utility, explosives, and possible vehicles.</li>
-                            <li>Keep moving with the closing zone and survive until one player or team remains.</li>
-                            <li>Night Vision Goggles are equipped at round start and begin switched off. Bind <code>Toggle Night Vision Goggles</code> in the Call of Block controls to use them.</li>
+                            <li>Keep moving with the closing zone and survive until one player or team remains. A reconnect grace period protects brief disconnects.</li>
+                            <li>Full combat destruction is enabled by default. General map damage can persist until an administrator performs the manual Shmar maintenance reset.</li>
+                            <li>Configured respawns return as air drops. The experimental Lights Out variant changes visibility when it is selected for testing.</li>
                         </ul>
                     </section>
                     <section class="mode-guide" aria-labelledby="how-to-play-dm">
                         <span>Deathmatch</span>
                         <h3 id="how-to-play-dm">Vote, kit up, score.</h3>
                         <ul>
-                            <li>Join from the menu or with <code>/joindm</code>, then choose a Red, Blue, or random team preference. Teams are balanced when the round starts.</li>
-                            <li>Vote for an available map while queued. Use the menu, <code>/vote map &lt;id&gt;</code>, or <code>/vote random</code>.</li>
+                            <li>Join Team Deathmatch with <code>/cob dm queue tdm join</code>, choose Team 1, Team 2, or random, or use <code>/cob dm queue ffa join</code> for Free For All.</li>
+                            <li>Vote while queued with <code>/cob dm vote map &lt;id&gt;</code> or <code>/cob dm vote random</code>.</li>
                             <li>Choose a kit during the active round. You respawn after dying and return with your selected kit.</li>
-                            <li>Help your team reach the kill target before the other team or finish ahead when the timer expires.</li>
+                            <li>After the five-second preparation, help your team reach its target or, in FFA, finish as the first player to the configured score.</li>
                         </ul>
                     </section>
                     <section class="mode-guide" aria-labelledby="how-to-play-duel">
                         <span>Duel</span>
                         <h3 id="how-to-play-duel">Prepare, fight, reset.</h3>
                         <ul>
-                            <li>Duel supports balanced 1v1 or 2v2 teams on dedicated small maps.</li>
+                            <li>Duel requires exactly two teams and supports 1v1, 1v2, 2v1, and 2v2 on configured maps.</li>
                             <li>Select a kit during each frozen preparation phase, then fight when every player unlocks together.</li>
-                            <li>A death lasts for the rest of that round. The first team to the configured round-win target takes the match.</li>
+                            <li>A death lasts for the rest of that round. Dead fighters spectate a living teammate where available, and the first team to the configured round-win target takes the match.</li>
                         </ul>
                     </section>
                     <section class="mode-guide" aria-labelledby="how-to-play-zombie-survival">
                         <span>Zombie Survival</span>
                         <h3 id="how-to-play-zombie-survival">Scavenge, move, endure.</h3>
                         <ul>
-                            <li>The run begins at a safe random insertion area with sparse chests and rare ground vehicles.</li>
-                            <li>Threats spawn around living participants and scale through capped difficulty phases for as long as anyone survives.</li>
-                            <li>Your personal timer stops when your survival ends. The match continues until the final survivor is gone.</li>
+                            <li>Zombie Survival is experimental. Players receive no combat kit or infinite ammunition and must loot equipment.</li>
+                            <li>Each seeded run activates about half of Shmar's full Battle Royale chest and vehicle spawn locations. Ordinary chests do not refill, and rare golden apples provide cure opportunities for the planned infection system.</li>
+                            <li>Solo, one-team co-op, and multiple teams are valid. Friendly fire is blocked by default, while enemy-team PvP remains enabled.</li>
+                            <li>A player with a living teammate can be downed and revived. Solo players and the final living teammate are eliminated immediately.</li>
+                            <li>Threats spawn near living participants and scale through bounded phases. The Hordes infection and Mob Control climbing/access behavior are not production-ready on the current server build.</li>
                         </ul>
                     </section>
                 </div>
                 <div class="guide-account-note">
                     <strong>After the match</strong>
-                    <p>Completed rounds are published to the website for leaderboards, profiles, weapons, maps, and match history. To connect those stats to your website account, run <code>/linkminecraft</code> in Discord's <strong>#minecraft-verification</strong> channel and then <code>/discordlink &lt;code&gt;</code> in Minecraft while the bot and server are online.</p>
+                    <p>Completed rounds are published to the website for leaderboards, profiles, weapons, maps, and match history. To connect those stats to your website account, run <code>/linkminecraft</code> in Discord's <strong>#minecraft-verification</strong> channel and then <code>/cob discord link &lt;code&gt;</code> in Minecraft while the bot and server are online.</p>
                 </div>
                 <div class="link-row">
                     <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord invite</a>
@@ -344,7 +346,7 @@
                 </details>
                 <details>
                     <summary>What is the difference between the modes?</summary>
-                    <p>Battle Royale uses dropping, looting, and a moving zone. Deathmatch uses kits, respawns, and a score target. Duel is a round-based 1v1 or 2v2 mode without mid-round respawns. Zombie Survival is an endless cooperative endurance mode ranked by verified survival time.</p>
+                    <p>Battle Royale uses fly-by insertion, full-map looting, vehicles, destruction, and a moving zone. Deathmatch offers Team Deathmatch and Free For All with kits and respawns. Duel supports 1v1 through 2v2 team arrangements without mid-round respawns. Zombie Survival is an experimental scavenging and endurance mode with solo, co-op, or opposing-team arrangements.</p>
                 </details>
                 <details>
                     <summary>Do I need to log in with Discord?</summary>
@@ -352,7 +354,7 @@
                 </details>
                 <details>
                     <summary>How do I link Discord, Minecraft, and my stats?</summary>
-                    <p>Run <code>/linkminecraft</code> in Discord's <strong>#minecraft-verification</strong> channel, then use the displayed <code>/discordlink &lt;code&gt;</code> command in Minecraft before it expires. The bot and server must be online while linking. Once saved, your website profile can load the link while the bot is offline.</p>
+                    <p>Run <code>/linkminecraft</code> in Discord's <strong>#minecraft-verification</strong> channel, then use the displayed <code>/cob discord link &lt;code&gt;</code> command in Minecraft before it expires. The bot and server must be online while linking. Once saved, your website profile can load the link while the bot is offline.</p>
                 </details>
                 <details>
                     <summary>Why have my stats not updated yet?</summary>
@@ -385,39 +387,61 @@
                     <p class="panel-kicker">Server Help</p>
                     <h2>Commands and controls</h2>
                 </div>
-                <p>Type <code>/brhelp</code> in-game for the short version. Admins can open the full setup reference on its own page.</p>
+                <p>Type <code>/cob help</code> in-game for the current command groups. Administrators can open the protected operations reference from their account panel.</p>
             </div>
             <div class="command-groups">
                 <article class="command-group">
                     <span>Controls</span>
                     <ul class="command-list">
-                        <li><code>Open Call of Block Menu</code><em>Bind this in Minecraft Controls, or use /brmenu.</em></li>
-                        <li><code>/brmenu</code><em>Opens the main server menu for queues, teams, votes, kits, and mode panels.</em></li>
-                        <li><code>/hub</code><em>Returns you to hub. If you are spectating Battle Royale, it exits spectator first.</em></li>
+                        <li><code>Open Call of Block Menu</code><em>Bind this in Minecraft Controls, or use <code>/cob menu</code>.</em></li>
+                        <li><code>/cob menu</code><em>Opens the main server menu for queues, teams, votes, kits, and mode panels.</em></li>
+                        <li><code>/cob hub</code><em>Returns you to hub and exits an active spectator queue.</em></li>
+                        <li><code>/cob help &lt;topic&gt;</code><em>Shows focused help for BR, DM, Duel, Zombie Survival, vehicles, Discord linking, statistics, or admin commands.</em></li>
+                        <li><code>/cob leave</code><em>Begins the protected leave flow for an active match; confirm with <code>/cob leave confirm</code>.</em></li>
                     </ul>
                 </article>
                 <article class="command-group">
                     <span>Battle Royale</span>
                     <ul class="command-list">
-                        <li><code>/brmenu</code><em>Join or leave the BR queue, pick solo/team, create a team, and check match state.</em></li>
-                        <li><code>/brspectate</code><em>Joins a running BR match as a spectator when you are not a participant.</em></li>
-                        <li><code>/brspectate leave</code><em>Leaves BR spectator mode and returns you to normal hub flow.</em></li>
+                        <li><code>/cob br queue join</code><em>Joins the Battle Royale player queue.</em></li>
+                        <li><code>/cob br queue solo</code><em>Joins and selects solo play.</em></li>
+                        <li><code>/cob br queue team &lt;id&gt;</code><em>Joins and selects an existing team; use <code>newteam</code> to create one.</em></li>
+                        <li><code>/cob br queue spectate</code><em>Joins the Battle Royale spectator group.</em></li>
+                        <li><code>/cob br queue leave</code><em>Leaves either Battle Royale queue role.</em></li>
                     </ul>
                 </article>
                 <article class="command-group">
                     <span>Deathmatch</span>
                     <ul class="command-list">
-                        <li><code>/joindm</code><em>Joins the Deathmatch queue.</em></li>
-                        <li><code>/leavedm</code><em>Leaves the Deathmatch queue and sends you back to hub.</em></li>
-                        <li><code>/dmteam 1|2|random</code><em>Sets your preferred DM team before teams are locked.</em></li>
-                        <li><code>/vote map &lt;id&gt;</code><em>Votes for a map while queued. Use /vote random to vote random.</em></li>
-                        <li><code>/kit</code><em>Opens the kit picker during an active DM round. Use /kit &lt;id&gt; to select directly.</em></li>
+                        <li><code>/cob dm queue tdm join</code><em>Joins Team Deathmatch; add <code>team 1|2|random</code> to choose a preference.</em></li>
+                        <li><code>/cob dm queue ffa join</code><em>Joins Free For All Deathmatch.</em></li>
+                        <li><code>/cob dm queue tdm|ffa spectate</code><em>Joins that mode's spectator group.</em></li>
+                        <li><code>/cob dm queue leave</code><em>Leaves any Deathmatch player or spectator queue.</em></li>
+                        <li><code>/cob dm vote map &lt;id&gt;</code><em>Votes for a map while queued; use <code>/cob dm vote random</code> for random.</em></li>
+                        <li><code>/cob kit</code><em>Opens the kit picker when the current mode permits it; use <code>/cob kit &lt;id&gt;</code> to select directly.</em></li>
+                    </ul>
+                </article>
+                <article class="command-group">
+                    <span>Duel &amp; Zombie</span>
+                    <ul class="command-list">
+                        <li><code>/cob duel queue join</code><em>Joins Duel; use <code>team 1|2|random</code> to choose a team preference.</em></li>
+                        <li><code>/cob duel queue spectate</code><em>Joins the Duel spectator group.</em></li>
+                        <li><code>/cob zombie queue join</code><em>Joins the experimental Zombie Survival player queue.</em></li>
+                        <li><code>/cob zombie queue spectate</code><em>Joins the Zombie Survival spectator group.</em></li>
+                    </ul>
+                </article>
+                <article class="command-group">
+                    <span>Account &amp; Stats</span>
+                    <ul class="command-list">
+                        <li><code>/cob discord link &lt;code&gt;</code><em>Claims the one-time code created by the Discord bot.</em></li>
+                        <li><code>/cob leaderboard</code><em>Opens the combined in-game leaderboard.</em></li>
+                        <li><code>/cob leaderboard br|dm view</code><em>Opens a mode-specific in-game leaderboard.</em></li>
                     </ul>
                 </article>
             </div>
             <div class="requirements-strip">
                 <span>Requirements</span>
-                <p>Player commands require being on the server. Voting requires being queued for Deathmatch. Kit changing requires an active Deathmatch round. Admin commands require permission level 2.</p>
+                <p>Player actions require an in-game player. Voting requires a Deathmatch queue. Kit selection depends on the active mode and preparation state. Administrator commands require permission level 2, and destructive match/statistics operations use a separate confirmation step.</p>
             </div>
 
         </section>
