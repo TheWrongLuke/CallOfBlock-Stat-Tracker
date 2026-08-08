@@ -28,6 +28,40 @@ for (const directory of directories) {
 
 const sourceHtml = await readFile(path.join(root, "index.html"), "utf8");
 const socialImageUrl = new URL(config.socialImage, publicSiteUrl).toString();
+const routeViewTags = new Map([
+    ["home-view", "main"],
+    ["leaderboard-view", "main"],
+    ["playtests-view", "main"],
+    ["feedback-view", "main"],
+    ["ticket-view", "main"],
+    ["admin-tickets-view", "main"],
+    ["community-admin-view", "main"],
+    ["admin-help-view", "main"],
+    ["admin-progression-view", "main"],
+    ["player-view", "section"],
+    ["match-view", "main"],
+    ["account-view", "main"],
+    ["store-view", "main"]
+]);
+
+const routeViewAllowlist = {
+    home: new Set(["home-view"]),
+    stats: new Set([
+        "leaderboard-view",
+        "admin-tickets-view",
+        "community-admin-view",
+        "admin-help-view",
+        "admin-progression-view",
+        "player-view",
+        "match-view",
+        "account-view",
+        "store-view"
+    ]),
+    playtests: new Set(["playtests-view", "community-admin-view"]),
+    feedback: new Set(["feedback-view", "ticket-view"]),
+    help: new Set(["home-view"]),
+    about: new Set(["home-view"])
+};
 
 for (const [id, page] of Object.entries(pages)) {
     const canonicalUrl = new URL(String(page.path || "/").replace(/^\//, ""), publicSiteUrl).toString();
@@ -59,14 +93,8 @@ console.log(`Built static site at ${output}`);
 
 function renderPublicPage(html, { id, page, canonicalUrl, socialImageUrl, publicSiteUrl }) {
     const structuredData = pageStructuredData(id, page, canonicalUrl, publicSiteUrl);
-    const pageShell =
-        id === "home"
-            ? html
-            : html.replace(
-                  /<h1 class="hero-site-title" data-site-heading>([\s\S]*?)<\/h1>/i,
-                  '<p class="hero-site-title" data-site-heading>$1</p>'
-              );
-    return pageShell
+    const entry = String(page.entry || id).replace(/[^a-z0-9-]/gi, "");
+    const rendered = html
         .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(page.title)}</title>`)
         .replace(metaPattern("name", "description"), `$1${escapeHtml(page.description)}$2`)
         .replace(metaPattern("property", "og:title"), `$1${escapeHtml(page.title)}$2`)
@@ -77,20 +105,39 @@ function renderPublicPage(html, { id, page, canonicalUrl, socialImageUrl, public
         .replace(metaPattern("name", "twitter:description"), `$1${escapeHtml(page.description)}$2`)
         .replace(metaPattern("name", "twitter:url"), `$1${escapeHtml(canonicalUrl)}$2`)
         .replace(metaPattern("name", "twitter:image"), `$1${escapeHtml(socialImageUrl)}$2`)
-        .replace(/<link rel="canonical" href="[^"]*">/i, `<link rel="canonical" href="${escapeHtml(canonicalUrl)}">`)
+        .replace(/(<link(?=[^>]*\brel="canonical")[^>]*\bhref=")[^"]*("[^>]*>)/i, `$1${escapeHtml(canonicalUrl)}$2`)
         .replace(
             /<script id="page-structured-data" type="application\/ld\+json">[\s\S]*?<\/script>/i,
             `<script id="page-structured-data" type="application/ld+json">\n${JSON.stringify(structuredData, null, 4)}\n    </script>`
         )
         .replace(
             /<body class="[^"]*" data-public-route="[^"]*">/i,
-            `<body class="${id === "home" ? "home-route" : "public-route"}" data-public-route="${id}">`
+            `<body class="${id === "home" ? "home-route" : ""}" data-public-route="${id}">`
         )
-        .replace("<!-- PUBLIC_PAGE_INTRO -->", renderPublicIntro(id, page));
+        .replace("<!-- PUBLIC_PAGE_INTRO -->", "")
+        .replace(
+            /<script type="module" src="\.\/src\/entries\/home\.js\?v=[^"]*"><\/script>/i,
+            `<script type="module" src="./src/entries/${entry}.js?v=page-runtime-1"></script>`
+        );
+    return pruneRouteViews(rendered, id);
+}
+
+function pruneRouteViews(html, routeId) {
+    const allowed = routeViewAllowlist[routeId] || new Set();
+    let output = html;
+    for (const [viewId, tagName] of routeViewTags) {
+        if (allowed.has(viewId)) continue;
+        const pattern = new RegExp(
+            `<${tagName}(?=[^>]*\\bid="${escapeRegExp(viewId)}")[^>]*>[\\s\\S]*?<\\/${tagName}>\\s*`,
+            "i"
+        );
+        output = output.replace(pattern, "");
+    }
+    return output;
 }
 
 function metaPattern(attribute, value) {
-    return new RegExp(`(<meta\\s+${attribute}="${escapeRegExp(value)}"\\s+content=")[^"]*(">)`, "i");
+    return new RegExp(`(<meta(?=[^>]*\\b${attribute}="${escapeRegExp(value)}")[^>]*\\bcontent=")[^"]*("[^>]*>)`, "i");
 }
 
 function pageStructuredData(id, page, canonicalUrl, publicSiteUrl) {
@@ -132,24 +179,6 @@ function pageStructuredData(id, page, canonicalUrl, publicSiteUrl) {
             }
         ]
     };
-}
-
-function renderPublicIntro(id, page) {
-    if (id === "home") return "";
-    const paragraphs = (page.intro || []).map((text) => `<p>${escapeHtml(text)}</p>`).join("\n                ");
-    return `
-        <section class="public-page-intro" aria-labelledby="public-page-title">
-            <nav class="public-breadcrumb" aria-label="Breadcrumb">
-                <a href="/">Home</a>
-                <span aria-hidden="true">/</span>
-                <span aria-current="page">${escapeHtml(page.heading)}</span>
-            </nav>
-            <p class="panel-kicker">${escapeHtml(page.kicker)}</p>
-            <h1 id="public-page-title">${escapeHtml(page.heading)}</h1>
-            <div class="public-page-summary">
-                ${paragraphs}
-            </div>
-        </section>`;
 }
 
 function buildSitemap(pageDefinitions, baseUrl) {

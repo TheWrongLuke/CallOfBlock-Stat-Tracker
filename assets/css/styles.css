@@ -4128,50 +4128,6 @@ a[aria-disabled="true"] {
     transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
 }
 
-.public-page-intro {
-    width: min(1440px, calc(100% - 48px));
-    margin: 28px auto 6px;
-    border-bottom: 1px solid var(--line);
-    padding: 24px 0 30px;
-}
-
-.public-breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 18px;
-    color: var(--muted);
-    font: 600 0.82rem "Chakra Petch", sans-serif;
-}
-
-.public-breadcrumb a {
-    color: var(--gold);
-}
-
-.public-page-intro h1 {
-    max-width: 20ch;
-    margin: 8px 0 14px;
-    font-family: "Chakra Petch", sans-serif;
-    font-size: 4rem;
-    line-height: 0.94;
-    letter-spacing: 0;
-}
-
-.public-page-summary {
-    max-width: 900px;
-    color: var(--muted);
-    font-size: 1.02rem;
-    line-height: 1.65;
-}
-
-.public-page-summary p {
-    margin: 0;
-}
-
-.public-page-summary p + p {
-    margin-top: 8px;
-}
-
 body[data-public-route="about"] #home-view {
     display: none !important;
 }
@@ -11447,43 +11403,6 @@ code {
 }
 
 @media (max-width: 700px) {
-    body.public-route .hero {
-        padding-top: 94px;
-    }
-
-    body.public-route .hero-text,
-    body.public-route .hero-status {
-        display: none;
-    }
-
-    body.public-route .hero-site-title {
-        font-size: 2.7rem;
-    }
-
-    body.public-route .hero-links {
-        gap: 8px;
-        margin-top: 18px;
-    }
-
-    body.public-route .hero-links a {
-        min-height: 40px;
-        padding: 8px 12px;
-    }
-
-    .public-page-intro {
-        width: calc(100% - 24px);
-        margin-top: 18px;
-        padding: 18px 0 24px;
-    }
-
-    .public-page-intro h1 {
-        font-size: 2.45rem;
-    }
-
-    .public-page-summary {
-        font-size: 0.94rem;
-    }
-
     .leaderboard-panel > .panel-header {
         display: grid;
         width: 100%;

@@ -327,7 +327,7 @@ const delayedAdminSupabaseStub = `window.__profileSyncDelayMs = 1200;\n${adminSu
                     );`
     );
 
-async function installPageStubs(page, supabaseBody) {
+async function installPageStubs(page, supabaseBody, statsPayload = statsExportFixture) {
     await page.route("https://cdn.jsdelivr.net/**", (route) =>
         route.fulfill({ contentType: "text/javascript", body: supabaseBody })
     );
@@ -335,9 +335,7 @@ async function installPageStubs(page, supabaseBody) {
         const requestedRow = new URL(route.request().url()).searchParams.get("id");
         return route.fulfill({
             contentType: "application/json",
-            body: JSON.stringify([
-                { payload: requestedRow === "eq.live" ? liveStatsExportFixture : statsExportFixture }
-            ])
+            body: JSON.stringify([{ payload: requestedRow === "eq.live" ? liveStatsExportFixture : statsPayload }])
         });
     });
     await page.route("https://mc-heads.net/**", (route) =>
@@ -438,18 +436,20 @@ test("statistics refresh only on demand and preserves the active route", async (
     await expect(page.locator("#leaderboard-view")).toBeVisible();
 });
 
-test("initial authentication data uses one request per public resource", async ({ page }) => {
+test("the homepage initializes only the public resources it needs", async ({ page }) => {
     await installPageStubs(page, countingSupabaseStub);
     await page.goto("/");
     await page.waitForLoadState("domcontentloaded");
     await expect(page.getByRole("heading", { level: 1, name: "Call of Block" })).toBeVisible();
 
-    await expect.poll(() => page.evaluate(() => window.__supabaseTableRequests?.playtests || 0)).toBe(1);
+    await expect.poll(() => page.evaluate(() => window.__supabaseTableRequests?.public_profiles || 0)).toBe(1);
     const counts = await page.evaluate(() => ({ ...window.__supabaseTableRequests }));
     expect(counts.public_profiles).toBe(1);
-    expect(counts.public_profile_cosmetic_inventory).toBe(1);
     expect(counts.public_cosmetic_catalog).toBe(1);
-    expect(counts.badge_catalog_overrides).toBe(1);
+    expect(counts.playtest_slots).toBe(1);
+    expect(counts.playtests || 0).toBe(0);
+    expect(counts.public_profile_cosmetic_inventory || 0).toBe(0);
+    expect(counts.badge_catalog_overrides || 0).toBe(0);
 });
 
 test("statistics payloads follow the active route instead of loading the full export", async ({ page }) => {
@@ -520,7 +520,6 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "stats",
             title: "Call of Block Stats Tracker | Minecraft PvP Leaderboards",
             canonical: "https://callofblock.com/stats/",
-            heading: "Call of Block Stats Tracker",
             view: "#leaderboard-view"
         },
         {
@@ -528,7 +527,6 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "playtests",
             title: "Call of Block Playtests | Join Minecraft PvP Testing",
             canonical: "https://callofblock.com/playtests/",
-            heading: "Call of Block Playtests",
             view: "#playtests-view"
         },
         {
@@ -536,7 +534,6 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "feedback",
             title: "Call of Block Feedback & Support",
             canonical: "https://callofblock.com/feedback/",
-            heading: "Call of Block Feedback & Support",
             view: "#feedback-view"
         },
         {
@@ -544,7 +541,6 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "help",
             title: "Call of Block Help | Server, Accounts and Stats",
             canonical: "https://callofblock.com/help/",
-            heading: "Call of Block Help",
             view: "#help"
         },
         {
@@ -552,7 +548,6 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "about",
             title: "About Call of Block | Competitive Minecraft PvP Project",
             canonical: "https://callofblock.com/about/",
-            heading: "About Call of Block",
             view: "#about-the-creator"
         }
     ];
@@ -567,11 +562,8 @@ test("canonical public pages load directly with unique indexable metadata", asyn
         await expect(page.locator("meta[property='og:url']")).toHaveAttribute("content", entry.canonical);
         await expect(page.locator("body")).toHaveAttribute("data-public-route", entry.route);
         await expect(page.locator(entry.view)).toBeVisible();
-        if (entry.route === "home") {
-            await expect(page.getByRole("heading", { level: 1, name: entry.heading })).toBeVisible();
-        } else {
-            await expect(page.locator("#public-page-title")).toHaveText(entry.heading);
-        }
+        await expect(page.getByRole("heading", { level: 1, name: "Call of Block" })).toBeVisible();
+        await expect(page.locator("#public-page-title")).toHaveCount(0);
         const structuredData = JSON.parse(await page.locator("#page-structured-data").textContent());
         if (entry.route === "home") {
             expect(structuredData).toMatchObject({ "@type": "WebSite", name: "Call of Block" });
@@ -595,6 +587,32 @@ test("canonical public pages load directly with unique indexable metadata", asyn
     expect(pageErrors).toEqual([]);
     expect(consoleErrors).toEqual([]);
     expect(failedAssets).toEqual([]);
+});
+
+test("public entry points share styling without loading unrelated tracker code", async ({ page }) => {
+    await installPageStubs(page, supabaseStub);
+    const routes = ["/", "/playtests/", "/feedback/", "/help/", "/about/"];
+
+    for (const route of routes) {
+        await page.goto(route);
+        await page.waitForLoadState("domcontentloaded");
+        await expect(page.locator("#public-page-title")).toHaveCount(0);
+        const resources = await page.evaluate(() =>
+            performance.getEntriesByType("resource").map((entry) => entry.name)
+        );
+        expect(resources.some((url) => /\/src\/app\.js(?:\?|$)/.test(url))).toBe(false);
+        const stylesheets = await page
+            .locator("link[rel='stylesheet']")
+            .evaluateAll((links) => links.map((link) => new URL(link.href).pathname));
+        expect(stylesheets).toEqual(["/assets/css/styles.css"]);
+    }
+
+    await page.goto("/stats/");
+    await expect(page.locator("#leaderboard-view")).toBeVisible();
+    const statsResources = await page.evaluate(() =>
+        performance.getEntriesByType("resource").map((entry) => entry.name)
+    );
+    expect(statsResources.some((url) => /\/src\/app\.js(?:\?|$)/.test(url))).toBe(true);
 });
 
 test("robots and sitemap expose only canonical public pages", async ({ request }) => {
@@ -671,6 +689,19 @@ test("a player profile can be opened from existing test data", async ({ page }) 
     await expect(firstProfileLink).toBeVisible();
     await firstProfileLink.click();
     await expect(page.locator("#player-view")).toBeVisible();
+});
+
+test("legacy duplicate profile IDs resolve to the canonical merged profile", async ({ page }) => {
+    const legacyId = "p_1978b4b211a8";
+    const canonicalId = "sample-rtxluke";
+    const payload = structuredClone(statsExportFixture);
+    payload.playerAliases = { [legacyId]: canonicalId };
+    await installPageStubs(page, supabaseStub, payload);
+
+    await page.goto(`/stats/#player=${legacyId}&tab=overview`);
+    await expect(page.locator("#player-view")).toBeVisible();
+    await expect(page.locator("#player-view")).toContainText("RTXLuke");
+    await expect.poll(() => page.evaluate(() => window.location.hash)).toBe(`#player=${canonicalId}&tab=overview`);
 });
 
 test("feedback asks logged-out visitors to sign in", async ({ page }) => {
@@ -758,7 +789,8 @@ test("admin routes reject a signed-in non-admin on direct navigation and refresh
 test("protected admin content waits for profile verification", async ({ page }) => {
     await openDelayedAdminApp(page);
     await expect(page.locator("#admin-help-view")).toBeHidden();
-    await expect(page.locator("#home-view")).toBeVisible();
+    await expect(page).toHaveURL(/\/stats\/#admin-help$/);
+    await expect(page.locator("#leaderboard-view")).toBeVisible();
     expect(await page.evaluate(() => window.__queriedSupabaseTables || [])).not.toContain(
         "admin_documentation_sections"
     );

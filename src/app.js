@@ -34,38 +34,34 @@ import {
     ticketSeverityRank,
     ticketStatusLabel
 } from "./config/feedback.js";
-import { validateReplyInput, validateTicketInput } from "./utils/feedback-validation.js";
 import { headshotRatePercent, meetsSharpshooterRequirement } from "./utils/cosmetic-progress.js";
 import { createPerformanceDiagnostics } from "./utils/performance-diagnostics.js";
-import {
-    createFeedbackAttachmentView,
-    createFeedbackTicketId,
-    feedbackAttachmentErrorMessage,
-    removeFeedbackAttachment,
-    uploadFeedbackAttachment,
-    validateFeedbackAttachment
-} from "./services/feedback-attachments.js";
-import { createFeedbackDraftSession } from "./services/feedback-draft-session.js";
 import { loadAdminTicketPreferences, saveAdminTicketPreferences } from "./services/admin-ticket-preferences.js";
 import {
     loadCosmeticPickerPreferences,
     saveCosmeticPickerPreferences
 } from "./services/cosmetic-picker-preferences.js";
 import { claimCanonicalProgressionCosmetics } from "./services/progression-claims.js";
-import {
-    renderAdminDocumentationContent,
-    renderAdminTicketsContent,
-    renderFeedbackContent,
-    renderTicketDetailContent
-} from "./views/feedback.js";
-import { renderProgressionAdminContent } from "./views/progression.js?v=weekly-missions-3";
 import { renderGiftNotificationPopup, renderNotificationInbox } from "./views/notifications.js";
-import { createMatchDetailApi } from "./match/match-detail-api.js";
-import { createMatchDetailPage } from "./match/match-detail.js";
-import { createReplayApi } from "./match/replay-downloads.js";
-
 const performanceDiagnostics = createPerformanceDiagnostics();
 globalThis.__cobPerformanceDiagnostics = performanceDiagnostics;
+
+let feedbackFeatureLoadPromise = null;
+let feedbackDraftSession = createEmptyFeedbackDraftSession();
+let createFeedbackAttachmentView;
+let createFeedbackTicketId;
+let feedbackAttachmentErrorMessage;
+let removeFeedbackAttachment;
+let uploadFeedbackAttachment;
+let validateFeedbackAttachment;
+let validateReplyInput;
+let validateTicketInput;
+let renderAdminDocumentationContent;
+let renderAdminTicketsContent;
+let renderFeedbackContent;
+let renderTicketDetailContent;
+let progressionAdminViewLoadPromise = null;
+let renderProgressionAdminContent;
 
 const MODE_LABELS = {
     overall: "Overall",
@@ -717,9 +713,6 @@ const state = {
     playtests: emptyPlaytestState(),
     cache: emptyCache()
 };
-const feedbackDraftSession = createFeedbackDraftSession({
-    getUserId: () => state.authSession?.user?.id || ""
-});
 let activeBadgeProgressHost = null;
 let badgeTooltipFrame = 0;
 let adminTicketSearchTimer = 0;
@@ -729,23 +722,95 @@ let weeklyTemplateSearchTimer = 0;
 let playerManagerSearchTimer = 0;
 let weeklyTemplateLoadPromise = null;
 let matchDetailPage = null;
+let matchDetailLoadPromise = null;
 let accountProfilesRequest = null;
 let remotePlaytestsRequest = null;
 let cosmeticCatalogRequest = null;
 
+function createEmptyFeedbackDraftSession() {
+    return {
+        attachment: () => null,
+        attach: () => {},
+        capture: () => {},
+        clear: async () => {},
+        discard: async () => {},
+        flush: () => {},
+        reset: () => {}
+    };
+}
+
+async function ensureFeedbackFeature() {
+    if (renderFeedbackContent) return true;
+    if (feedbackFeatureLoadPromise) return feedbackFeatureLoadPromise;
+    feedbackFeatureLoadPromise = (async () => {
+        const [validation, attachments, drafts, views] = await Promise.all([
+            import("./utils/feedback-validation.js"),
+            import("./services/feedback-attachments.js"),
+            import("./services/feedback-draft-session.js"),
+            import("./views/feedback.js")
+        ]);
+        validateReplyInput = validation.validateReplyInput;
+        validateTicketInput = validation.validateTicketInput;
+        createFeedbackAttachmentView = attachments.createFeedbackAttachmentView;
+        createFeedbackTicketId = attachments.createFeedbackTicketId;
+        feedbackAttachmentErrorMessage = attachments.feedbackAttachmentErrorMessage;
+        removeFeedbackAttachment = attachments.removeFeedbackAttachment;
+        uploadFeedbackAttachment = attachments.uploadFeedbackAttachment;
+        validateFeedbackAttachment = attachments.validateFeedbackAttachment;
+        renderAdminDocumentationContent = views.renderAdminDocumentationContent;
+        renderAdminTicketsContent = views.renderAdminTicketsContent;
+        renderFeedbackContent = views.renderFeedbackContent;
+        renderTicketDetailContent = views.renderTicketDetailContent;
+        feedbackDraftSession = drafts.createFeedbackDraftSession({
+            getUserId: () => state.authSession?.user?.id || ""
+        });
+        return true;
+    })();
+    try {
+        return await feedbackFeatureLoadPromise;
+    } finally {
+        feedbackFeatureLoadPromise = null;
+    }
+}
+
+async function ensureProgressionAdminView() {
+    if (renderProgressionAdminContent) return true;
+    if (progressionAdminViewLoadPromise) return progressionAdminViewLoadPromise;
+    progressionAdminViewLoadPromise = import("./views/progression.js?v=weekly-missions-3").then((module) => {
+        renderProgressionAdminContent = module.renderProgressionAdminContent;
+        return true;
+    });
+    try {
+        return await progressionAdminViewLoadPromise;
+    } finally {
+        progressionAdminViewLoadPromise = null;
+    }
+}
+
+function renderLazyFeature(body, label, loader) {
+    body.innerHTML = `<div class="panel-state"><strong>${escapeHtml(label)}</strong></div>`;
+    void loader()
+        .then(() => render())
+        .catch((error) => {
+            console.error(`Could not load ${label.toLowerCase()}`, error);
+            body.innerHTML = '<div class="panel-state error"><strong>This section could not be loaded.</strong></div>';
+        });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
     setupAuthClient();
-    setupMatchDetailPage();
-    loadPlaytestState();
+    if (pageNeedsPlaytestData()) loadPlaytestState();
     bindAvatarImageEvents();
     applyRoute();
     bindStaticEvents();
-    startChampionRotation();
-    state.statsRefresh.counterTimer = window.setInterval(renderStatsRefreshControl, 1000);
+    if (usesHomePresentation()) startChampionRotation();
+    if (document.body?.dataset.publicRoute === "stats") {
+        state.statsRefresh.counterTimer = window.setInterval(renderStatsRefreshControl, 1000);
+    }
     window.addEventListener("pagehide", () => state.statsRefresh.controller?.abort(), { once: true });
+    render();
     void initAuth();
-    void loadData();
 });
 
 function bindAvatarImageEvents() {
@@ -814,35 +879,50 @@ function setupAuthClient() {
     state.progression.api = createProgressionAdminApi(state.authClient);
 }
 
-function setupMatchDetailPage() {
+async function ensureMatchDetailPage() {
+    if (matchDetailPage) return matchDetailPage;
+    if (matchDetailLoadPromise) return matchDetailLoadPromise;
     const container = document.getElementById("match-view");
-    if (!container) return;
-    const detailApi = createMatchDetailApi({
-        supabaseClient: state.authClient,
-        apiUrl: state.apiUrl,
-        fetchImpl: performanceDiagnostics.fetch
-    });
-    const replayApi = createReplayApi({
-        supabaseClient: state.authClient,
-        supabaseUrl: state.supabaseUrl,
-        supabaseKey: state.supabaseKey
-    });
-    matchDetailPage = createMatchDetailPage({
-        container,
-        api: detailApi,
-        replayApi,
-        getSummary: findMatchSummary,
-        getViewerSummary: findViewerMatchSummary,
-        getViewerPlayerId: () => linkedStatsProfile()?.playerId || "",
-        getActivePlayerId: () => state.matchPlayerId,
-        getBackHref: () =>
-            state.matchPlayerId
-                ? `#player=${encodeURIComponent(state.matchPlayerId)}&tab=history`
-                : "#view=leaderboards&board=players&mode=battleRoyale&sort=wins",
-        getPlayerPresentation: matchPlayerPresentation,
-        isAdmin: isPlaytestAdmin,
-        isAuthenticated: () => Boolean(state.authSession?.user)
-    });
+    if (!container) return null;
+    matchDetailLoadPromise = (async () => {
+        const [{ createMatchDetailApi }, { createMatchDetailPage }, { createReplayApi }] = await Promise.all([
+            import("./match/match-detail-api.js"),
+            import("./match/match-detail.js"),
+            import("./match/replay-downloads.js")
+        ]);
+        const detailApi = createMatchDetailApi({
+            supabaseClient: state.authClient,
+            apiUrl: state.apiUrl,
+            fetchImpl: performanceDiagnostics.fetch
+        });
+        const replayApi = createReplayApi({
+            supabaseClient: state.authClient,
+            supabaseUrl: state.supabaseUrl,
+            supabaseKey: state.supabaseKey
+        });
+        matchDetailPage = createMatchDetailPage({
+            container,
+            api: detailApi,
+            replayApi,
+            getSummary: findMatchSummary,
+            getViewerSummary: findViewerMatchSummary,
+            getViewerPlayerId: () => linkedStatsProfile()?.playerId || "",
+            getActivePlayerId: () => state.matchPlayerId,
+            getBackHref: () =>
+                state.matchPlayerId
+                    ? statsHref(`player=${encodeURIComponent(state.matchPlayerId)}&tab=history`)
+                    : statsHref("view=leaderboards&board=players&mode=battleRoyale&sort=wins"),
+            getPlayerPresentation: matchPlayerPresentation,
+            isAdmin: isPlaytestAdmin,
+            isAuthenticated: () => Boolean(state.authSession?.user)
+        });
+        return matchDetailPage;
+    })();
+    try {
+        return await matchDetailLoadPromise;
+    } finally {
+        matchDetailLoadPromise = null;
+    }
 }
 
 async function initAuth() {
@@ -897,7 +977,7 @@ async function applyAuthSession(session, shouldRender = false) {
         await loadCosmeticCatalog({ force: true });
         await loadBadgeCatalogOverrides({ force: true });
         await loadAccountProfiles();
-        await loadRemotePlaytests({ silent: true });
+        if (pageNeedsPlaytestData()) await loadRemotePlaytests({ silent: true });
         applyRoute();
         enforceProtectedAdminRoute();
         if (shouldRender) render();
@@ -911,7 +991,7 @@ async function applyAuthSession(session, shouldRender = false) {
     await claimProgressionCosmetics();
     await loadAccountProfiles();
     await loadOwnNotifications();
-    await loadRemotePlaytests({ silent: true });
+    if (pageNeedsPlaytestData()) await loadRemotePlaytests({ silent: true });
     await syncWeeklyMissions();
     resetFeedbackSessionState();
     resetProgressionAdminState();
@@ -992,7 +1072,7 @@ async function signOutDiscord() {
     await loadCosmeticCatalog({ force: true });
     await loadBadgeCatalogOverrides({ force: true });
     await loadAccountProfiles();
-    await loadRemotePlaytests({ silent: true });
+    if (pageNeedsPlaytestData()) await loadRemotePlaytests({ silent: true });
     enforceProtectedAdminRoute();
     render();
 }
@@ -1992,18 +2072,18 @@ function bindStaticEvents() {
     window.addEventListener("pagehide", () => feedbackDraftSession.flush());
 
     const search = document.getElementById("player-search");
-    search.addEventListener("input", (event) => {
+    search?.addEventListener("input", (event) => {
         state.query = event.target.value.trim().toLowerCase();
         state.page = 1;
         render();
     });
 
-    document.querySelector(".leaderboard-table").addEventListener("click", (event) => {
+    document.querySelector(".leaderboard-table")?.addEventListener("click", (event) => {
         const button = event.target.closest("[data-sort]");
         if (button) setSort(button.dataset.sort);
     });
 
-    document.getElementById("leaderboard-body").addEventListener("click", (event) => {
+    document.getElementById("leaderboard-body")?.addEventListener("click", (event) => {
         if (event.target.closest("a")) return;
         const row = event.target.closest("[data-player-id]");
         if (row) {
@@ -2013,14 +2093,14 @@ function bindStaticEvents() {
         }
     });
 
-    document.getElementById("back-to-leaderboard").addEventListener("click", () => routeToLeaderboard());
-    document.getElementById("close-profile-preview").addEventListener("click", () => {
+    document.getElementById("back-to-leaderboard")?.addEventListener("click", () => routeToLeaderboard());
+    document.getElementById("close-profile-preview")?.addEventListener("click", () => {
         state.selectedId = null;
         state.profilePreviewOpen = false;
         render();
     });
 
-    document.getElementById("player-detail-body").addEventListener("click", (event) => {
+    document.getElementById("player-detail-body")?.addEventListener("click", (event) => {
         const tabButton = event.target.closest("[data-player-tab]");
         if (tabButton) {
             state.playerTab = tabButton.dataset.playerTab;
@@ -2092,7 +2172,7 @@ function bindStaticEvents() {
     }
 
     const championCarousel = document.getElementById("champion-carousel");
-    championCarousel.addEventListener("scroll", () => {
+    championCarousel?.addEventListener("scroll", () => {
         window.clearTimeout(state.championScrollTimer);
         state.championScrollTimer = window.setTimeout(() => {
             const mode =
@@ -2275,7 +2355,7 @@ function applyRoute() {
     const playerId = params.get("player");
     const tab = params.get("tab");
     if (!playerId) {
-        state.view = "home";
+        state.view = publicFallbackView();
         state.matchPlayerId = "";
         return;
     }
@@ -2321,7 +2401,7 @@ function applyPublicPageRoute() {
 function openProtectedAdminRoute(fallbackView, fallbackHash = "") {
     if (canOpenAdminRoute({ authReady: state.authReady, profile: state.authProfile })) return true;
 
-    state.view = fallbackView;
+    state.view = fallbackView === "home" ? publicFallbackView() : fallbackView;
     state.selectedId = null;
     state.profilePreviewOpen = false;
     if (state.authReady) {
@@ -2334,8 +2414,17 @@ function openProtectedAdminRoute(fallbackView, fallbackHash = "") {
     return false;
 }
 
+function publicFallbackView() {
+    return isStatsPage() ? "leaderboard" : "home";
+}
+
 function routeToPlayer(playerId, tab = state.playerTab || "overview") {
     if (!playerId) return;
+    playerId = canonicalPlayerId(playerId);
+    if (!isStatsPage()) {
+        window.location.assign(`/stats/#player=${encodeURIComponent(playerId)}&tab=${encodeURIComponent(tab)}`);
+        return;
+    }
     state.selectedId = playerId;
     state.view = "player";
     state.profilePreviewOpen = false;
@@ -2350,10 +2439,51 @@ function updatePlayerHash() {
 }
 
 function setRouteHash(hash) {
+    if (!isStatsPage() && isStatsHash(hash)) {
+        window.location.assign(`/stats/#${hash}`);
+        return true;
+    }
     if (window.location.hash.replace(/^#/, "") === hash) return false;
     state.routeScrollPending = true;
     window.location.hash = hash;
     return true;
+}
+
+function statsHref(hash) {
+    return `${isStatsPage() ? "" : "/stats/"}#${hash}`;
+}
+
+function isStatsPage() {
+    return document.body?.dataset.publicRoute === "stats";
+}
+
+function isStatsHash(hash) {
+    const params = new URLSearchParams(String(hash || "").replace(/^#/, ""));
+    const route = params.get("view") || "";
+    return Boolean(
+        params.get("player") ||
+        params.get("match") ||
+        [
+            "leaderboard",
+            "leaderboards",
+            "weapons",
+            "maps",
+            "account",
+            "store",
+            "admin-help",
+            "admin-progression",
+            "admin-tickets",
+            "community-dates"
+        ].includes(route)
+    );
+}
+
+function pageNeedsPlaytestData() {
+    return document.body?.dataset.publicRoute === "playtests" || state.view === "communityAdmin";
+}
+
+function viewNeedsStatsData() {
+    return ["leaderboard", "player", "match", "account", "store", "adminProgression"].includes(state.view);
 }
 
 function enforceProtectedAdminRoute() {
@@ -2369,7 +2499,7 @@ function enforceProtectedAdminRoute() {
         state.view = "playtests";
         hash = "#playtests";
     } else {
-        state.view = "home";
+        state.view = publicFallbackView();
     }
 
     state.store.pendingPurchase = null;
@@ -2402,7 +2532,7 @@ function routeTo(route) {
     }
     if (route === "admin-help") {
         if (!isPlaytestAdmin()) {
-            state.view = "home";
+            state.view = publicFallbackView();
             window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
             render();
             return;
@@ -2436,7 +2566,7 @@ function routeTo(route) {
     }
     if (route === "admin-progression") {
         if (!isPlaytestAdmin()) {
-            state.view = "home";
+            state.view = publicFallbackView();
             state.selectedId = null;
             state.profilePreviewOpen = false;
             window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
@@ -2465,7 +2595,7 @@ function routeTo(route) {
     }
     if (route === "store") {
         if (!isPlaytestAdmin()) {
-            state.view = "home";
+            state.view = publicFallbackView();
             state.selectedId = null;
             state.profilePreviewOpen = false;
             window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
@@ -2728,7 +2858,7 @@ function renderStatsRefreshControl() {
     const status = document.querySelector("[data-stats-refresh-status]");
     if (!control || !(button instanceof HTMLButtonElement) || !label || !status) return;
 
-    const visible = state.view !== "home";
+    const visible = viewNeedsStatsData();
     control.classList.toggle("hidden", !visible);
     control.setAttribute("aria-hidden", visible ? "false" : "true");
     button.disabled = refresh.loading;
@@ -3477,12 +3607,16 @@ function applyData(data, preview, dataMode, { fullRender = true, sliceId = state
     rebuildCache();
     void syncWeeklyMissions();
 
+    const canonicalSelectedId = canonicalPlayerId(previousSelectedId);
     if (
-        previousSelectedId &&
-        profileById(previousSelectedId) &&
+        canonicalSelectedId &&
+        profileById(canonicalSelectedId) &&
         (state.view === "player" || state.profilePreviewOpen)
     ) {
-        state.selectedId = previousSelectedId;
+        state.selectedId = canonicalSelectedId;
+        if (state.view === "player" && canonicalSelectedId !== previousSelectedId) {
+            replacePlayerHash(canonicalSelectedId);
+        }
     } else {
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -3743,7 +3877,7 @@ function render() {
     renderCosmeticPicker();
     renderRoute();
     finishRender();
-    void ensureStatsDataForRoute();
+    if (viewNeedsStatsData()) void ensureStatsDataForRoute();
 }
 
 function renderCreatorIdentity() {
@@ -3772,26 +3906,31 @@ function renderRoute() {
         "progression-modal-open",
         state.view === "adminProgression" && progressionEditorOpen()
     );
-    document.getElementById("home-view").classList.toggle("hidden", state.view !== "home");
-    document.getElementById("admin-help-view").classList.toggle("hidden", state.view !== "adminHelp");
-    document.getElementById("playtests-view").classList.toggle("hidden", state.view !== "playtests");
-    document.getElementById("feedback-view").classList.toggle("hidden", state.view !== "feedback");
-    document.getElementById("ticket-view").classList.toggle("hidden", state.view !== "ticket");
-    document.getElementById("admin-tickets-view").classList.toggle("hidden", state.view !== "adminTickets");
-    document.getElementById("admin-progression-view").classList.toggle("hidden", state.view !== "adminProgression");
-    document.getElementById("community-admin-view").classList.toggle("hidden", state.view !== "communityAdmin");
-    document.getElementById("account-view").classList.toggle("hidden", state.view !== "account");
-    document.getElementById("store-view").classList.toggle("hidden", state.view !== "store");
+    toggleRouteView("home-view", state.view === "home");
+    toggleRouteView("admin-help-view", state.view === "adminHelp");
+    toggleRouteView("playtests-view", state.view === "playtests");
+    toggleRouteView("feedback-view", state.view === "feedback");
+    toggleRouteView("ticket-view", state.view === "ticket");
+    toggleRouteView("admin-tickets-view", state.view === "adminTickets");
+    toggleRouteView("admin-progression-view", state.view === "adminProgression");
+    toggleRouteView("community-admin-view", state.view === "communityAdmin");
+    toggleRouteView("account-view", state.view === "account");
+    toggleRouteView("store-view", state.view === "store");
     const leaderboardView = document.getElementById("leaderboard-view");
-    leaderboardView.hidden = state.view !== "leaderboard";
-    leaderboardView.classList.toggle("hidden", state.view !== "leaderboard");
-    leaderboardView.classList.toggle("profile-closed", state.view === "leaderboard" && !state.profilePreviewOpen);
-    document.getElementById("player-view").classList.toggle("hidden", state.view !== "player");
-    document.getElementById("match-view").classList.toggle("hidden", state.view !== "match");
+    if (leaderboardView) {
+        leaderboardView.hidden = state.view !== "leaderboard";
+        leaderboardView.classList.toggle("hidden", state.view !== "leaderboard");
+        leaderboardView.classList.toggle("profile-closed", state.view === "leaderboard" && !state.profilePreviewOpen);
+    }
+    toggleRouteView("player-view", state.view === "player");
+    toggleRouteView("match-view", state.view === "match");
     updateFloatingButtonPosition();
     if (state.view === "player") renderPlayerDetail();
     if (state.view === "match") {
-        void matchDetailPage?.open(state.matchId);
+        const requestedMatchId = state.matchId;
+        void ensureMatchDetailPage().then((page) => {
+            if (page && state.view === "match" && state.matchId === requestedMatchId) void page.open(requestedMatchId);
+        });
     } else {
         matchDetailPage?.close();
     }
@@ -3817,6 +3956,10 @@ function renderRoute() {
         });
     }
     finishRender();
+}
+
+function toggleRouteView(id, visible) {
+    document.getElementById(id)?.classList.toggle("hidden", !visible);
 }
 
 function updateFloatingButtonPosition() {
@@ -4087,7 +4230,7 @@ function renderAccountPage() {
                 </div>
             </div>
             <div class="account-actions">
-                ${linkedProfile ? `<a href="#player=${encodeURIComponent(linkedProfile.playerId)}&tab=overview">Open stats profile</a>` : ""}
+                            ${linkedProfile ? `<a href="${statsHref(`player=${encodeURIComponent(linkedProfile.playerId)}&tab=overview`)}">Open stats profile</a>` : ""}
                 <button type="button" data-auth-sign-out>Sign out</button>
             </div>
         </section>
@@ -4207,6 +4350,10 @@ function resetProgressionAdminState() {
 function renderFeedbackPage() {
     const body = document.getElementById("feedback-body");
     if (!body) return;
+    if (!renderFeedbackContent) {
+        renderLazyFeature(body, "Loading feedback and support...", ensureFeedbackFeature);
+        return;
+    }
     const loggedIn = isDiscordLoggedIn();
     const userId = state.authSession?.user?.id || "";
     if (loggedIn && !state.feedback.ticketsLoaded && !state.feedback.ticketsLoading) {
@@ -4365,6 +4512,10 @@ function focusFirstFeedbackError(form, errors) {
 function renderTicketDetailPage() {
     const body = document.getElementById("ticket-detail-body");
     if (!body) return;
+    if (!renderTicketDetailContent) {
+        renderLazyFeature(body, "Loading ticket details...", ensureFeedbackFeature);
+        return;
+    }
     const feedback = state.feedback;
     const ticketId = feedback.selectedTicketId;
     const loggedIn = isDiscordLoggedIn();
@@ -4601,6 +4752,10 @@ async function submitAdminTicketUpdate(form) {
 function renderAdminTicketsPage() {
     const body = document.getElementById("admin-tickets-body");
     if (!body) return;
+    if (!renderAdminTicketsContent) {
+        renderLazyFeature(body, "Loading ticket administration...", ensureFeedbackFeature);
+        return;
+    }
     if (!state.authReady) {
         body.innerHTML = renderAdminTicketsContent({
             loading: true,
@@ -4788,6 +4943,10 @@ function ticketSummaryText(ticket) {
 function renderAdminDocumentationPage() {
     const body = document.getElementById("admin-documentation-body");
     if (!body) return;
+    if (!renderAdminDocumentationContent) {
+        renderLazyFeature(body, "Loading administrator documentation...", ensureFeedbackFeature);
+        return;
+    }
     if (!state.authReady || state.feedback.documentationLoading) {
         body.innerHTML = renderAdminDocumentationContent({ loading: true, sections: [], error: "" });
         return;
@@ -4834,6 +4993,10 @@ async function loadAdminDocumentation({ force = false } = {}) {
 function renderProgressionAdminPage({ forceBadgeEditor = false } = {}) {
     const body = document.getElementById("admin-progression-body");
     if (!body) return;
+    if (!renderProgressionAdminContent) {
+        renderLazyFeature(body, "Loading progression administration...", ensureProgressionAdminView);
+        return;
+    }
     document.body.classList.toggle(
         "progression-modal-open",
         state.view === "adminProgression" && progressionEditorOpen()
@@ -9375,7 +9538,7 @@ function renderFeaturedPlayer(player, rank, modeId) {
     const modeTab = modeId === "deathmatch" ? "deathmatch" : "battleRoyale";
 
     return `
-        <a class="featured-player podium-rank-${rank}" href="#player=${encodeURIComponent(player.playerId)}&tab=${encodeURIComponent(modeTab)}">
+        <a class="featured-player podium-rank-${rank}" href="${statsHref(`player=${encodeURIComponent(player.playerId)}&tab=${encodeURIComponent(modeTab)}`)}">
             ${renderPlayerAvatar(player, profile, 96, "featured-avatar")}
             <div class="featured-player-main">
                 <div>
@@ -12294,7 +12457,9 @@ function renderChampionControls() {
     });
     const fullBoard = document.getElementById("champion-full-board");
     if (fullBoard) {
-        fullBoard.href = `#view=leaderboards&mode=${encodeURIComponent(state.championMode)}&board=players&sort=wins`;
+        fullBoard.href = statsHref(
+            `view=leaderboards&mode=${encodeURIComponent(state.championMode)}&board=players&sort=wins`
+        );
     }
 }
 
@@ -12631,7 +12796,7 @@ function renderTable() {
                             <strong>${escapeHtml(name)}</strong>
                             ${renderProfileTitle(accountProfileForPlayer(player, profile), { compact: true })}
                         </div>
-                        <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview" aria-label="${escapeHtml(`Open ${name} profile`)}">Profile</a>
+            <a class="profile-link" href="${statsHref(`player=${encodeURIComponent(player.playerId)}&tab=overview`)}" aria-label="${escapeHtml(`Open ${name} profile`)}">Profile</a>
                     </div>
                 </div>
             </td>
@@ -12829,7 +12994,7 @@ function renderSpecialLeaderboardPlayer(player, tab) {
                     <strong>${escapeHtml(name)}</strong>
                     ${renderProfileTitle(accountProfileForPlayer(player, profile), { compact: true })}
                 </div>
-                <a class="profile-link" href="#player=${encodeURIComponent(player.playerId)}&tab=${escapeHtml(tab)}" aria-label="${escapeHtml(`Open ${name} profile`)}">Profile</a>
+            <a class="profile-link" href="${statsHref(`player=${encodeURIComponent(player.playerId)}&tab=${escapeHtml(tab)}`)}" aria-label="${escapeHtml(`Open ${name} profile`)}">Profile</a>
             </div>
         </div>
     `;
@@ -14582,7 +14747,7 @@ function renderMatchParticipant(player, index, match) {
         return `
             <article class="roster-row ${player.won ? "winner" : ""}">
                 <strong>Team ${number(player.team) === 2 ? "B" : "A"}</strong>
-                ${player.playerId ? `<a class="roster-player-link" href="#player=${encodeURIComponent(player.playerId)}&tab=duel">${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}
+                    ${player.playerId ? `<a class="roster-player-link" href="${statsHref(`player=${encodeURIComponent(player.playerId)}&tab=duel`)}">${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}
                 <span>${number(player.kills)} K</span>
                 <span>${number(player.deaths)} D</span>
                 <span>${number(player.roundWins)} rounds</span>
@@ -14594,7 +14759,7 @@ function renderMatchParticipant(player, index, match) {
         return `
             <article class="roster-row ${player.lastSurvivor ? "winner" : ""}">
                 <strong>#${index + 1}</strong>
-                ${player.playerId ? `<a class="roster-player-link" href="#player=${encodeURIComponent(player.playerId)}&tab=zombieSurvival">${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}
+                    ${player.playerId ? `<a class="roster-player-link" href="${statsHref(`player=${encodeURIComponent(player.playerId)}&tab=zombieSurvival`)}">${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}
                 <span>${escapeHtml(formatDuration(number(player.survivalDurationMs) / 1000))}</span>
                 <span>${number(player.zombieKills)} kills</span>
                 <span>${number(player.specialZombieKills)} special</span>
@@ -14605,7 +14770,7 @@ function renderMatchParticipant(player, index, match) {
     return `
         <article class="roster-row ${player.won ? "winner" : ""}">
             <strong>${escapeHtml(match.mode === "battleRoyale" && player.placement ? formatPlacement(player.placement) : `#${index + 1}`)}</strong>
-            ${player.playerId ? `<a class="roster-player-link" href="#player=${encodeURIComponent(player.playerId)}&tab=overview">${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}
+                    ${player.playerId ? `<a class="roster-player-link" href="${statsHref(`player=${encodeURIComponent(player.playerId)}&tab=overview`)}">${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}
             <span>${escapeHtml(String(player.kills || 0))} K</span>
             <span>${escapeHtml(String(player.deaths || 0))} D</span>
             <span>${formatPercent(rate(player.headshots, player.hits))} HS</span>
@@ -15504,7 +15669,23 @@ function matchWinnerText(match) {
 }
 
 function profileById(playerId) {
-    return state.cache.profileMap.get(playerId) || null;
+    return state.cache.profileMap.get(canonicalPlayerId(playerId)) || null;
+}
+
+function canonicalPlayerId(playerId) {
+    const id = String(playerId || "");
+    return String(state.data?.playerAliases?.[id] || id);
+}
+
+function replacePlayerHash(playerId) {
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    params.set("player", playerId);
+    params.set("tab", PLAYER_TABS[state.playerTab] ? state.playerTab : "overview");
+    window.history.replaceState(
+        null,
+        document.title,
+        `${window.location.pathname}${window.location.search}#${params.toString()}`
+    );
 }
 
 function applyRanks(players) {
