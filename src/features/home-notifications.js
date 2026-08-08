@@ -19,6 +19,11 @@ export async function initializeHomeNotifications(client) {
     };
 
     document.addEventListener("click", (event) => handleClick(event, api, state));
+    document.addEventListener("cob:account-panel-open", () => {
+        if (!state.open) return;
+        state.open = false;
+        render(state);
+    });
     await loadNotifications(api, state, true);
 }
 
@@ -48,6 +53,7 @@ async function handleClick(event, api, state) {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
     if (target.closest("[data-notification-panel-open]")) {
+        document.dispatchEvent(new CustomEvent("cob:notification-panel-open"));
         state.open = true;
         state.message = "";
         render(state);

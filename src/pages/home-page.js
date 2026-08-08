@@ -6,6 +6,7 @@ import {
     renderHeroStatus,
     skinHeadUrl
 } from "../core/site-shell.js";
+import { syncDiscordProfile } from "../api/profile.js";
 
 const CHAMPION_ROTATE_MS = 5000;
 
@@ -18,12 +19,14 @@ export async function initializeHomePage() {
     const data = await shell.loadStatsSlice("home");
     renderHeroStatus(data);
 
-    const [profiles, catalog] = await Promise.all([
+    const [profiles, catalog, ownProfileResult] = await Promise.all([
         loadPublicProfiles(shell.client),
-        loadCosmeticCatalog(shell.client)
+        loadCosmeticCatalog(shell.client),
+        shell.session?.user ? syncDiscordProfile(shell.client) : Promise.resolve({ data: null, error: null })
     ]);
-    const viewerProfile = profiles.find((profile) => profile.id === shell.session?.user?.id) || null;
-    shell.setProfile(viewerProfile);
+    const publicViewerProfile = profiles.find((profile) => profile.id === shell.session?.user?.id) || null;
+    const viewerProfile = ownProfileResult.error ? publicViewerProfile : ownProfileResult.data || publicViewerProfile;
+    shell.setProfile(resolveShellProfile(viewerProfile, catalog));
     renderHome(data, profiles, catalog);
     if (shell.session?.user) {
         const { initializeHomeNotifications } = await import("../features/home-notifications.js");
@@ -31,6 +34,21 @@ export async function initializeHomePage() {
     }
     void renderUpcomingPlaytest(shell.client);
     startChampionCarousel();
+}
+
+function resolveShellProfile(profile, catalog) {
+    if (!profile) return null;
+    const border = catalog.get(`border:${String(profile.pfp_border || "none")}`);
+    const titleId = String(profile.profile_title || "none");
+    const title = catalog.get(`title:${titleId}`);
+    return {
+        ...profile,
+        resolved_avatar_url: profileAvatar(profile, { name: profile.minecraft_player_name }, catalog, 96),
+        resolved_border_url: border?.image_url || "",
+        resolved_border_inset: border?.border_inset || 0,
+        resolved_title_text: title?.title_text || (titleId === "none" ? "" : titleId.replaceAll("_", " ")),
+        resolved_title_rarity: title?.rarity || "common"
+    };
 }
 
 function renderHome(data, profiles, catalog) {

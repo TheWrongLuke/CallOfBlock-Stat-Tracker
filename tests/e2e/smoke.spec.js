@@ -452,6 +452,27 @@ test("the homepage initializes only the public resources it needs", async ({ pag
     expect(counts.badge_catalog_overrides || 0).toBe(0);
 });
 
+test("the signed-in homepage account pill opens the profile drawer and reveals admin Store access", async ({
+    page
+}) => {
+    await openAdminApp(page, "");
+    const accountButton = page.locator("[data-shell-account-open]");
+    await expect(accountButton).toBeVisible();
+    await expect(accountButton).toContainText("Test Admin");
+    await expect(page.locator(".store-float")).toBeVisible();
+    await expect(page.locator(".store-float")).toHaveAttribute("href", "/stats/#store");
+
+    await accountButton.click();
+    const drawer = page.locator("#account-side-panel-host .profile-drawer");
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByRole("heading", { name: "PROFILE" })).toBeVisible();
+    await expect(drawer.getByRole("link", { name: "Customize profile" })).toHaveAttribute("href", "/stats/#account");
+    await expect(drawer.getByRole("link", { name: "Open store admin" })).toHaveAttribute("href", "/stats/#store");
+
+    await drawer.getByRole("button", { name: "Close profile panel" }).click();
+    await expect(drawer).toBeHidden();
+});
+
 test("statistics payloads follow the active route instead of loading the full export", async ({ page }) => {
     const requestedRows = [];
     page.on("request", (request) => {

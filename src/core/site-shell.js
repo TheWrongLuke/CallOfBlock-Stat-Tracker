@@ -13,6 +13,7 @@ export async function initializeSiteShell({ loadStatus = true } = {}) {
         client,
         session: null,
         profile: null,
+        accountPanelOpen: false,
         signIn() {
             return client ? signIn(client) : Promise.resolve();
         },
@@ -25,8 +26,10 @@ export async function initializeSiteShell({ loadStatus = true } = {}) {
         setProfile(profile) {
             shell.profile = profile || null;
             renderAccountWidget(shell);
+            renderAccountPanel(shell);
         }
     };
+    document.addEventListener("cob:notification-panel-open", () => closeAccountPanel(shell, false));
 
     renderAccountWidget(shell, false);
     const tasks = [initializeAuth(shell)];
@@ -177,7 +180,14 @@ function renderAccountWidget(shell, ready = true) {
             metadata.user_name ||
             "Account"
     );
-    const avatar = safeImageUrl(profile.avatar_url || metadata.avatar_url || metadata.picture || "");
+    const avatar = safeImageUrl(
+        profile.resolved_avatar_url ||
+            profile.custom_avatar_url ||
+            profile.avatar_url ||
+            metadata.avatar_url ||
+            metadata.picture ||
+            ""
+    );
     container.innerHTML = `
         <button class="notification-bell-button" type="button" data-notification-panel-open aria-label="Open account notifications" aria-expanded="false">
             <svg class="notification-bell-symbol" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -185,10 +195,126 @@ function renderAccountWidget(shell, ready = true) {
                 <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path>
             </svg>
         </button>
-        <a class="account-pill" href="/stats/#view=account" aria-label="Open profile for ${escapeHtml(name)}">
-            <span class="account-avatar-frame">${avatar ? `<img class="avatar-image" src="${escapeHtml(avatar)}" alt="" decoding="async" referrerpolicy="no-referrer">` : `<span class="avatar-image-fallback">${escapeHtml(initials(name))}</span>`}</span>
+        <button class="account-pill" type="button" data-shell-account-open aria-label="Open profile panel for ${escapeHtml(name)}" aria-expanded="${shell.accountPanelOpen ? "true" : "false"}">
+            ${renderShellAvatar(profile, avatar, name)}
             <span>${escapeHtml(name)}</span>
-        </a>`;
+        </button>`;
+    container.querySelector("[data-shell-account-open]")?.addEventListener("click", () => openAccountPanel(shell));
+    updateAdminStoreLinks(profile);
+}
+
+function openAccountPanel(shell) {
+    if (!shell.session?.user) return;
+    document.dispatchEvent(new CustomEvent("cob:account-panel-open"));
+    shell.accountPanelOpen = true;
+    renderAccountWidget(shell);
+    renderAccountPanel(shell);
+    window.requestAnimationFrame(() => document.querySelector("[data-shell-account-close]")?.focus());
+}
+
+function closeAccountPanel(shell, restoreFocus = true) {
+    if (!shell.accountPanelOpen) return;
+    shell.accountPanelOpen = false;
+    renderAccountWidget(shell);
+    renderAccountPanel(shell);
+    if (restoreFocus) {
+        window.requestAnimationFrame(() => document.querySelector("[data-shell-account-open]")?.focus());
+    }
+}
+
+function renderAccountPanel(shell) {
+    let host = document.getElementById("account-side-panel-host");
+    if (!host) {
+        host = document.createElement("div");
+        host.id = "account-side-panel-host";
+        document.body.appendChild(host);
+    }
+    if (!shell.accountPanelOpen || !shell.session?.user) {
+        document.body.classList.remove("account-drawer-open");
+        if (host.dataset.shellPanel === "profile") host.innerHTML = "";
+        delete host.dataset.shellPanel;
+        return;
+    }
+
+    const metadata = shell.session.user.user_metadata || {};
+    const profile = shell.profile || {};
+    const name = String(
+        profile.display_name ||
+            profile.username ||
+            metadata.full_name ||
+            metadata.name ||
+            metadata.user_name ||
+            "Account"
+    );
+    const avatar = safeImageUrl(
+        profile.resolved_avatar_url ||
+            profile.custom_avatar_url ||
+            profile.avatar_url ||
+            metadata.avatar_url ||
+            metadata.picture ||
+            ""
+    );
+    const admin = Boolean(profile.is_admin);
+    const title = String(profile.resolved_title_text || "").trim();
+    const rarity = cleanRarity(profile.resolved_title_rarity);
+    const level = accountLevel(profile.xp);
+    document.body.classList.add("account-drawer-open");
+    host.dataset.shellPanel = "profile";
+    host.innerHTML = `<div class="profile-drawer-backdrop" data-shell-account-backdrop>
+        <aside class="profile-drawer" role="dialog" aria-modal="true" aria-labelledby="shell-profile-drawer-title">
+            <header class="profile-drawer-header">
+                <h2 id="shell-profile-drawer-title">PROFILE</h2>
+                <button class="profile-drawer-close" type="button" data-shell-account-close aria-label="Close profile panel">&times;</button>
+            </header>
+            <div class="profile-drawer-identity">
+                ${renderShellAvatar(profile, avatar, name)}
+                <div>
+                    <strong>${escapeHtml(name)}</strong>
+                    ${title ? `<span class="profile-title-cosmetic rarity-${rarity} compact">${escapeHtml(title)}</span>` : ""}
+                    <div class="account-level-pill" title="${escapeHtml(`${number(profile.xp).toLocaleString()} total XP`)}"><strong>LVL ${level}</strong><span>${number(profile.xp).toLocaleString()} XP</span></div>
+                </div>
+            </div>
+            <div class="profile-drawer-actions ${admin ? "admin" : ""}">
+                <a class="profile-drawer-customize" href="/stats/#account">Customize profile</a>
+                <a class="profile-drawer-support" href="/feedback/">Feedback &amp; support</a>
+                ${
+                    admin
+                        ? `<a class="profile-drawer-tickets" href="/stats/#admin-tickets">Ticket dashboard</a>
+                           <a class="profile-drawer-progression" href="/stats/#admin-progression">Progression &amp; missions</a>
+                           <a class="profile-drawer-docs" href="/stats/#admin-help">Admin documentation</a>
+                           <a class="profile-drawer-store" href="/stats/#store">Open store admin</a>`
+                        : ""
+                }
+            </div>
+        </aside>
+    </div>`;
+    host.querySelector("[data-shell-account-close]")?.addEventListener("click", () => closeAccountPanel(shell));
+    host.querySelector("[data-shell-account-backdrop]")?.addEventListener("click", (event) => {
+        if (event.target === event.currentTarget) closeAccountPanel(shell);
+    });
+}
+
+function renderShellAvatar(profile, avatar, name) {
+    const border = safeCssUrl(profile.resolved_border_url);
+    const inset = Math.max(0, Math.min(25, number(profile.resolved_border_inset)));
+    const frameClass = border ? " avatar-frame-image" : "";
+    const frameStyle = border
+        ? ` style="--avatar-frame-image: url('${escapeHtml(border)}'); --avatar-frame-inset: ${inset}%"`
+        : "";
+    return `<span class="account-avatar-frame${frameClass}"${frameStyle}><span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials(name))}</span>${avatar ? `<img class="avatar-image" src="${escapeHtml(avatar)}" alt="" decoding="async" referrerpolicy="no-referrer">` : ""}</span>`;
+}
+
+function updateAdminStoreLinks(profile) {
+    const visible = Boolean(profile?.is_admin);
+    document.querySelectorAll("[data-admin-store-link]").forEach((link) => {
+        link.hidden = !visible;
+        link.classList.toggle("hidden", !visible);
+        link.setAttribute("aria-hidden", visible ? "false" : "true");
+    });
+}
+
+function accountLevel(value) {
+    return Math.min(1000, Math.floor(Math.max(0, number(value)) / 10000) + 1);
 }
 
 async function signIn(client) {
@@ -246,6 +372,15 @@ function safeImageUrl(value) {
     if (!url) return "";
     if (/^https:\/\//i.test(url) || /^\.\/?assets\//i.test(url) || /^\/assets\//i.test(url)) return url;
     return "";
+}
+
+function safeCssUrl(value) {
+    return safeImageUrl(value).replace(/['"\\<>]/g, "");
+}
+
+function cleanRarity(value) {
+    const rarity = String(value || "common").toLowerCase();
+    return ["common", "rare", "epic", "legendary", "mythic"].includes(rarity) ? rarity : "common";
 }
 
 function initials(value) {
