@@ -1012,7 +1012,7 @@ function playtestAuthRedirectUrl() {
 }
 
 function rememberAuthReturn() {
-    const route = window.location.hash.replace(/^#/, "");
+    const route = window.location.hash.replace(/^#/, "") || document.body?.dataset.publicRoute || "";
     const allowed = new Set(["playtests", "store", "feedback"]);
     if (!allowed.has(route) && !/^ticket=[0-9a-f-]{36}$/i.test(route)) return;
     try {
@@ -2132,8 +2132,7 @@ function applyRoute() {
     const previousSelectedId = state.selectedId;
     const hash = window.location.hash.replace(/^#/, "");
     if (!hash) {
-        state.view = "home";
-        state.matchPlayerId = "";
+        applyPublicPageRoute();
         return;
     }
     const params = new URLSearchParams(hash);
@@ -2284,6 +2283,39 @@ function applyRoute() {
     state.matchPlayerId = "";
     state.selectedId = playerId;
     state.playerTab = PLAYER_TABS[tab] ? tab : "overview";
+}
+
+function applyPublicPageRoute() {
+    const route = document.body?.dataset.publicRoute || "home";
+    const params = new URLSearchParams(window.location.search);
+    state.matchPlayerId = "";
+    state.matchId = "";
+    state.selectedId = null;
+    state.profilePreviewOpen = false;
+    state.pendingScrollTarget = "";
+    state.pendingDetailsTarget = "";
+
+    if (route === "stats") {
+        state.view = "leaderboard";
+        const board = params.get("view") || params.get("board") || "players";
+        if (MAIN_VIEWS[board]) state.mainView = board;
+        const mode = params.get("mode") || "battleRoyale";
+        state.mode = PUBLIC_MODE_LABELS[mode] ? mode : "battleRoyale";
+        if (isSpecialMode(state.mode)) state.mainView = "players";
+        const sort = params.get("sort") || defaultSortForMode(state.mode);
+        state.sort = normalizedLeaderboardSort(SORT_LABELS[sort] ? sort : defaultSortForMode(state.mode));
+        state.page = 1;
+        return;
+    }
+    if (route === "playtests") {
+        state.view = "playtests";
+        return;
+    }
+    if (route === "feedback") {
+        state.view = "feedback";
+        return;
+    }
+    state.view = "home";
 }
 
 function openProtectedAdminRoute(fallbackView, fallbackHash = "") {
@@ -3734,7 +3766,7 @@ function renderLeaderboardView() {
 
 function renderRoute() {
     const finishRender = performanceDiagnostics.startRender(`route:${state.view}`);
-    document.body.classList.toggle("home-route", state.view === "home");
+    document.body.classList.toggle("home-route", usesHomePresentation());
     document.body.classList.toggle("store-route", state.view === "store");
     document.body.classList.toggle(
         "progression-modal-open",
@@ -3788,9 +3820,13 @@ function renderRoute() {
 }
 
 function updateFloatingButtonPosition() {
-    const compact = state.view === "home" && window.scrollY > 90;
+    const compact = usesHomePresentation() && window.scrollY > 90;
     document.body.classList.toggle("home-scrolled", compact);
-    if (state.view !== "home") document.body.classList.remove("home-scrolled");
+    if (!usesHomePresentation()) document.body.classList.remove("home-scrolled");
+}
+
+function usesHomePresentation() {
+    return state.view === "home" && (document.body?.dataset.publicRoute || "home") === "home";
 }
 
 function renderTopNav() {
@@ -3798,7 +3834,12 @@ function renderTopNav() {
     if (floatingButton) {
         const onHome = state.view === "home";
         floatingButton.textContent = onHome ? "Tracker" : "Hub";
-        floatingButton.dataset.route = onHome ? "leaderboard" : "home";
+        if (floatingButton instanceof HTMLAnchorElement) {
+            floatingButton.href = onHome ? "/stats/" : "/";
+            delete floatingButton.dataset.route;
+        } else {
+            floatingButton.dataset.route = onHome ? "leaderboard" : "home";
+        }
         floatingButton.setAttribute("aria-label", onHome ? "Open stats tracker" : "Return to server hub");
         floatingButton.title = onHome ? "Open stats tracker" : "Return to server hub";
     }

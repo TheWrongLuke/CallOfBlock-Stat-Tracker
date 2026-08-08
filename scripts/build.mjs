@@ -6,6 +6,7 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDirectory, "..");
 const output = path.join(root, "dist");
 const config = JSON.parse(await readFile(path.join(root, "config", "site.config.json"), "utf8"));
+const pages = JSON.parse(await readFile(path.join(root, "config", "public-pages.json"), "utf8"));
 const publicSiteUrl = String(process.env.COB_PUBLIC_SITE_URL || config.publicSiteUrl).replace(/\/+$/, "/");
 
 if (path.dirname(output) !== root || path.basename(output) !== "dist") {
@@ -15,11 +16,9 @@ if (path.dirname(output) !== root || path.basename(output) !== "dist") {
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
-const files = ["index.html"];
 const publicFiles = ["robots.txt", "sitemap.xml", "site.webmanifest"];
 const directories = ["assets", "data", "src"];
 
-for (const file of files) await cp(path.join(root, file), path.join(output, file));
 for (const file of publicFiles) {
     await cp(path.join(root, "public", file), path.join(output, file));
 }
@@ -27,20 +26,19 @@ for (const directory of directories) {
     await cp(path.join(root, directory), path.join(output, directory), { recursive: true });
 }
 
-const indexPath = path.join(output, "index.html");
-let html = await readFile(indexPath, "utf8");
-html = html
-    .replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${publicSiteUrl}">`)
-    .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${publicSiteUrl}">`)
-    .replace(
-        /<meta property="og:image" content="[^"]*">/,
-        `<meta property="og:image" content="${new URL(config.socialImage, publicSiteUrl)}">`
-    )
-    .replace(
-        /<meta name="twitter:image" content="[^"]*">/,
-        `<meta name="twitter:image" content="${new URL(config.socialImage, publicSiteUrl)}">`
+const sourceHtml = await readFile(path.join(root, "index.html"), "utf8");
+const socialImageUrl = new URL(config.socialImage, publicSiteUrl).toString();
+
+for (const [id, page] of Object.entries(pages)) {
+    const canonicalUrl = new URL(String(page.path || "/").replace(/^\//, ""), publicSiteUrl).toString();
+    const targetDirectory = page.directory ? path.join(output, page.directory) : output;
+    await mkdir(targetDirectory, { recursive: true });
+    await writeFile(
+        path.join(targetDirectory, "index.html"),
+        renderPublicPage(sourceHtml, { id, page, canonicalUrl, socialImageUrl, publicSiteUrl }),
+        "utf8"
     );
-await writeFile(indexPath, html, "utf8");
+}
 
 const apiConfigPath = path.join(output, "src", "config", "api-config.js");
 let apiConfig = await readFile(apiConfigPath, "utf8");
@@ -55,10 +53,127 @@ await writeFile(
     `User-agent: *\nAllow: /\n\nSitemap: ${new URL("sitemap.xml", publicSiteUrl)}\n`,
     "utf8"
 );
-await writeFile(
-    path.join(output, "sitemap.xml"),
-    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${publicSiteUrl}</loc></url>\n</urlset>\n`,
-    "utf8"
-);
+await writeFile(path.join(output, "sitemap.xml"), buildSitemap(Object.values(pages), publicSiteUrl), "utf8");
 
 console.log(`Built static site at ${output}`);
+
+function renderPublicPage(html, { id, page, canonicalUrl, socialImageUrl, publicSiteUrl }) {
+    const structuredData = pageStructuredData(id, page, canonicalUrl, publicSiteUrl);
+    const pageShell =
+        id === "home"
+            ? html
+            : html.replace(
+                  /<h1 class="hero-site-title" data-site-heading>([\s\S]*?)<\/h1>/i,
+                  '<p class="hero-site-title" data-site-heading>$1</p>'
+              );
+    return pageShell
+        .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(page.title)}</title>`)
+        .replace(metaPattern("name", "description"), `$1${escapeHtml(page.description)}$2`)
+        .replace(metaPattern("property", "og:title"), `$1${escapeHtml(page.title)}$2`)
+        .replace(metaPattern("property", "og:description"), `$1${escapeHtml(page.description)}$2`)
+        .replace(metaPattern("property", "og:url"), `$1${escapeHtml(canonicalUrl)}$2`)
+        .replace(metaPattern("property", "og:image"), `$1${escapeHtml(socialImageUrl)}$2`)
+        .replace(metaPattern("name", "twitter:title"), `$1${escapeHtml(page.title)}$2`)
+        .replace(metaPattern("name", "twitter:description"), `$1${escapeHtml(page.description)}$2`)
+        .replace(metaPattern("name", "twitter:url"), `$1${escapeHtml(canonicalUrl)}$2`)
+        .replace(metaPattern("name", "twitter:image"), `$1${escapeHtml(socialImageUrl)}$2`)
+        .replace(/<link rel="canonical" href="[^"]*">/i, `<link rel="canonical" href="${escapeHtml(canonicalUrl)}">`)
+        .replace(
+            /<script id="page-structured-data" type="application\/ld\+json">[\s\S]*?<\/script>/i,
+            `<script id="page-structured-data" type="application/ld+json">\n${JSON.stringify(structuredData, null, 4)}\n    </script>`
+        )
+        .replace(
+            /<body class="[^"]*" data-public-route="[^"]*">/i,
+            `<body class="${id === "home" ? "home-route" : "public-route"}" data-public-route="${id}">`
+        )
+        .replace("<!-- PUBLIC_PAGE_INTRO -->", renderPublicIntro(id, page));
+}
+
+function metaPattern(attribute, value) {
+    return new RegExp(`(<meta\\s+${attribute}="${escapeRegExp(value)}"\\s+content=")[^"]*(">)`, "i");
+}
+
+function pageStructuredData(id, page, canonicalUrl, publicSiteUrl) {
+    if (id === "home") {
+        return {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            name: "Call of Block",
+            alternateName: ["Call of Block 2", "COB"],
+            url: publicSiteUrl
+        };
+    }
+    return {
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "WebPage",
+                name: page.title,
+                description: page.description,
+                url: canonicalUrl,
+                isPartOf: { "@type": "WebSite", name: "Call of Block", url: publicSiteUrl }
+            },
+            {
+                "@type": "BreadcrumbList",
+                itemListElement: [
+                    {
+                        "@type": "ListItem",
+                        position: 1,
+                        name: "Call of Block",
+                        item: publicSiteUrl
+                    },
+                    {
+                        "@type": "ListItem",
+                        position: 2,
+                        name: page.heading,
+                        item: canonicalUrl
+                    }
+                ]
+            }
+        ]
+    };
+}
+
+function renderPublicIntro(id, page) {
+    if (id === "home") return "";
+    const paragraphs = (page.intro || []).map((text) => `<p>${escapeHtml(text)}</p>`).join("\n                ");
+    return `
+        <section class="public-page-intro" aria-labelledby="public-page-title">
+            <nav class="public-breadcrumb" aria-label="Breadcrumb">
+                <a href="/">Home</a>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">${escapeHtml(page.heading)}</span>
+            </nav>
+            <p class="panel-kicker">${escapeHtml(page.kicker)}</p>
+            <h1 id="public-page-title">${escapeHtml(page.heading)}</h1>
+            <div class="public-page-summary">
+                ${paragraphs}
+            </div>
+        </section>`;
+}
+
+function buildSitemap(pageDefinitions, baseUrl) {
+    const urls = pageDefinitions
+        .map(
+            (page) =>
+                `    <url><loc>${escapeXml(new URL(String(page.path || "/").replace(/^\//, ""), baseUrl))}</loc></url>`
+        )
+        .join("\n");
+    return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function escapeXml(value) {
+    return escapeHtml(String(value));
+}
+
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

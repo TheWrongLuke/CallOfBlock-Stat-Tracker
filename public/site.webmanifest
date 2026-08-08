@@ -1,14 +1,14 @@
 {
-    "name": "Call of Block 2",
+    "name": "Call of Block",
     "short_name": "Call of Block",
-    "description": "Call of Block 2 community hub and stat tracker.",
-    "start_url": "./",
+    "description": "Call of Block competitive Minecraft PvP community hub and stat tracker.",
+    "start_url": "/",
     "display": "standalone",
     "background_color": "#090d10",
     "theme_color": "#090d10",
     "icons": [
         {
-            "src": "./assets/branding/icon.png",
+            "src": "/assets/branding/icon.png",
             "sizes": "512x512",
             "type": "image/png"
         }

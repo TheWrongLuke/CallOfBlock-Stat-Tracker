@@ -51,11 +51,17 @@ const server = createServer(async (request, response) => {
         }
         let filePath = requestedFilePath;
         if (!(await isFile(filePath))) {
-            const publicFilePath = path.resolve(publicRoot, `.${requestedPath}`);
-            if (publicFilePath !== publicRoot && !publicFilePath.startsWith(`${publicRoot}${path.sep}`)) {
-                throw new Error("Invalid public path");
+            const directoryIndex = path.join(filePath, "index.html");
+            if (await isFile(directoryIndex)) {
+                filePath = directoryIndex;
+            } else {
+                const publicFilePath = path.resolve(publicRoot, `.${requestedPath}`);
+                if (publicFilePath !== publicRoot && !publicFilePath.startsWith(`${publicRoot}${path.sep}`)) {
+                    throw new Error("Invalid public path");
+                }
+                const publicDirectoryIndex = path.join(publicFilePath, "index.html");
+                filePath = (await isFile(publicFilePath)) ? publicFilePath : publicDirectoryIndex;
             }
-            filePath = publicFilePath;
         }
         const fileStat = await stat(filePath);
         if (!fileStat.isFile()) throw new Error("Not a file");

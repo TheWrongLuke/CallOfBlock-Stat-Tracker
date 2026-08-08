@@ -68,6 +68,7 @@
 }
 
 .feedback-hero button,
+.feedback-hero > a,
 .ticket-detail-header a,
 .ticket-detail-actions button,
 .feedback-access button,
@@ -88,6 +89,7 @@
 }
 
 .feedback-hero button,
+.feedback-hero > a,
 .ticket-detail-header a,
 .ticket-detail-actions button,
 .feedback-access button,
@@ -101,6 +103,7 @@
 }
 
 .feedback-hero button:hover,
+.feedback-hero > a:hover,
 .ticket-detail-header a:hover,
 .ticket-detail-actions button:hover,
 .feedback-access button:hover,
@@ -3831,6 +3834,7 @@ html, body {
         radial-gradient(circle at top left, rgba(255, 127, 114, 0.14), transparent 32%),
         radial-gradient(circle at top right, rgba(126, 200, 255, 0.14), transparent 36%),
         linear-gradient(180deg, #09101a 0%, #0e1522 55%, #0c1119 100%);
+    background-color: #0c1119;
     color: var(--text);
     font-family: "Space Grotesk", sans-serif;
 }
@@ -3859,6 +3863,7 @@ body.home-route {
         radial-gradient(circle at 74% 18%, rgba(140, 255, 106, 0.12), transparent 29%),
         radial-gradient(circle at 18% 7%, rgba(255, 107, 44, 0.16), transparent 27%),
         linear-gradient(180deg, #090d10 0%, #111a1e 48%, #090d10 100%);
+    background-color: #090d10;
 }
 
 body.home-route::before {
@@ -3948,7 +3953,7 @@ body.home-route::before {
     color: #8cff6a;
 }
 
-.home-route .hero h1 {
+.home-route .hero-site-title {
     max-width: 8ch;
     font-size: clamp(4.7rem, 11vw, 10.5rem);
     letter-spacing: 0;
@@ -3966,6 +3971,7 @@ body.home-route::before {
     line-height: inherit;
     letter-spacing: inherit;
     text-align: left;
+    text-decoration: none;
     cursor: pointer;
     text-shadow: inherit;
 }
@@ -4032,14 +4038,14 @@ a[aria-disabled="true"] {
     font-size: 0.74rem;
 }
 
-.hero h1,
+.hero-site-title,
 .panel h2,
 .tab-pill,
 .summary-card strong {
     font-family: "Chakra Petch", sans-serif;
 }
 
-.hero h1 {
+.hero-site-title {
     margin: 10px 0 12px;
     font-size: clamp(2.6rem, 5vw, 4.4rem);
     line-height: 0.92;
@@ -4118,7 +4124,60 @@ a[aria-disabled="true"] {
     cursor: pointer;
     font: inherit;
     font-family: "Chakra Petch", sans-serif;
+    text-decoration: none;
     transition: background 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.public-page-intro {
+    width: min(1440px, calc(100% - 48px));
+    margin: 28px auto 6px;
+    border-bottom: 1px solid var(--line);
+    padding: 24px 0 30px;
+}
+
+.public-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 18px;
+    color: var(--muted);
+    font: 600 0.82rem "Chakra Petch", sans-serif;
+}
+
+.public-breadcrumb a {
+    color: var(--gold);
+}
+
+.public-page-intro h1 {
+    max-width: 20ch;
+    margin: 8px 0 14px;
+    font-family: "Chakra Petch", sans-serif;
+    font-size: 4rem;
+    line-height: 0.94;
+    letter-spacing: 0;
+}
+
+.public-page-summary {
+    max-width: 900px;
+    color: var(--muted);
+    font-size: 1.02rem;
+    line-height: 1.65;
+}
+
+.public-page-summary p {
+    margin: 0;
+}
+
+.public-page-summary p + p {
+    margin-top: 8px;
+}
+
+body[data-public-route="about"] #home-view {
+    display: none !important;
+}
+
+body[data-public-route="help"] #home-view > :not(.guide-grid, .command-help) {
+    display: none;
 }
 
 .account-widget {
@@ -11388,6 +11447,43 @@ code {
 }
 
 @media (max-width: 700px) {
+    body.public-route .hero {
+        padding-top: 94px;
+    }
+
+    body.public-route .hero-text,
+    body.public-route .hero-status {
+        display: none;
+    }
+
+    body.public-route .hero-site-title {
+        font-size: 2.7rem;
+    }
+
+    body.public-route .hero-links {
+        gap: 8px;
+        margin-top: 18px;
+    }
+
+    body.public-route .hero-links a {
+        min-height: 40px;
+        padding: 8px 12px;
+    }
+
+    .public-page-intro {
+        width: calc(100% - 24px);
+        margin-top: 18px;
+        padding: 18px 0 24px;
+    }
+
+    .public-page-intro h1 {
+        font-size: 2.45rem;
+    }
+
+    .public-page-summary {
+        font-size: 0.94rem;
+    }
+
     .leaderboard-panel > .panel-header {
         display: grid;
         width: 100%;
@@ -11869,7 +11965,7 @@ code {
         min-height: 92svh;
     }
 
-    .home-route .hero h1 {
+    .home-route .hero-site-title {
         font-size: clamp(4rem, 19vw, 6.3rem);
     }
 

@@ -487,6 +487,138 @@ test("existing public hash routes still open", async ({ page }) => {
     await expect(page.locator("#leaderboard-view")).toBeVisible();
 });
 
+test("canonical public pages load directly with unique indexable metadata", async ({ page }) => {
+    const pageErrors = [];
+    const consoleErrors = [];
+    const failedAssets = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    page.on("console", (message) => {
+        if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    page.on("response", (response) => {
+        const url = new URL(response.url());
+        if (url.hostname === "127.0.0.1" && response.status() >= 400) {
+            failedAssets.push(`${response.status()} ${url.pathname}`);
+        }
+    });
+    await installPageStubs(page, supabaseStub);
+    await page.unroute("https://mc-heads.net/**");
+    await page.route("https://mc-heads.net/**", (route) =>
+        route.fulfill({ contentType: "image/png", body: transparentPng })
+    );
+    const pages = [
+        {
+            path: "/",
+            route: "home",
+            title: "Call of Block | Competitive Minecraft PvP & Battle Royale",
+            canonical: "https://callofblock.com/",
+            heading: "Call of Block",
+            view: "#home-view"
+        },
+        {
+            path: "/stats/",
+            route: "stats",
+            title: "Call of Block Stats Tracker | Minecraft PvP Leaderboards",
+            canonical: "https://callofblock.com/stats/",
+            heading: "Call of Block Stats Tracker",
+            view: "#leaderboard-view"
+        },
+        {
+            path: "/playtests/",
+            route: "playtests",
+            title: "Call of Block Playtests | Join Minecraft PvP Testing",
+            canonical: "https://callofblock.com/playtests/",
+            heading: "Call of Block Playtests",
+            view: "#playtests-view"
+        },
+        {
+            path: "/feedback/",
+            route: "feedback",
+            title: "Call of Block Feedback & Support",
+            canonical: "https://callofblock.com/feedback/",
+            heading: "Call of Block Feedback & Support",
+            view: "#feedback-view"
+        },
+        {
+            path: "/help/",
+            route: "help",
+            title: "Call of Block Help | Server, Accounts and Stats",
+            canonical: "https://callofblock.com/help/",
+            heading: "Call of Block Help",
+            view: "#help"
+        },
+        {
+            path: "/about/",
+            route: "about",
+            title: "About Call of Block | Competitive Minecraft PvP Project",
+            canonical: "https://callofblock.com/about/",
+            heading: "About Call of Block",
+            view: "#about-the-creator"
+        }
+    ];
+
+    const descriptions = new Set();
+    for (const entry of pages) {
+        const response = await page.goto(entry.path);
+        expect(response?.ok()).toBe(true);
+        await page.waitForLoadState("domcontentloaded");
+        await expect(page).toHaveTitle(entry.title);
+        await expect(page.locator("link[rel='canonical']")).toHaveAttribute("href", entry.canonical);
+        await expect(page.locator("meta[property='og:url']")).toHaveAttribute("content", entry.canonical);
+        await expect(page.locator("body")).toHaveAttribute("data-public-route", entry.route);
+        await expect(page.locator(entry.view)).toBeVisible();
+        if (entry.route === "home") {
+            await expect(page.getByRole("heading", { level: 1, name: entry.heading })).toBeVisible();
+        } else {
+            await expect(page.locator("#public-page-title")).toHaveText(entry.heading);
+        }
+        const structuredData = JSON.parse(await page.locator("#page-structured-data").textContent());
+        if (entry.route === "home") {
+            expect(structuredData).toMatchObject({ "@type": "WebSite", name: "Call of Block" });
+        } else {
+            expect(structuredData["@graph"].some((item) => item["@type"] === "BreadcrumbList")).toBe(true);
+        }
+        const description = await page.locator("meta[name='description']").getAttribute("content");
+        expect(description).toBeTruthy();
+        descriptions.add(description);
+        const horizontalOverflow = await page.evaluate(
+            () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+        );
+        expect(horizontalOverflow).toBeLessThanOrEqual(1);
+    }
+    expect(descriptions.size).toBe(pages.length);
+
+    const primaryLinks = await page
+        .locator("nav[aria-label='Primary navigation'] a")
+        .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+    expect(primaryLinks).toEqual(["/", "/stats/", "/playtests/", "/feedback/", "/help/", "/about/"]);
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
+    expect(failedAssets).toEqual([]);
+});
+
+test("robots and sitemap expose only canonical public pages", async ({ request }) => {
+    const robots = await request.get("/robots.txt");
+    expect(robots.ok()).toBe(true);
+    await expect(robots.text()).resolves.toContain("Sitemap: https://callofblock.com/sitemap.xml");
+
+    const sitemap = await request.get("/sitemap.xml");
+    expect(sitemap.ok()).toBe(true);
+    const xml = await sitemap.text();
+    for (const path of ["", "stats/", "playtests/", "feedback/", "help/", "about/"]) {
+        expect(xml).toContain(`<loc>https://callofblock.com/${path}</loc>`);
+    }
+    expect(xml).not.toMatch(/admin|login|supabase|replay/i);
+});
+
+test("stats page accepts crawlable query filters", async ({ page }) => {
+    await openApp(page);
+    await page.goto("/stats/?mode=deathmatch&view=weapons&sort=kills");
+    await expect(page.locator("#leaderboard-view")).toBeVisible();
+    await expect(page.locator("#main-view-tabs button.active")).toContainText("Weapons");
+    await expect(page.locator("#mode-tabs button.active")).toContainText("Deathmatch");
+});
+
 test("Duel and Zombie Survival have separate public leaderboard routes", async ({ page }) => {
     await openApp(page, "#view=leaderboards&mode=zombieSurvival&board=players&sort=survivalDurationMs");
 
@@ -520,14 +652,14 @@ test("creator trust section and footer trust links are visible to public visitor
 test("website safety footer link opens the targeted FAQ entry", async ({ page }) => {
     await openApp(page);
 
-    await page.locator('.site-footer a[href="#view=faq&entry=faq-safety"]').click();
+    await page.locator('.site-footer a[href="/help/#view=faq&entry=faq-safety"]').click();
     await expect.poll(() => page.evaluate(() => window.location.hash)).toBe("#view=faq&entry=faq-safety");
     await expect(page.locator("#faq-safety")).toHaveJSProperty("open", true);
     await expect(page.locator("#faq-safety")).toContainText("Discord OAuth");
     await expect(page.locator("#faq-safety summary")).toBeFocused();
 
     await page.evaluate(() => {
-        document.querySelector('.site-footer a[href="#view=faq&entry=faq-safety"]')?.click();
+        document.querySelector('.site-footer a[href="/help/#view=faq&entry=faq-safety"]')?.click();
     });
     await expect(page.locator("#faq-safety")).toHaveJSProperty("open", true);
     await expect(page.locator("#faq-safety summary")).toBeFocused();

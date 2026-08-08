@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://thewrongluke.github.io/CallOfBlock-Stat-Tracker/sitemap.xml
+Sitemap: https://callofblock.com/sitemap.xml

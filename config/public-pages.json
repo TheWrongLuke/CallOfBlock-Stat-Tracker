@@ -1,0 +1,68 @@
+{
+    "home": {
+        "directory": "",
+        "path": "/",
+        "title": "Call of Block | Competitive Minecraft PvP & Battle Royale",
+        "description": "Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Deathmatch, Zombie Survival, guns, vehicles, destruction, parkour, leaderboards, player profiles and tactical match replays."
+    },
+    "stats": {
+        "directory": "stats",
+        "path": "/stats/",
+        "title": "Call of Block Stats Tracker | Minecraft PvP Leaderboards",
+        "description": "Explore Call of Block Minecraft PvP leaderboards, player profiles, weapon and map statistics, match history, personal records and tactical match replays.",
+        "kicker": "Competitive Records",
+        "heading": "Call of Block Stats Tracker",
+        "intro": [
+            "Compare Battle Royale, Deathmatch, Duel and Zombie Survival results from tracked Call of Block matches.",
+            "Open a player profile for mode records, weapons, maps and match history. Detailed tactical telemetry loads only when a replay is opened."
+        ]
+    },
+    "playtests": {
+        "directory": "playtests",
+        "path": "/playtests/",
+        "title": "Call of Block Playtests | Join Minecraft PvP Testing",
+        "description": "Join Call of Block community playtests, vote for available dates and help test experimental Minecraft Battle Royale, Deathmatch, Duel and Zombie Survival features.",
+        "kicker": "Community Testing",
+        "heading": "Call of Block Playtests",
+        "intro": [
+            "Vote for dates and availability for upcoming Call of Block Minecraft PvP testing sessions.",
+            "Confirmed events appear with their local date and time. Discord sign-in is required only for account-linked voting and notifications."
+        ]
+    },
+    "feedback": {
+        "directory": "feedback",
+        "path": "/feedback/",
+        "title": "Call of Block Feedback & Support",
+        "description": "Report Call of Block bugs, suspected cheating, balance concerns, website problems or account issues, and follow replies through the private support ticket system.",
+        "kicker": "Community Support",
+        "heading": "Call of Block Feedback & Support",
+        "intro": [
+            "Send bug reports, cheat reports, balance feedback, suggestions and account or website support requests to the Call of Block team.",
+            "Signed-in players can attach evidence, save a draft locally and review only their own support tickets."
+        ]
+    },
+    "help": {
+        "directory": "help",
+        "path": "/help/",
+        "title": "Call of Block Help | Server, Accounts and Stats",
+        "description": "Find Call of Block help for joining the Minecraft server, linking Discord and Minecraft accounts, understanding statistics, using player commands and resolving common issues.",
+        "kicker": "Player Reference",
+        "heading": "Call of Block Help",
+        "intro": [
+            "Find current player instructions for joining Call of Block, linking accounts, reading tracked statistics and using public in-game commands.",
+            "The How to Play and FAQ sections also cover server access, playtests, profiles, privacy and website safety."
+        ]
+    },
+    "about": {
+        "directory": "about",
+        "path": "/about/",
+        "title": "About Call of Block | Competitive Minecraft PvP Project",
+        "description": "Learn about Call of Block, an independently developed competitive Minecraft PvP project combining guns, vehicles, destruction, parkour, statistics and tactical replays.",
+        "kicker": "Independent Project",
+        "heading": "About Call of Block",
+        "intro": [
+            "Call of Block is an independent Minecraft 1.20.1 Forge project built around competitive PvP, community playtests and transparent player statistics.",
+            "Its available and experimental modes combine TacZ weapons, Superb Warfare vehicles, Parcool movement, destructible maps and server-authoritative match tracking."
+        ]
+    }
+}

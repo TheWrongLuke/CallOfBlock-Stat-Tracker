@@ -3,26 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Call of Block | Official Minecraft Battle Royale & Stats</title>
-    <meta name="description"content="The official Call of Block website. View Minecraft Battle Royale and Deathmatch statistics, player profiles, leaderboards, match history, playtests, and server information.">
-    <meta name="robots"content="index, follow, max-image-preview:large">
+    <base href="/">
+    <title>Call of Block | Competitive Minecraft PvP &amp; Battle Royale</title>
+    <meta name="description" content="Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Deathmatch, Zombie Survival, guns, vehicles, destruction, parkour, leaderboards, player profiles and tactical match replays.">
+    <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="application-name" content="Call of Block">
     <meta name="theme-color" content="#090d10">
     <link rel="canonical" href="https://callofblock.com/">
     <meta property="og:type" content="website">
     <meta property="og:locale" content="en_US">
     <meta property="og:site_name" content="Call of Block">
-    <meta property="og:title"content="Call of Block | Official Minecraft Battle Royale & Stats">
-    <meta property="og:description"content="The official Call of Block website with Minecraft Battle Royale and Deathmatch statistics, leaderboards, player profiles, match history, and community playtests.">
+    <meta property="og:title" content="Call of Block | Competitive Minecraft PvP &amp; Battle Royale">
+    <meta property="og:description" content="Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Deathmatch, Zombie Survival, guns, vehicles, destruction, parkour, leaderboards, player profiles and tactical match replays.">
     <meta property="og:url" content="https://callofblock.com/">
-    <meta property="og:image"content="https://callofblock.com/assets/home-hero-bg.png">
-    <meta property="og:image:alt"content="Call of Block Minecraft Battle Royale">
+    <meta property="og:image" content="https://callofblock.com/assets/home-hero-bg.png">
+    <meta property="og:image:alt" content="Call of Block Minecraft Battle Royale">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title"content="Call of Block | Official Minecraft Battle Royale & Stats">
-    <meta name="twitter:description"content="View Call of Block leaderboards, player statistics, match history, playtests, and server information.">
-    <meta name="twitter:image"content="https://callofblock.com/assets/home-hero-bg.png">
-    <meta name="twitter:image:alt"content="Call of Block Minecraft Battle Royale">
-    <script type="application/ld+json">
+    <meta name="twitter:title" content="Call of Block | Competitive Minecraft PvP &amp; Battle Royale">
+    <meta name="twitter:description" content="Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Deathmatch, Zombie Survival, guns, vehicles, destruction, parkour, leaderboards, player profiles and tactical match replays.">
+    <meta name="twitter:url" content="https://callofblock.com/">
+    <meta name="twitter:image" content="https://callofblock.com/assets/home-hero-bg.png">
+    <meta name="twitter:image:alt" content="Call of Block Minecraft Battle Royale">
+    <script id="page-structured-data" type="application/ld+json">
     {
         "@context": "https://schema.org",
         "@type": "WebSite",
@@ -39,23 +41,23 @@
     <link rel="manifest" href="/site.webmanifest">
     <link rel="stylesheet" href="/assets/css/styles.css?v=tactical-replay-1">
 </head>
-<body class="home-route">
+<body class="home-route" data-public-route="home">
 <div class="app-shell">
     <header class="hero">
         <div class="hero-copy">
             <p class="eyebrow">Call of Block 3.2</p>
-            <h1><button type="button" class="hero-title-link" data-route="home">Call of Block</button></h1>
+            <h1 class="hero-site-title" data-site-heading><a class="hero-title-link" href="/">Call of Block</a></h1>
             <p class="hero-text">
                 Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, team Deathmatch, TacZ guns, Superb Warfare vehicles, destructible maps, Parcool movement, player leaderboards, and tactical match replays.
             </p>
-            <div class="hero-links" aria-label="Server links">
-                <a class="join-link" href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord invite</a>
-                <a class="join-link" href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">YouTube</a>
-                <a class="join-link" href="#playtests">Playtests</a>
-                <a class="join-link" href="#feedback">Feedback &amp; Support</a>
-                <a class="join-link" href="#help">Help</a>
-                <span class="server-pill">Server access in Discord</span>
-            </div>
+            <nav class="hero-links" aria-label="Primary navigation">
+                <a class="join-link" href="/">Home</a>
+                <a class="join-link" href="/stats/">Stats Tracker</a>
+                <a class="join-link" href="/playtests/">Playtests</a>
+                <a class="join-link" href="/feedback/">Feedback</a>
+                <a class="join-link" href="/help/">Help</a>
+                <a class="join-link" href="/about/">About</a>
+            </nav>
         </div>
         <div class="hero-champions">
             <div class="section-heading">
@@ -112,9 +114,11 @@
             </button>
             <span class="sr-only" data-stats-refresh-status>Loading statistics...</span>
         </div>
-        <button type="button" class="tracker-float" data-route="leaderboard">Tracker</button>
+        <a class="tracker-float" href="/stats/">Tracker</a>
         <div class="account-widget" id="account-widget" aria-live="polite"></div>
     </div>
+
+    <!-- PUBLIC_PAGE_INTRO -->
 
     <main class="home-view" id="home-view">
         <section class="landing-intro">
@@ -140,37 +144,37 @@
                 <span>01</span>
                 <h3>Battle Royale</h3>
                 <p>Queue up, fly over Shmar, drop where you want, loot weapons and upgrades, use explosives or vehicles when you find them, and stay ahead of the moving zone.</p>
-                <a href="#view=leaderboards&mode=battleRoyale&board=players&sort=wins">BR stats</a>
+                <a href="/stats/?mode=battleRoyale&amp;view=players&amp;sort=wins">BR stats</a>
             </article>
             <article class="info-panel">
                 <span>02</span>
                 <h3>Deathmatch</h3>
                 <p>Vote maps, pick kits, chase team score, and build a profile with map stats, kit stats, top match kills, accuracy, and favorite weapons.</p>
-                <a href="#view=leaderboards&mode=deathmatch&board=players&sort=wins">DM stats</a>
+                <a href="/stats/?mode=deathmatch&amp;view=players&amp;sort=wins">DM stats</a>
             </article>
             <article class="info-panel">
                 <span>03</span>
                 <h3>Duel</h3>
                 <p>Choose kits between rounds, fight without mid-round respawns, and push your team to the required round-win score.</p>
-                <a href="#view=leaderboards&mode=duel&board=players&sort=wins">Duel stats</a>
+                <a href="/stats/?mode=duel&amp;view=players&amp;sort=wins">Duel stats</a>
             </article>
             <article class="info-panel">
                 <span>04</span>
                 <h3>Zombie Survival</h3>
                 <p>Enter together, scavenge sparse supplies, survive escalating local hordes, and compete for the longest verified survival time.</p>
-                <a href="#view=leaderboards&mode=zombieSurvival&board=players&sort=survivalDurationMs">Survival stats</a>
+                <a href="/stats/?mode=zombieSurvival&amp;view=players&amp;sort=survivalDurationMs">Survival stats</a>
             </article>
             <article class="info-panel">
                 <span>05</span>
                 <h3>Tracker</h3>
                 <p>Check rankings, player profiles, match history, weapons, maps, headshots, playtime, win rates, and the last completed games from the live server stats.</p>
-                <a href="#view=leaderboards&mode=battleRoyale&board=players&sort=wins">Leaderboards</a>
+                <a href="/stats/?mode=battleRoyale&amp;view=players&amp;sort=wins">Leaderboards</a>
             </article>
             <article class="info-panel">
                 <span>06</span>
                 <h3>Playtests</h3>
                 <p>Pick the best community match time with transparent availability, preferred dates, mode interest, and a ranked winner.</p>
-                <a href="#playtests">Open scheduler</a>
+                <a href="/playtests/">Open scheduler</a>
             </article>
         </section>
 
@@ -212,7 +216,7 @@
                 </p>
             </div>
             <div class="playtest-promo-actions">
-                <a href="#playtests">Open playtest scheduler</a>
+                <a href="/playtests/">Open playtest scheduler</a>
                 <span>Calendar voting</span>
                 <span>Best-date score</span>
                 <span>Mode interest</span>
@@ -491,7 +495,7 @@
             </div>
             <div class="playtests-hero-actions">
                 <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord</a>
-                <button type="button" data-route="leaderboard">Stats</button>
+                <a href="/stats/">Stats</a>
             </div>
         </section>
         <section class="playtests-layout">
@@ -512,7 +516,7 @@
                 <h2>Report an issue or help shape the game.</h2>
                 <p>Report bugs or suspected cheating, send balancing feedback, suggest gameplay changes, flag website or account problems, and request support from the Call of Block team.</p>
             </div>
-            <button type="button" data-route="home">Back to hub</button>
+            <a href="/">Back to hub</a>
         </section>
         <div class="feedback-body" id="feedback-body" aria-live="polite"></div>
     </main>
@@ -540,7 +544,7 @@
                 <h2>Community date overview.</h2>
             </div>
             <div class="playtests-hero-actions">
-                <a href="#playtests">Scheduler</a>
+                <a href="/playtests/">Scheduler</a>
                 <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord</a>
             </div>
         </section>
@@ -556,7 +560,7 @@
             <div class="admin-help-actions">
                 <button type="button" data-route="admin-tickets">Ticket dashboard</button>
                 <button type="button" data-route="admin-progression">Progression &amp; missions</button>
-                <a href="#help">Player help</a>
+                <a href="/help/">Player help</a>
             </div>
         </section>
         <div id="admin-documentation-body" aria-live="polite"></div>
@@ -611,7 +615,7 @@
                     <div class="creator-trust-links" aria-label="Creator links">
                         <a href="https://thewrongluke.github.io/Portfolio/" target="_blank" rel="noopener noreferrer" aria-label="Open Lukas portfolio in a new tab">Portfolio</a>
                         <a href="https://github.com/TheWrongLuke" target="_blank" rel="noopener noreferrer" aria-label="Open TheWrongLuke GitHub profile in a new tab">GitHub</a>
-                        <a href="#feedback">Feedback &amp; Support</a>
+                        <a href="/feedback/">Feedback &amp; Support</a>
                         <button type="button" data-contact-email>Contact</button>
                     </div>
                 </div>
@@ -639,17 +643,17 @@
                         </div>
                     </div>
                     <p>Modded Battle Royale, Deathmatch, Duel, and Zombie Survival for Minecraft 1.20.1 Forge.</p>
-                    <p class="footer-project-meta">Call of Block 2.3 Community Hub</p>
+                    <p class="footer-project-meta">Call of Block Community Hub</p>
                 </section>
                 <nav class="footer-column" aria-labelledby="footer-explore-title">
                     <p class="footer-heading" id="footer-explore-title">Explore</p>
                     <div class="footer-link-list">
-                        <button type="button" data-route="home">Home</button>
-                        <a href="#view=leaderboards&mode=battleRoyale&board=players&sort=wins">Stats / Leaderboards</a>
-                        <a href="#playtests">Playtests</a>
-                        <a href="#how-to-play">How to Play</a>
-                        <a href="#faq">FAQ</a>
-                        <a href="#help">Help</a>
+                        <a href="/">Home</a>
+                        <a href="/stats/">Stats / Leaderboards</a>
+                        <a href="/playtests/">Playtests</a>
+                        <a href="/help/#how-to-play">How to Play</a>
+                        <a href="/help/#faq">FAQ</a>
+                        <a href="/help/">Help</a>
                         <a class="hidden" href="#store" data-admin-store-link hidden>Store</a>
                     </div>
                 </nav>
@@ -658,7 +662,7 @@
                     <div class="footer-link-list">
                         <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord</a>
                         <a href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">YouTube</a>
-                        <a href="#feedback">Feedback &amp; Support</a>
+                        <a href="/feedback/">Feedback &amp; Support</a>
                         <a href="https://www.curseforge.com/minecraft/modpacks/call-of-block" target="_blank" rel="noopener noreferrer">CurseForge</a>
                         <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Modrinth</a>
                         <a href="https://ko-fi.com/J3J17SDR6" target="_blank" rel="noopener noreferrer">Ko-fi</a>
@@ -667,10 +671,10 @@
                 <nav class="footer-column" aria-labelledby="footer-trust-title">
                     <p class="footer-heading" id="footer-trust-title">About &amp; Trust</p>
                     <div class="footer-link-list">
-                        <a href="#view=home&section=about-the-creator">Who is behind Call of Block?</a>
+                        <a href="/about/">Who is behind Call of Block?</a>
                         <a href="https://thewrongluke.github.io/Portfolio/" target="_blank" rel="noopener noreferrer">Portfolio</a>
                         <a href="https://github.com/TheWrongLuke" target="_blank" rel="noopener noreferrer">GitHub</a>
-                        <a href="#view=faq&entry=faq-safety">Website Safety</a>
+                        <a href="/help/#view=faq&amp;entry=faq-safety">Website Safety</a>
                         <button type="button" data-contact-email>Contact</button>
                     </div>
                 </nav>
