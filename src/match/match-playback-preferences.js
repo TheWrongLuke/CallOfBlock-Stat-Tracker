@@ -3,7 +3,7 @@ const FILTER_KEYS = ["engagements", "eliminations", "vehicles", "zone", "streaks
 
 export const DEFAULT_MATCH_PLAYBACK_PREFERENCES = Object.freeze({
     speed: 1,
-    skipIdle: true,
+    skipIdle: false,
     filters: Object.freeze(Object.fromEntries(FILTER_KEYS.map((key) => [key, true]))),
     markers: Object.freeze({
         size: 2,
@@ -38,7 +38,7 @@ export function normalizeMatchPlaybackPreferences(value = {}) {
         : DEFAULT_MATCH_PLAYBACK_PREFERENCES.markers.size;
     return {
         speed,
-        skipIdle: value?.skipIdle !== false,
+        skipIdle: value?.skipIdle === true,
         filters: Object.fromEntries(FILTER_KEYS.map((key) => [key, value?.filters?.[key] !== false])),
         markers: {
             size: value?.markers?.size === undefined ? 2 : markerSize,

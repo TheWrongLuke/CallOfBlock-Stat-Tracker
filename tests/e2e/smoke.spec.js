@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
+
+const statsExportFixture = JSON.parse(
+    readFileSync(new URL("../../data/stats.sample.json", import.meta.url), "utf8").replace(/^\uFEFF/, "")
+);
+const liveStatsExportFixture = JSON.parse(
+    readFileSync(new URL("../../data/stats.json", import.meta.url), "utf8").replace(/^\uFEFF/, "")
+);
 
 const supabaseStub = `
 (() => {
@@ -38,6 +46,15 @@ window.COB_SUPABASE_ROW_ID = "live";
 window.COB_PUBLIC_SITE_URL = "http://127.0.0.1:4175/";
 window.COB_STATS_API_URL = "";
 `;
+
+const countingSupabaseStub = supabaseStub
+    .replace(
+        "function builder() {",
+        `function builder(table) {
+        window.__supabaseTableRequests = window.__supabaseTableRequests || {};
+        window.__supabaseTableRequests[table] = (window.__supabaseTableRequests[table] || 0) + 1;`
+    )
+    .replace("from: () => builder(),", "from: (table) => builder(table),");
 
 const transparentPng = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
@@ -314,9 +331,15 @@ async function installPageStubs(page, supabaseBody) {
     await page.route("https://cdn.jsdelivr.net/**", (route) =>
         route.fulfill({ contentType: "text/javascript", body: supabaseBody })
     );
-    await page.route("https://test.supabase.co/rest/v1/**", (route) =>
-        route.fulfill({ contentType: "application/json", body: "[]" })
-    );
+    await page.route("https://test.supabase.co/rest/v1/**", (route) => {
+        const requestedRow = new URL(route.request().url()).searchParams.get("id");
+        return route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify([
+                { payload: requestedRow === "eq.live" ? liveStatsExportFixture : statsExportFixture }
+            ])
+        });
+    });
     await page.route("https://mc-heads.net/**", (route) =>
         route.fulfill({ status: 502, contentType: "application/json", body: '{"error":"unavailable"}' })
     );
@@ -394,7 +417,7 @@ test("homepage and primary navigation load without fatal errors", async ({ page 
     expect(pageErrors).toEqual([]);
 });
 
-test("statistics refresh only on demand and preserves the active route on failure", async ({ page }) => {
+test("statistics refresh only on demand and preserves the active route", async ({ page }) => {
     let statsRequests = 0;
     page.on("request", (request) => {
         if (request.url().includes("/rest/v1/cob_stats_exports")) statsRequests += 1;
@@ -409,10 +432,46 @@ test("statistics refresh only on demand and preserves the active route on failur
 
     const routeBeforeRefresh = await page.evaluate(() => window.location.hash);
     await page.locator("[data-stats-refresh]").click();
-    await expect(page.locator("[data-stats-refresh-label]")).toHaveText("Retry");
+    await expect(page.locator("[data-stats-refresh-status]")).toContainText("last refreshed");
     expect(statsRequests).toBe(requestsAfterLoad + 1);
     await expect.poll(() => page.evaluate(() => window.location.hash)).toBe(routeBeforeRefresh);
     await expect(page.locator("#leaderboard-view")).toBeVisible();
+});
+
+test("initial authentication data uses one request per public resource", async ({ page }) => {
+    await installPageStubs(page, countingSupabaseStub);
+    await page.goto("/");
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.getByRole("heading", { level: 1, name: "Call of Block" })).toBeVisible();
+
+    await expect.poll(() => page.evaluate(() => window.__supabaseTableRequests?.playtests || 0)).toBe(1);
+    const counts = await page.evaluate(() => ({ ...window.__supabaseTableRequests }));
+    expect(counts.public_profiles).toBe(1);
+    expect(counts.public_profile_cosmetic_inventory).toBe(1);
+    expect(counts.public_cosmetic_catalog).toBe(1);
+    expect(counts.badge_catalog_overrides).toBe(1);
+});
+
+test("statistics payloads follow the active route instead of loading the full export", async ({ page }) => {
+    const requestedRows = [];
+    page.on("request", (request) => {
+        if (!request.url().includes("/rest/v1/cob_stats_exports")) return;
+        requestedRows.push(new URL(request.url()).searchParams.get("id"));
+    });
+
+    await openApp(page);
+    await expect.poll(() => requestedRows.includes("eq.home")).toBe(true);
+    expect(requestedRows).not.toContain("eq.live");
+
+    await page.locator(".tracker-float").click();
+    await expect.poll(() => requestedRows.includes("eq.mode:battleRoyale")).toBe(true);
+
+    await page.getByRole("button", { name: "Weapons stat view" }).click();
+    await expect.poll(() => requestedRows.includes("eq.weapons:battleRoyale")).toBe(true);
+
+    await page.getByRole("button", { name: "Players stat view" }).click();
+    await page.locator("#leaderboard-body .profile-link").first().click();
+    await expect.poll(() => requestedRows.some((row) => row?.startsWith("eq.profile:"))).toBe(true);
 });
 
 test("existing public hash routes still open", async ({ page }) => {
@@ -991,6 +1050,10 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
             )
         };
     });
+    const minimumVehicleSize = await matchView
+        .locator(".tactical-vehicle-marker")
+        .first()
+        .evaluate((marker) => marker.getBoundingClientRect().width);
     await matchView.locator("[data-match-marker-size]").evaluate((element) => {
         element.value = "4";
         element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -1001,13 +1064,20 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
             getComputedStyle(marker.closest(".tactical-map-stage")).getPropertyValue("--tactical-player-dot-size")
         )
     }));
+    const maximumVehicleSize = await matchView
+        .locator(".tactical-vehicle-marker")
+        .first()
+        .evaluate((marker) => marker.getBoundingClientRect().width);
     expect(minimumDotGeometry.centerOffsetX).toBeLessThanOrEqual(0.5);
     expect(minimumDotGeometry.centerOffsetY).toBeLessThanOrEqual(0.5);
     expect(minimumDotGeometry.dotSize).toBeGreaterThan(0);
     expect(maximumDotSize.dotSize).toBeGreaterThan(minimumDotGeometry.dotSize);
     expect(maximumDotSize.configuredSize / minimumDotGeometry.configuredSize).toBeCloseTo(10, 1);
+    expect(maximumVehicleSize).toBeGreaterThan(minimumVehicleSize);
     await matchView.locator("[data-match-player-icons]").check();
-    await expect(matchView.locator("[data-match-skip-idle]")).toBeChecked();
+    await expect(matchView.locator("[data-match-skip-idle]")).not.toBeChecked();
+    await expect(matchView.locator("[data-match-status]")).toContainText("Snapshot");
+    await matchView.locator("[data-match-skip-idle]").check();
     await expect(matchView.locator("[data-match-status]")).toContainText("Engagement");
     const timelineFollowsMap = await matchView.evaluate((element) => {
         const map = element.querySelector("[data-match-map]");
@@ -1037,10 +1107,12 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     await expect(matchView.locator(".tactical-marker-tooltip")).toContainText("HP");
 
     await matchView.locator('[data-match-event="elimination-1"]').first().click();
-    await expect(matchView.locator(".tactical-event-lines .kill-line")).toBeVisible();
-    await expect(matchView.locator(".tactical-event-lines text")).toHaveText(/^\d+(?:\.\d+)? blocks$/);
-    await expect(matchView.locator("[data-match-event-feed]")).toContainText("Headshot");
-    await expect(matchView.locator("[data-match-event-feed]")).not.toContainText(/height advantage|below target/);
+    await expect(matchView.locator("[data-match-play]")).toHaveText("Pause");
+    await expect
+        .poll(async () => Number(await matchView.locator("[data-match-timeline]").inputValue()))
+        .toBeGreaterThanOrEqual(8_000);
+    expect(Number(await matchView.locator("[data-match-timeline]").inputValue())).toBeLessThan(10_000);
+    await matchView.locator("[data-match-play]").click();
     await matchView.locator("[data-match-timeline]").evaluate((element) => {
         element.value = "26900";
         element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -1057,6 +1129,8 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
         element.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await expect(matchView.locator(".tactical-event-lines .kill-line")).toBeVisible();
+    await expect(matchView.locator("[data-match-event-feed]")).toContainText("Headshot");
+    await expect(matchView.locator("[data-match-event-feed]")).not.toContainText(/height advantage|below target/);
     await matchView.locator("[data-match-timeline]").evaluate((element) => {
         element.value = "29000";
         element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -1098,7 +1172,34 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     const continuousTime = Number(await matchView.locator("[data-match-timeline]").inputValue());
     expect(continuousTime).toBeGreaterThan(0);
     expect(continuousTime).toBeLessThan(1000);
+    await matchView.locator("[data-match-timeline]").evaluate((element) => {
+        element.value = "10000";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator("[data-match-play]")).toHaveText("Pause");
+    await expect
+        .poll(async () => Number(await matchView.locator("[data-match-timeline]").inputValue()))
+        .toBeGreaterThan(10_000);
+
+    const timeline = matchView.locator("[data-match-timeline]");
+    const timelineBox = await timeline.boundingBox();
+    await page.mouse.move(timelineBox.x + timelineBox.width * 0.25, timelineBox.y + timelineBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(timelineBox.x + timelineBox.width * 0.7, timelineBox.y + timelineBox.height / 2, {
+        steps: 5
+    });
+    await expect(matchView.locator("[data-match-play]")).toHaveText("Play");
+    await page.mouse.up();
+    await expect(matchView.locator("[data-match-play]")).toHaveText("Pause");
     await matchView.locator("[data-match-play]").click();
+
+    await page.mouse.move(timelineBox.x + timelineBox.width * 0.7, timelineBox.y + timelineBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(timelineBox.x + timelineBox.width * 0.4, timelineBox.y + timelineBox.height / 2, {
+        steps: 4
+    });
+    await page.mouse.up();
+    await expect(matchView.locator("[data-match-play]")).toHaveText("Play");
     await matchView.locator('[name="match-speed"][value="2"]').check();
     await expect(matchView.locator('[name="match-speed"][value="2"]')).toBeChecked();
 
@@ -1163,14 +1264,25 @@ test("tactical controls work from the keyboard and reduced motion stays usable",
     await openApp(page, "#view=match&match=fixture-br");
 
     const controls = page.locator("[data-match-viewer-controls]");
+    const timeline = page.locator("[data-match-timeline]");
+    await timeline.evaluate((element) => {
+        element.value = "10000";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await controls.focus();
-    const initialStatus = await page.locator("[data-match-status]").textContent();
     await page.keyboard.press("ArrowRight");
-    await expect(page.locator("[data-match-status]")).not.toHaveText(initialStatus);
+    await expect(timeline).toHaveValue("15000");
+    await page.keyboard.press("ArrowLeft");
+    await expect(timeline).toHaveValue("10000");
     await page.keyboard.press(" ");
     await expect(page.locator("[data-match-play]")).toHaveText("Pause");
     await page.keyboard.press(" ");
     await expect(page.locator("[data-match-play]")).toHaveText("Play");
+
+    await page.locator("[data-match-marker-size]").focus();
+    const timeBeforeFormKey = await timeline.inputValue();
+    await page.keyboard.press("ArrowRight");
+    await expect(timeline).toHaveValue(timeBeforeFormKey);
 
     const transitionDuration = await page
         .locator(".tactical-player-marker")

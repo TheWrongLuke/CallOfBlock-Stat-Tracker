@@ -2,6 +2,7 @@ const FRAME_INTERVAL_MS = 32;
 const MAX_FRAME_DELTA_MS = 250;
 const ISOLATED_EVENT_WINDOW_MS = 2000;
 const COMBAT_LINE_DURATION_MS = 1000;
+export const INTERESTING_EVENT_PRE_ROLL_MS = 20_000;
 
 const DEFAULT_FILTERS = Object.freeze({
     engagements: true,
@@ -16,7 +17,7 @@ export class MatchPlaybackController {
     constructor(telemetry, onChange = () => {}, options = {}) {
         this.telemetry = telemetry;
         this.onChange = onChange;
-        this.skipIdle = options.skipIdle !== false;
+        this.skipIdle = options.skipIdle === true;
         this.speed = [0.5, 1, 2].includes(Number(options.speed)) ? Number(options.speed) : 1;
         this.filters = {
             ...DEFAULT_FILTERS,
@@ -140,30 +141,43 @@ export class MatchPlaybackController {
         this.emit();
     }
 
-    seek(timeMs) {
-        this.stopTimer();
+    seek(timeMs, { preservePlayback = true } = {}) {
+        const wasPlaying = this.playing;
+        this.cancelTimer();
+        if (!preservePlayback) this.playing = false;
         const target = Math.max(0, Math.min(this.telemetry.durationMs, Number(timeMs) || 0));
         this.playheadMs = target;
         this.syncIndicesFromTime(target);
         this.currentEventId = "";
         this.emit();
+        if (wasPlaying && preservePlayback && this.playing) {
+            this.lastFrameAt = Date.now();
+            this.schedule();
+        }
+    }
+
+    seekBy(deltaMs) {
+        this.seek(this.playheadMs + Number(deltaMs || 0));
     }
 
     selectEvent(eventId) {
         const event = this.telemetry.events.find((candidate) => candidate.eventId === eventId);
         if (!event) return;
-        this.stopTimer();
+        this.cancelTimer();
+        this.playing = false;
         const engagement = event.engagementId
             ? this.telemetry.engagements.find((candidate) => candidate.engagementId === event.engagementId)
             : null;
         const isCombatEvent = event.type === "damage" || event.type === "elimination";
-        const target =
+        const eventStart =
             !isCombatEvent && this.skipIdle && this.filters.engagements && engagement?.qualifiesForSkipIdle
                 ? engagement.startMs
                 : event.timeMs;
-        this.seek(target);
+        const target = Math.max(0, eventStart - INTERESTING_EVENT_PRE_ROLL_MS);
+        this.seek(target, { preservePlayback: false });
         this.currentEventId = event.eventId;
         this.emit();
+        this.play();
     }
 
     setSkipIdle(enabled) {
@@ -409,7 +423,7 @@ export function buildMeaningfulMoments(telemetry, filters = DEFAULT_FILTERS) {
                 id: engagement.engagementId,
                 kind: "engagement",
                 label: engagement.eliminationEventId ? "Engagement and elimination" : "Engagement",
-                startMs: engagement.startMs,
+                startMs: Math.max(0, engagement.startMs - INTERESTING_EVENT_PRE_ROLL_MS),
                 endMs: engagement.endMs,
                 snapshotIndices: ensureSnapshotIndices(indices, telemetry.snapshots, engagement.startMs),
                 eventIds: engagementEvents.map((event) => event.eventId)
@@ -421,10 +435,11 @@ export function buildMeaningfulMoments(telemetry, filters = DEFAULT_FILTERS) {
     for (const event of telemetry.events) {
         if (!eventVisible(event, filters) || coveredEventIds.has(event.eventId)) continue;
         if (!isMeaningfulEvent(event.type)) continue;
-        const startMs =
+        const eventStart =
             event.type === "elimination" && filters.engagements && event.engagementStartMs !== null
                 ? event.engagementStartMs
-                : Math.max(0, event.timeMs - ISOLATED_EVENT_WINDOW_MS);
+                : event.timeMs;
+        const startMs = Math.max(0, eventStart - INTERESTING_EVENT_PRE_ROLL_MS);
         const endMs = Math.min(telemetry.durationMs, event.timeMs + ISOLATED_EVENT_WINDOW_MS);
         moments.push({
             id: event.eventId,

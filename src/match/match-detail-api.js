@@ -2,57 +2,76 @@ import { normalizeMatchTelemetry } from "./match-telemetry-normalizer.js";
 
 export function createMatchDetailApi({ supabaseClient = null, apiUrl = "", fetchImpl = globalThis.fetch } = {}) {
     const cache = new Map();
+    const inflight = new Map();
 
     return {
-        async load(matchId, { force = false } = {}) {
+        async load(matchId, { force = false, signal = null } = {}) {
             const id = cleanMatchId(matchId);
             if (!id) throw new Error("A valid match ID is required.");
             if (!force && cache.has(id)) return cache.get(id);
+            if (!force && inflight.has(id)) return inflight.get(id).promise;
+            if (force) inflight.get(id)?.controller.abort();
 
-            const attempts = [];
-            const supabaseResult = await loadFromSupabase(supabaseClient, id, attempts);
-            const apiResult = supabaseResult || (await loadFromApi(fetchImpl, apiUrl, id, attempts));
-            const fixtureResult = apiResult || (await loadFixture(fetchImpl, id, attempts));
-            if (!fixtureResult) {
-                const reason = attempts.find((attempt) => attempt.error)?.error;
-                throw new Error(reason || "Detailed telemetry is not available for this match.");
-            }
-            const normalized = normalizeMatchTelemetry(fixtureResult, id);
-            cache.set(id, normalized);
-            return normalized;
+            const controller = new AbortController();
+            const unlinkSignal = linkAbortSignal(signal, controller);
+            const promise = (async () => {
+                const attempts = [];
+                const supabaseResult = await loadFromSupabase(supabaseClient, id, attempts, controller.signal);
+                const apiResult =
+                    supabaseResult || (await loadFromApi(fetchImpl, apiUrl, id, attempts, controller.signal));
+                const fixtureResult = apiResult || (await loadFixture(fetchImpl, id, attempts, controller.signal));
+                if (!fixtureResult) {
+                    const reason = attempts.find((attempt) => attempt.error)?.error;
+                    throw new Error(reason || "Detailed telemetry is not available for this match.");
+                }
+                const normalized = normalizeMatchTelemetry(fixtureResult, id);
+                cache.set(id, normalized);
+                return normalized;
+            })().finally(() => {
+                unlinkSignal();
+                if (inflight.get(id)?.promise === promise) inflight.delete(id);
+            });
+            inflight.set(id, { controller, promise });
+            return promise;
         },
 
         clear(matchId = "") {
-            if (matchId) cache.delete(matchId);
-            else cache.clear();
+            if (matchId) {
+                cache.delete(matchId);
+                inflight.get(matchId)?.controller.abort();
+                inflight.delete(matchId);
+            } else {
+                cache.clear();
+                for (const request of inflight.values()) request.controller.abort();
+                inflight.clear();
+            }
         }
     };
 }
 
-async function loadFromSupabase(client, matchId, attempts) {
+async function loadFromSupabase(client, matchId, attempts, signal) {
     if (!client?.from) return null;
     try {
-        const { data, error } = await client
-            .from("cob_public_match_telemetry")
-            .select("payload")
-            .eq("match_id", matchId)
-            .maybeSingle();
+        let query = client.from("cob_public_match_telemetry").select("payload").eq("match_id", matchId);
+        if (signal && typeof query.abortSignal === "function") query = query.abortSignal(signal);
+        const { data, error } = await query.maybeSingle();
         if (error) {
             attempts.push({ source: "supabase", error: friendlyRemoteError(error) });
             return null;
         }
         return data?.payload || null;
     } catch (error) {
+        if (isAbortError(error, signal)) throw error;
         attempts.push({ source: "supabase", error: friendlyRemoteError(error) });
         return null;
     }
 }
 
-async function loadFromApi(fetchImpl, apiUrl, matchId, attempts) {
+async function loadFromApi(fetchImpl, apiUrl, matchId, attempts, signal) {
     if (!apiUrl || typeof fetchImpl !== "function") return null;
     try {
         const url = matchApiUrl(apiUrl, matchId);
-        const response = await fetchImpl(url, { cache: "no-store" });
+        const response = await fetchImpl(url, { cache: "no-store", signal });
         if (response.status === 404) return null;
         if (!response.ok) {
             attempts.push({ source: "api", error: `Telemetry API returned HTTP ${response.status}.` });
@@ -60,23 +79,38 @@ async function loadFromApi(fetchImpl, apiUrl, matchId, attempts) {
         }
         return await response.json();
     } catch (error) {
+        if (isAbortError(error, signal)) throw error;
         attempts.push({ source: "api", error: friendlyRemoteError(error) });
         return null;
     }
 }
 
-async function loadFixture(fetchImpl, matchId, attempts) {
+async function loadFixture(fetchImpl, matchId, attempts, signal) {
     if (typeof fetchImpl !== "function" || !/^[A-Za-z0-9._-]{1,160}$/.test(matchId)) return null;
     try {
         const response = await fetchImpl(`./data/match-telemetry/${encodeURIComponent(matchId)}.json`, {
-            cache: "no-store"
+            cache: "no-store",
+            signal
         });
         if (!response.ok) return null;
         return await response.json();
     } catch (error) {
+        if (isAbortError(error, signal)) throw error;
         attempts.push({ source: "fixture", error: friendlyRemoteError(error) });
         return null;
     }
+}
+
+function linkAbortSignal(signal, controller) {
+    if (!signal) return () => {};
+    const abort = () => controller.abort(signal.reason);
+    if (signal.aborted) abort();
+    else signal.addEventListener("abort", abort, { once: true });
+    return () => signal.removeEventListener("abort", abort);
+}
+
+function isAbortError(error, signal) {
+    return Boolean(signal?.aborted || error?.name === "AbortError");
 }
 
 function matchApiUrl(apiUrl, matchId) {

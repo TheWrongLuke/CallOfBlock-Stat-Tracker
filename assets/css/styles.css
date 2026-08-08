@@ -1786,13 +1786,13 @@ body.replay-fullscreen-open {
 
 .tactical-vehicle-marker {
     z-index: 11;
-    width: 28px;
-    height: 28px;
+    width: var(--tactical-vehicle-marker-size, 23px);
+    height: var(--tactical-vehicle-marker-size, 23px);
     border: 1px solid var(--gold);
     border-radius: 4px;
     background: rgba(15, 20, 16, 0.92);
     color: var(--gold);
-    font: 700 0.72rem "Chakra Petch", sans-serif;
+    font: 700 clamp(0.45rem, calc(var(--tactical-vehicle-marker-size, 23px) * 0.32), 0.85rem) "Chakra Petch", sans-serif;
     cursor: help;
 }
 

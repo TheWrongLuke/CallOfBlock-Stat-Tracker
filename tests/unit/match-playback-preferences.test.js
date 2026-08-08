@@ -40,10 +40,14 @@ describe("match playback preferences", () => {
 
         expect(loadMatchPlaybackPreferences(storage)).toMatchObject({
             speed: 0.5,
-            skipIdle: true,
+            skipIdle: false,
             filters: { zone: false, vehicles: true },
             markers: { size: 2, showIcons: true, showNames: true }
         });
+    });
+
+    it("preserves an explicit choice to auto-skip interesting events", () => {
+        expect(normalizeMatchPlaybackPreferences({ skipIdle: true }).skipIdle).toBe(true);
     });
 
     it("preserves an explicit choice to hide icons and names", () => {

@@ -36,6 +36,7 @@ import {
 } from "./config/feedback.js";
 import { validateReplyInput, validateTicketInput } from "./utils/feedback-validation.js";
 import { headshotRatePercent, meetsSharpshooterRequirement } from "./utils/cosmetic-progress.js";
+import { createPerformanceDiagnostics } from "./utils/performance-diagnostics.js";
 import {
     createFeedbackAttachmentView,
     createFeedbackTicketId,
@@ -62,6 +63,9 @@ import { renderGiftNotificationPopup, renderNotificationInbox } from "./views/no
 import { createMatchDetailApi } from "./match/match-detail-api.js";
 import { createMatchDetailPage } from "./match/match-detail.js";
 import { createReplayApi } from "./match/replay-downloads.js";
+
+const performanceDiagnostics = createPerformanceDiagnostics();
+globalThis.__cobPerformanceDiagnostics = performanceDiagnostics;
 
 const MODE_LABELS = {
     overall: "Overall",
@@ -497,6 +501,7 @@ const cosmeticPickerPreferences = loadCosmeticPickerPreferences();
 
 const state = {
     data: null,
+    dataSliceId: "",
     preview: false,
     dataMode: "Static file",
     apiUrl: "",
@@ -677,6 +682,8 @@ const state = {
         message: "Loading statistics...",
         lastUpdatedAt: null,
         request: null,
+        requestSliceId: "",
+        controller: null,
         counterTimer: 0
     },
     dataSignature: "",
@@ -722,6 +729,9 @@ let weeklyTemplateSearchTimer = 0;
 let playerManagerSearchTimer = 0;
 let weeklyTemplateLoadPromise = null;
 let matchDetailPage = null;
+let accountProfilesRequest = null;
+let remotePlaytestsRequest = null;
+let cosmeticCatalogRequest = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     setupLiveConfig();
@@ -733,8 +743,8 @@ document.addEventListener("DOMContentLoaded", () => {
     bindStaticEvents();
     startChampionRotation();
     state.statsRefresh.counterTimer = window.setInterval(renderStatsRefreshControl, 1000);
+    window.addEventListener("pagehide", () => state.statsRefresh.controller?.abort(), { once: true });
     void initAuth();
-    void loadRemotePlaytests({ silent: true });
     void loadData();
 });
 
@@ -793,6 +803,7 @@ function setupAuthClient() {
             detectSessionInUrl: true
         },
         global: {
+            fetch: performanceDiagnostics.fetch,
             headers: {
                 "x-client-info": "call-of-block-stats-site"
             }
@@ -808,7 +819,8 @@ function setupMatchDetailPage() {
     if (!container) return;
     const detailApi = createMatchDetailApi({
         supabaseClient: state.authClient,
-        apiUrl: state.apiUrl
+        apiUrl: state.apiUrl,
+        fetchImpl: performanceDiagnostics.fetch
     });
     const replayApi = createReplayApi({
         supabaseClient: state.authClient,
@@ -847,9 +859,12 @@ async function initAuth() {
         const { data, error } = await state.authClient.auth.getSession();
         if (error) throw error;
         await applyAuthSession(data?.session || null, true);
-        await loadAccountProfiles();
-        await loadRemotePlaytests({ silent: true });
-        state.authClient.auth.onAuthStateChange((_event, session) => {
+        state.authClient.auth.onAuthStateChange((event, session) => {
+            if (event === "INITIAL_SESSION") return;
+            if (event === "TOKEN_REFRESHED") {
+                state.authSession = session || null;
+                return;
+            }
             void applyAuthSession(session, true);
         });
     } catch (error) {
@@ -2312,10 +2327,7 @@ function setRouteHash(hash) {
 function enforceProtectedAdminRoute() {
     if (!state.authReady || isPlaytestAdmin()) return;
     const protectedView = state.view;
-    if (
-        !["store", "adminHelp", "adminTickets", "adminProgression", "communityAdmin"].includes(protectedView)
-    )
-        return;
+    if (!["store", "adminHelp", "adminTickets", "adminProgression", "communityAdmin"].includes(protectedView)) return;
 
     let hash = "";
     if (protectedView === "adminTickets") {
@@ -2493,28 +2505,118 @@ function routeToLeaderboardWithOptions(options) {
 }
 
 async function loadData() {
-    try {
-        await refreshData({ initial: true });
-        markStatsRefreshSuccess();
-    } catch (error) {
-        console.error("Failed to load statistics", error);
-        state.statsRefresh.status = "error";
-        state.statsRefresh.message = "Statistics could not be loaded. Retry.";
-        renderStatsRefreshControl();
-    }
+    if (state.statsRefresh.request) return state.statsRefresh.request;
+    const sliceId = desiredStatsSliceId();
+    const controller = new AbortController();
+    state.statsRefresh.controller = controller;
+    state.statsRefresh.requestSliceId = sliceId;
+    state.statsRefresh.loading = true;
+    const request = (async () => {
+        try {
+            await refreshData({ initial: true, signal: controller.signal, sliceId });
+            markStatsRefreshSuccess();
+        } catch (error) {
+            if (error?.name === "AbortError") return;
+            console.error("Failed to load statistics", error);
+            state.statsRefresh.status = "error";
+            state.statsRefresh.message = "Statistics could not be loaded. Retry.";
+            renderStatsRefreshControl();
+        } finally {
+            state.statsRefresh.loading = false;
+            if (state.statsRefresh.controller === controller) state.statsRefresh.controller = null;
+            if (state.statsRefresh.request === request) {
+                state.statsRefresh.request = null;
+                state.statsRefresh.requestSliceId = "";
+            }
+        }
+    })();
+    state.statsRefresh.request = request;
+    return request;
 }
 
-async function refreshData({ initial }) {
-    const supabaseData = await fetchSupabaseExport();
+async function ensureStatsDataForRoute() {
+    const sliceId = desiredStatsSliceId();
+    if (statsSliceSatisfied(sliceId)) return true;
+    if (state.statsRefresh.request) {
+        if (state.statsRefresh.requestSliceId === sliceId) return state.statsRefresh.request;
+        state.statsRefresh.controller?.abort();
+        try {
+            await state.statsRefresh.request;
+        } catch (_error) {
+            // The replacement request below owns the new route.
+        }
+    }
+    if (statsSliceSatisfied(sliceId)) return true;
+    return loadData();
+}
+
+function desiredStatsSliceId() {
+    if (state.view === "leaderboard") {
+        if (state.mainView === "weapons") return `weapons:${state.mode}`;
+        if (state.mainView === "maps") return "maps:deathmatch";
+        return `mode:${state.mode}`;
+    }
+    if (state.view === "player" && state.selectedId) {
+        const heavyTab = ["battleRoyale", "deathmatch", "weapons", "maps", "history"].includes(state.playerTab)
+            ? `:${state.playerTab}`
+            : "";
+        return `profile:${state.selectedId}${heavyTab}`;
+    }
+    if (state.view === "match") return state.supabaseRowId;
+    return "home";
+}
+
+function statsSliceSatisfied(sliceId) {
+    const profileTabSuffixes = [":battleRoyale", ":deathmatch", ":weapons", ":maps", ":history"];
+    const profileCore =
+        sliceId.startsWith("profile:") && !profileTabSuffixes.some((suffix) => sliceId.endsWith(suffix));
+    return Boolean(
+        state.data &&
+        (state.dataSliceId === sliceId ||
+            state.dataSliceId === state.supabaseRowId ||
+            (profileCore && profileTabSuffixes.some((suffix) => state.dataSliceId === `${sliceId}${suffix}`)))
+    );
+}
+
+function statsApiSliceUrl(apiUrl, sliceId) {
+    if (!apiUrl || sliceId === state.supabaseRowId) return apiUrl;
+    const url = new URL(apiUrl, globalThis.location?.href || "http://localhost/");
+    url.search = "";
+    url.hash = "";
+    url.pathname = url.pathname.replace(/\/(?:stats(?:\.json)?)\/?$/i, "").replace(/\/+$/, "");
+    if (sliceId === "home") url.pathname += "/summary";
+    else if (sliceId === "maps:deathmatch") url.pathname += "/maps/deathmatch";
+    else {
+        const separator = sliceId.indexOf(":");
+        const type = sliceId.slice(0, separator);
+        const id = sliceId.slice(separator + 1);
+        const collection = type === "mode" ? "modes" : type;
+        url.pathname += `/${collection}/${encodeURIComponent(id)}`;
+    }
+    return url.toString();
+}
+
+async function refreshData({ initial, signal = null, sliceId = desiredStatsSliceId() }) {
+    let loadedSliceId = sliceId;
+    let supabaseData = await fetchSupabaseExport({ signal, rowId: sliceId });
+    if (!isStatsExport(supabaseData) && sliceId !== state.supabaseRowId) {
+        supabaseData = await fetchSupabaseExport({ signal, rowId: state.supabaseRowId });
+        loadedSliceId = state.supabaseRowId;
+    }
     if (isStatsExport(supabaseData)) {
-        applyData(supabaseData, false, "Supabase database", { fullRender: initial });
+        applyData(supabaseData, false, "Supabase database", { fullRender: initial, sliceId: loadedSliceId });
         return true;
     }
 
     if (state.apiUrl) {
-        const apiData = await fetchJson(state.apiUrl);
+        let apiData = await fetchJson(statsApiSliceUrl(state.apiUrl, sliceId), { signal });
+        loadedSliceId = sliceId;
+        if (!isStatsExport(apiData) && sliceId !== state.supabaseRowId) {
+            apiData = await fetchJson(state.apiUrl, { signal });
+            loadedSliceId = state.supabaseRowId;
+        }
         if (isStatsExport(apiData)) {
-            applyData(apiData, false, "Live API", { fullRender: initial });
+            applyData(apiData, false, "Live API", { fullRender: initial, sliceId: loadedSliceId });
             return true;
         }
     }
@@ -2523,11 +2625,11 @@ async function refreshData({ initial }) {
         throw new Error("The configured live statistics sources did not return a valid export.");
     }
 
-    let data = await fetchJson("./data/stats.json");
+    let data = await fetchJson("./data/stats.json", { signal });
     let preview = false;
     let dataMode = "Static file";
     if (!hasTrackedPlayers(data)) {
-        const sample = await fetchJson("./data/stats.sample.json");
+        const sample = await fetchJson("./data/stats.sample.json", { signal });
         if (sample) {
             data = sample;
             preview = true;
@@ -2535,7 +2637,7 @@ async function refreshData({ initial }) {
         }
     }
 
-    applyData(data || emptyExport(), preview, dataMode, { fullRender: initial });
+    applyData(data || emptyExport(), preview, dataMode, { fullRender: initial, sliceId: state.supabaseRowId });
     return true;
 }
 
@@ -2547,26 +2649,36 @@ function manuallyRefreshStats() {
     state.statsRefresh.status = "loading";
     state.statsRefresh.message = "Refreshing statistics...";
     renderStatsRefreshControl();
+    const controller = new AbortController();
+    const sliceId = desiredStatsSliceId();
+    state.statsRefresh.controller = controller;
+    state.statsRefresh.requestSliceId = sliceId;
 
-    state.statsRefresh.request = (async () => {
+    const request = (async () => {
         try {
-            await refreshData({ initial: false });
+            await refreshData({ initial: false, signal: controller.signal, sliceId });
             markStatsRefreshSuccess();
             render();
             if (state.view === "match") matchDetailPage?.refresh();
         } catch (error) {
+            if (error?.name === "AbortError") return;
             console.error("Failed to refresh statistics", error);
             state.statsRefresh.status = "error";
             state.statsRefresh.message = "Refresh failed. Previous statistics kept. Retry.";
         } finally {
             state.statsRefresh.loading = false;
-            state.statsRefresh.request = null;
+            if (state.statsRefresh.controller === controller) state.statsRefresh.controller = null;
+            if (state.statsRefresh.request === request) {
+                state.statsRefresh.request = null;
+                state.statsRefresh.requestSliceId = "";
+            }
             renderStatsRefreshControl();
             window.requestAnimationFrame(() => window.scrollTo(scrollPosition.x, scrollPosition.y));
         }
     })();
+    state.statsRefresh.request = request;
 
-    return state.statsRefresh.request;
+    return request;
 }
 
 function markStatsRefreshSuccess() {
@@ -2611,17 +2723,18 @@ function elapsedRefreshTime(date, long = false) {
     return long ? `${hours} hour${hours === 1 ? "" : "s"}` : `${hours}h`;
 }
 
-async function fetchSupabaseExport() {
+async function fetchSupabaseExport({ signal = null, rowId = state.supabaseRowId } = {}) {
     if (!state.supabaseUrl || !state.supabaseKey) return null;
 
     const baseUrl = state.supabaseUrl.replace(/\/+$/, "");
     const table = encodeURIComponent(state.supabaseTable || "cob_stats_exports");
-    const rowId = encodeURIComponent(state.supabaseRowId || "live");
-    const url = `${baseUrl}/rest/v1/${table}?id=eq.${rowId}&select=payload&limit=1`;
+    const encodedRowId = encodeURIComponent(rowId || "live");
+    const url = `${baseUrl}/rest/v1/${table}?id=eq.${encodedRowId}&select=payload&limit=1`;
 
     try {
-        const response = await fetch(url, {
+        const response = await performanceDiagnostics.fetch(url, {
             cache: "no-store",
+            signal,
             headers: {
                 apikey: state.supabaseKey,
                 Authorization: `Bearer ${state.supabaseKey}`,
@@ -2633,6 +2746,7 @@ async function fetchSupabaseExport() {
         const rows = await response.json();
         return rows?.[0]?.payload || null;
     } catch (error) {
+        if (error?.name === "AbortError" || signal?.aborted) throw error;
         console.error("Failed to load Supabase stats", error);
         return null;
     }
@@ -2689,6 +2803,17 @@ async function selectOwnProfile(userId) {
 }
 
 async function loadAccountProfiles() {
+    if (accountProfilesRequest) return accountProfilesRequest;
+    const request = loadAccountProfilesNow();
+    accountProfilesRequest = request;
+    try {
+        return await request;
+    } finally {
+        if (accountProfilesRequest === request) accountProfilesRequest = null;
+    }
+}
+
+async function loadAccountProfilesNow() {
     if (!state.authClient) {
         state.accountProfiles = [];
         state.accountProfilesReady = true;
@@ -2954,6 +3079,17 @@ function attachCosmeticInventory(profiles, inventoryRows) {
 }
 
 async function loadRemotePlaytests(options = {}) {
+    if (remotePlaytestsRequest) return remotePlaytestsRequest;
+    const request = loadRemotePlaytestsNow(options);
+    remotePlaytestsRequest = request;
+    try {
+        return await request;
+    } finally {
+        if (remotePlaytestsRequest === request) remotePlaytestsRequest = null;
+    }
+}
+
+async function loadRemotePlaytestsNow(options = {}) {
     const shouldRender = options.render !== false;
     const silent = Boolean(options.silent);
     if (!state.authClient) {
@@ -3296,14 +3432,15 @@ function initialsForName(value) {
     return initials.toUpperCase();
 }
 
-function applyData(data, preview, dataMode, { fullRender = true } = {}) {
-    const signature = exportSignature(data);
+function applyData(data, preview, dataMode, { fullRender = true, sliceId = state.supabaseRowId } = {}) {
+    const signature = exportSignature(data, sliceId);
     if (signature === state.dataSignature && state.preview === preview && state.dataMode === dataMode) return;
 
     const previousSelectedId = state.selectedId;
     state.data = data;
     state.preview = preview;
     state.dataMode = dataMode;
+    state.dataSliceId = data.slice?.id || sliceId;
     state.dataSignature = signature;
     rebuildCache();
     void syncWeeklyMissions();
@@ -3320,9 +3457,11 @@ function applyData(data, preview, dataMode, { fullRender = true } = {}) {
         if (state.view === "player" && !state.selectedId) state.view = "leaderboard";
     }
 
-    const rowCount = filteredLeaderboardRows().length;
-    const totalPages = Math.max(1, Math.ceil(rowCount / state.pageSize));
-    state.page = Math.min(state.page, totalPages);
+    if (state.view === "leaderboard") {
+        const rowCount = filteredLeaderboardRows().length;
+        const totalPages = Math.max(1, Math.ceil(rowCount / state.pageSize));
+        state.page = Math.min(state.page, totalPages);
+    }
     if (fullRender) {
         render();
     } else {
@@ -3331,12 +3470,13 @@ function applyData(data, preview, dataMode, { fullRender = true } = {}) {
     }
 }
 
-async function fetchJson(path) {
+async function fetchJson(path, { signal = null } = {}) {
     try {
-        const response = await fetch(path, { cache: "no-store" });
+        const response = await performanceDiagnostics.fetch(path, { cache: "no-store", signal });
         if (!response.ok) return null;
         return await response.json();
     } catch (error) {
+        if (error?.name === "AbortError" || signal?.aborted) throw error;
         console.error("Failed to load", path, error);
         return null;
     }
@@ -3346,8 +3486,21 @@ function isStatsExport(data) {
     return Boolean(data?.modes && Array.isArray(data.profiles));
 }
 
-function exportSignature(data) {
+function exportSignature(data, sliceId = state.supabaseRowId) {
     if (!data) return "";
+    if (data.generatedAt) {
+        const live = data.liveStatus || {};
+        return [
+            data.schemaVersion || "",
+            data.generatedAt,
+            data.slice?.id || sliceId,
+            data.profiles?.length || 0,
+            live.onlinePlayers ?? "",
+            live.state ?? "",
+            live.mode ?? "",
+            live.mapId ?? ""
+        ].join("|");
+    }
     const modeParts = Object.entries(data.modes || {})
         .map(([id, mode]) => {
             const totals = (mode.players || []).reduce(
@@ -3446,10 +3599,10 @@ function emptyCache() {
     return {
         profiles: [],
         profileMap: new Map(),
-        overallMode: { id: "overall", label: "Overall", totalPlayers: 0, players: [] },
-        overallById: new Map(),
-        weaponsByMode: { overall: [], battleRoyale: [], deathmatch: [], duel: [], zombieSurvival: [] },
-        maps: [],
+        overallMode: null,
+        overallById: null,
+        weaponsByMode: {},
+        maps: null,
         lastMatch: null
     };
 }
@@ -3492,30 +3645,20 @@ function rebuildAccountProfileIndex() {
 function rebuildCache() {
     const profiles = Array.isArray(state.data?.profiles) ? state.data.profiles : [];
     state.cosmeticOwnershipCache.clear();
-    const overallPlayers = profiles.map(buildOverallPlayer).filter(Boolean);
-    applyRanks(overallPlayers);
 
     state.cache = {
         profiles,
         profileMap: new Map(profiles.map((profile) => [profile.playerId, profile])),
-        overallMode: {
-            id: "overall",
-            label: "Overall",
-            totalPlayers: overallPlayers.length,
-            players: overallPlayers
-        },
-        overallById: new Map(overallPlayers.map((player) => [player.playerId, player])),
-        weaponsByMode: {
-            overall: aggregateWeapons(profiles, "overall"),
-            battleRoyale: aggregateWeapons(profiles, "battleRoyale"),
-            deathmatch: aggregateWeapons(profiles, "deathmatch")
-        },
-        maps: aggregateDeathmatchMaps(profiles),
-        lastMatch: findLastMatch(profiles)
+        overallMode: null,
+        overallById: null,
+        weaponsByMode: {},
+        maps: null,
+        lastMatch: state.data?.latestMatch || findLastMatch(profiles)
     };
 }
 
 function render() {
+    const finishRender = performanceDiagnostics.startRender(state.view);
     renderHeroStatus();
     renderTopNav();
     renderStatsRefreshControl();
@@ -3567,6 +3710,8 @@ function render() {
 
     renderCosmeticPicker();
     renderRoute();
+    finishRender();
+    void ensureStatsDataForRoute();
 }
 
 function renderCreatorIdentity() {
@@ -3588,6 +3733,7 @@ function renderLeaderboardView() {
 }
 
 function renderRoute() {
+    const finishRender = performanceDiagnostics.startRender(`route:${state.view}`);
     document.body.classList.toggle("home-route", state.view === "home");
     document.body.classList.toggle("store-route", state.view === "store");
     document.body.classList.toggle(
@@ -3617,7 +3763,10 @@ function renderRoute() {
     } else {
         matchDetailPage?.close();
     }
-    if (state.routeScrollPending && !(state.view === "home" && (state.pendingScrollTarget || state.pendingDetailsTarget))) {
+    if (
+        state.routeScrollPending &&
+        !(state.view === "home" && (state.pendingScrollTarget || state.pendingDetailsTarget))
+    ) {
         state.routeScrollPending = false;
         window.requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: "auto" }));
     }
@@ -3635,6 +3784,7 @@ function renderRoute() {
             if (details instanceof HTMLDetailsElement) details.querySelector("summary")?.focus({ preventScroll: true });
         });
     }
+    finishRender();
 }
 
 function updateFloatingButtonPosition() {
@@ -4639,7 +4789,6 @@ async function loadAdminDocumentation({ force = false } = {}) {
         if (state.view === "adminHelp") renderAdminDocumentationPage();
     }
 }
-
 
 function renderProgressionAdminPage({ forceBadgeEditor = false } = {}) {
     const body = document.getElementById("admin-progression-body");
@@ -6252,7 +6401,7 @@ async function loadBadgeCatalogOverrides({ force = false } = {}) {
     const badgeState = state.badges;
     if (badgeState.loading) {
         await badgeState.request;
-        if (!force) return;
+        return;
     }
     if (badgeState.loaded && !force) return;
     badgeState.loading = true;
@@ -6328,7 +6477,18 @@ function badgeCatalogErrorMessage(error, fallback = "Badge editing is unavailabl
 }
 
 async function loadCosmeticCatalog({ force = false } = {}) {
-    if (state.store.catalogLoading || (state.store.catalogLoaded && !force)) return;
+    if (cosmeticCatalogRequest) return cosmeticCatalogRequest;
+    if (state.store.catalogLoaded && !force) return;
+    const request = loadCosmeticCatalogNow();
+    cosmeticCatalogRequest = request;
+    try {
+        return await request;
+    } finally {
+        if (cosmeticCatalogRequest === request) cosmeticCatalogRequest = null;
+    }
+}
+
+async function loadCosmeticCatalogNow() {
     state.store.catalogLoading = true;
     state.store.catalogMessage = "";
 
@@ -8972,10 +9132,7 @@ function weeklyWeaponEntries(profile, mode) {
 }
 
 function weeklyMapEntries(profile) {
-    const entries = [
-        ...weeklyPlayerMapEntries(profile),
-        ...(Array.isArray(state.cache?.maps) ? state.cache.maps : [])
-    ];
+    const entries = [...weeklyPlayerMapEntries(profile), ...cachedMaps()];
     const maps = new Map();
     for (const entry of entries) {
         const id = String(entry?.id || "").trim();
@@ -8990,9 +9147,7 @@ function weeklyMapEntries(profile) {
 }
 
 function weeklyPlayerMapEntries(profile) {
-    return Array.isArray(profile?.deathmatch?.details?.deathmatchMaps)
-        ? profile.deathmatch.details.deathmatchMaps
-        : [];
+    return Array.isArray(profile?.deathmatch?.details?.deathmatchMaps) ? profile.deathmatch.details.deathmatchMaps : [];
 }
 
 function weeklyEligibleMaps(profile) {
@@ -12121,7 +12276,12 @@ function syncChampionScroll(smooth) {
 }
 
 function renderHeroStatus() {
-    const totalPlayers = state.cache.overallMode.players.length;
+    const exportedTotal = Number(state.data?.totalTrackedPlayers);
+    const totalPlayers = Number.isFinite(exportedTotal)
+        ? exportedTotal
+        : state.cache.profiles.filter(
+              (profile) => number(profile.battleRoyale?.stats?.games) + number(profile.deathmatch?.stats?.games) > 0
+          ).length;
     document.getElementById("hero-player-count").textContent = String(totalPlayers);
     renderLiveStatus();
 
@@ -12379,28 +12539,33 @@ function renderTable() {
 
     const start = (state.page - 1) * state.pageSize;
     const pageRows = rows.slice(start, start + state.pageSize);
+    const fragment = document.createDocumentFragment();
     if (state.mainView === "weapons") {
-        pageRows.forEach((entry, index) => body.appendChild(renderWeaponLeaderboardRow(entry, start + index + 1)));
+        pageRows.forEach((entry, index) => fragment.appendChild(renderWeaponLeaderboardRow(entry, start + index + 1)));
+        body.appendChild(fragment);
         renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
         return;
     }
 
     if (state.mainView === "maps") {
-        pageRows.forEach((entry, index) => body.appendChild(renderMapLeaderboardRow(entry, start + index + 1)));
+        pageRows.forEach((entry, index) => fragment.appendChild(renderMapLeaderboardRow(entry, start + index + 1)));
+        body.appendChild(fragment);
         renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
         return;
     }
 
     if (state.mode === "duel") {
-        pageRows.forEach((entry, index) => body.appendChild(renderDuelLeaderboardRow(entry, start + index + 1)));
+        pageRows.forEach((entry, index) => fragment.appendChild(renderDuelLeaderboardRow(entry, start + index + 1)));
+        body.appendChild(fragment);
         renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
         return;
     }
 
     if (state.mode === "zombieSurvival") {
         pageRows.forEach((entry, index) =>
-            body.appendChild(renderZombieSurvivalLeaderboardRow(entry, start + index + 1))
+            fragment.appendChild(renderZombieSurvivalLeaderboardRow(entry, start + index + 1))
         );
+        body.appendChild(fragment);
         renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
         return;
     }
@@ -12439,8 +12604,9 @@ function renderTable() {
             <td>${formatPercent(derived.headshotRate)}</td>
             <td>${formatNumber(derived.kdRatio)}</td>
         `;
-        body.appendChild(tr);
+        fragment.appendChild(tr);
     });
+    body.appendChild(fragment);
 
     renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
 }
@@ -14755,9 +14921,11 @@ function filteredLeaderboardRows() {
 }
 
 function currentLeaderboardRows() {
-    if (state.mainView === "weapons") return state.cache.weaponsByMode[state.mode] || [];
-    if (state.mainView === "maps") return state.cache.maps;
-    if (state.mode === "zombieSurvival") return currentMode().leaderboards?.longestSurvival || [];
+    if (state.mainView === "weapons") return cachedWeapons(state.mode);
+    if (state.mainView === "maps") return cachedMaps();
+    if (state.mode === "zombieSurvival") {
+        return currentMode().leaderboards?.longestSurvival || currentMode().players || [];
+    }
     return currentMode().players || [];
 }
 
@@ -14773,7 +14941,30 @@ function currentMode() {
 }
 
 function buildOverallMode() {
-    return state.cache.overallMode || emptyCache().overallMode;
+    if (state.cache.overallMode) return state.cache.overallMode;
+    const players = state.cache.profiles.map(buildOverallPlayer).filter(Boolean);
+    applyRanks(players);
+    state.cache.overallMode = {
+        id: "overall",
+        label: "Overall",
+        totalPlayers: players.length,
+        players
+    };
+    state.cache.overallById = new Map(players.map((player) => [player.playerId, player]));
+    return state.cache.overallMode;
+}
+
+function cachedWeapons(mode) {
+    const id = ["overall", "battleRoyale", "deathmatch"].includes(mode) ? mode : "battleRoyale";
+    if (!Object.hasOwn(state.cache.weaponsByMode, id)) {
+        state.cache.weaponsByMode[id] = aggregateWeapons(state.cache.profiles, id);
+    }
+    return state.cache.weaponsByMode[id];
+}
+
+function cachedMaps() {
+    if (!Array.isArray(state.cache.maps)) state.cache.maps = aggregateDeathmatchMaps(state.cache.profiles);
+    return state.cache.maps;
 }
 
 function buildOverallPlayer(profile) {
@@ -14790,7 +14981,7 @@ function buildOverallPlayer(profile) {
 }
 
 function buildProfileOverall(profile) {
-    return state.cache.overallById.get(profile?.playerId) || buildOverallPlayer(profile);
+    return state.cache.overallById?.get(profile?.playerId) || buildOverallPlayer(profile);
 }
 
 function combineStats(...statsList) {

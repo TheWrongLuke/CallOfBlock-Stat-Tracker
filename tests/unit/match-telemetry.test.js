@@ -171,15 +171,16 @@ describe("match telemetry normalization", () => {
 });
 
 describe("match tactical playback", () => {
-    it("starts in skip-idle mode and excludes isolated single-hit engagements", async () => {
+    it("starts with auto-skip disabled and gives interesting moments a pre-roll", async () => {
         const telemetry = normalizeMatchTelemetry(await fixture("fixture-br"), "fixture-br");
         const moments = buildMeaningfulMoments(telemetry);
         const controller = new MatchPlaybackController(telemetry);
 
-        expect(controller.state().skipIdle).toBe(true);
+        expect(controller.state().skipIdle).toBe(false);
         expect(moments.some((moment) => moment.id === "engagement-1")).toBe(false);
-        expect(moments.find((moment) => moment.id === "engagement-2")?.startMs).toBe(22_000);
-        expect(moments.find((moment) => moment.id === "engagement-3")?.startMs).toBe(43_000);
+        expect(moments.find((moment) => moment.id === "engagement-2")?.startMs).toBe(2_000);
+        expect(moments.find((moment) => moment.id === "engagement-3")?.startMs).toBe(23_000);
+        expect(moments.some((moment) => moment.id === "match-start")).toBe(false);
         controller.destroy();
     });
 
@@ -210,14 +211,33 @@ describe("match tactical playback", () => {
         expect(controller.sequence.some((moment) => moment.id === "vehicle-destroyed-1")).toBe(false);
 
         controller.selectEvent("elimination-1");
-        expect(controller.state().snapshot.timeMs).toBe(28_000);
+        expect(controller.state().snapshot.timeMs).toBe(8_000);
         expect(controller.state().currentEventId).toBe("elimination-1");
+        expect(controller.state().playing).toBe(true);
 
         controller.setSkipIdle(false);
         expect(controller.sequence).toHaveLength(telemetry.snapshots.length);
         controller.seek(34_000);
         expect(controller.state().snapshot.snapshotId).toBe("snapshot-10");
         controller.destroy();
+    });
+
+    it("keeps click seeks playing, supports relative seeking, and clamps to the match", async () => {
+        vi.useFakeTimers();
+        const telemetry = normalizeMatchTelemetry(await fixture("fixture-br"), "fixture-br");
+        const controller = new MatchPlaybackController(telemetry);
+
+        controller.play();
+        controller.seek(10_000);
+        expect(controller.state().playing).toBe(true);
+        expect(controller.state().snapshot.timeMs).toBe(10_000);
+        controller.seekBy(-20_000);
+        expect(controller.state().snapshot.timeMs).toBe(0);
+        controller.seekBy(telemetry.durationMs * 2);
+        expect(controller.state().snapshot.timeMs).toBe(telemetry.durationMs);
+
+        controller.destroy();
+        vi.useRealTimers();
     });
 
     it("interpolates continuously between recorded snapshots", async () => {
@@ -270,6 +290,9 @@ describe("match tactical playback", () => {
         const controller = new MatchPlaybackController(telemetry);
 
         controller.selectEvent("respawn-1");
+        expect(controller.state().playing).toBe(true);
+        controller.pause();
+        controller.seek(telemetry.events.find((event) => event.eventId === "respawn-1").timeMs);
         const alpha = controller.state().snapshot.players.find((player) => player.playerId === "p_alpha");
         expect(alpha.alive).toBe(true);
         expect(alpha.health).toBe(20);
@@ -292,6 +315,29 @@ describe("match detail loading", () => {
         expect(first).toBe(second);
         expect(from).toHaveBeenCalledTimes(1);
         expect(eq).toHaveBeenCalledWith("match_id", "fixture-br");
+    });
+
+    it("deduplicates concurrent telemetry requests", async () => {
+        const payload = await fixture("fixture-br");
+        let resolveQuery;
+        const maybeSingle = vi.fn(
+            () =>
+                new Promise((resolve) => {
+                    resolveQuery = resolve;
+                })
+        );
+        const eq = vi.fn(() => ({ maybeSingle }));
+        const select = vi.fn(() => ({ eq }));
+        const from = vi.fn(() => ({ select }));
+        const api = createMatchDetailApi({ supabaseClient: { from }, fetchImpl: vi.fn() });
+
+        const first = api.load("fixture-br");
+        const second = api.load("fixture-br");
+        resolveQuery({ data: { payload }, error: null });
+
+        await expect(first).resolves.toMatchObject({ matchId: "fixture-br" });
+        await expect(second).resolves.toMatchObject({ matchId: "fixture-br" });
+        expect(from).toHaveBeenCalledOnce();
     });
 
     it("falls back to the static deterministic fixture without refetching stats", async () => {

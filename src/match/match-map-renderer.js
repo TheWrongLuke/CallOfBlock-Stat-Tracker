@@ -283,6 +283,7 @@ export class MatchMapRenderer {
         const dotSize = blockScale * (1 + (9 * this.markerOptions.size) / 4);
         this.stage.style.setProperty("--tactical-player-icon-size", `${round(iconSize)}px`);
         this.stage.style.setProperty("--tactical-player-dot-size", `${dotSize}px`);
+        this.stage.style.setProperty("--tactical-vehicle-marker-size", `${round(iconSize)}px`);
         this.stage.classList.toggle("show-player-icons", this.markerOptions.showIcons);
         this.stage.classList.toggle("show-player-names", this.markerOptions.showNames);
     }

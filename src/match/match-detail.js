@@ -55,13 +55,20 @@ export function createMatchDetailPage({
     let playbackPreferences = loadMatchPlaybackPreferences();
     let lastEventFeedKey = "";
     let requestToken = 0;
+    let loadingMatchId = "";
+    let telemetryRequestController = null;
+    let timelineScrub = emptyTimelineScrub();
     let replayState = { loading: false, available: null, replays: [], error: "", message: "" };
 
     container.addEventListener("click", handleClick);
     container.addEventListener("change", handleChange);
     container.addEventListener("input", handleInput);
     container.addEventListener("submit", handleSubmit);
-    container.addEventListener("keydown", handleKeyDown);
+    container.addEventListener("pointerdown", handleTimelinePointerDown);
+    container.addEventListener("pointermove", handleTimelinePointerMove);
+    container.addEventListener("pointerup", finishTimelineScrub);
+    container.addEventListener("pointercancel", finishTimelineScrub);
+    document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("fullscreenchange", updateFullscreenState);
     document.addEventListener("webkitfullscreenchange", updateFullscreenState);
 
@@ -81,14 +88,17 @@ export function createMatchDetailPage({
             renderFailure("No match ID was provided.");
             return;
         }
-        if (
-            !force &&
-            activeMatchId === id &&
-            activePlayerId === playerId &&
-            activeViewerPlayerId === viewerPlayerId &&
-            (telemetry || summary?.hasTelemetry === false)
-        )
+        const sameMatch =
+            activeMatchId === id && activePlayerId === playerId && activeViewerPlayerId === viewerPlayerId;
+        if (!force && sameMatch && loadingMatchId === id) {
+            summary = getSummary(id, playerId) || summary;
+            viewerSummary = getViewerSummary(id) || viewerSummary;
             return;
+        }
+        if (!force && sameMatch && (telemetry || summary?.hasTelemetry === false)) return;
+        telemetryRequestController?.abort();
+        telemetryRequestController = null;
+        loadingMatchId = "";
         closePlayback();
         activeMatchId = id;
         activePlayerId = playerId;
@@ -104,24 +114,34 @@ export function createMatchDetailPage({
             return;
         }
         renderLoading();
+        const controller = new AbortController();
+        telemetryRequestController = controller;
+        loadingMatchId = id;
         try {
-            const loaded = await api.load(id, { force });
+            const loaded = await api.load(id, { force, signal: controller.signal });
             if (token !== requestToken || activeMatchId !== id) return;
             telemetry = loaded;
             renderLoaded();
             void loadReplays(token);
         } catch (error) {
             if (token !== requestToken || activeMatchId !== id) return;
+            if (error?.name === "AbortError") return;
             if (summary && !summary.hasTelemetry) {
                 renderLegacy();
             } else {
                 renderFailure(error?.message || "Detailed telemetry could not be loaded.");
             }
+        } finally {
+            if (token === requestToken) loadingMatchId = "";
+            if (telemetryRequestController === controller) telemetryRequestController = null;
         }
     }
 
     function close() {
         requestToken++;
+        telemetryRequestController?.abort();
+        telemetryRequestController = null;
+        loadingMatchId = "";
         activeMatchId = "";
         activePlayerId = "";
         activeViewerPlayerId = "";
@@ -133,6 +153,7 @@ export function createMatchDetailPage({
 
     function closePlayback() {
         leaveReplayFullscreen();
+        timelineScrub = emptyTimelineScrub();
         playback?.destroy();
         mapRenderer?.destroy();
         playback = null;
@@ -343,11 +364,11 @@ export function createMatchDetailPage({
                 <div class="match-skip-control">
                     <label>
                         <input type="checkbox" data-match-skip-idle ${playbackPreferences.skipIdle ? "checked" : ""}>
-                        <span>Skip idle time</span>
+                        <span>Auto-skip interesting events</span>
                     </label>
                     <details>
-                        <summary aria-label="Explain skip idle time">?</summary>
-                        <p>When enabled, playback skips quiet periods and moves between engagements and other meaningful moments. When disabled, every recorded match snapshot is played in chronological order.</p>
+                        <summary aria-label="Explain automatic event skipping">?</summary>
+                        <p>When enabled, playback skips quiet periods and starts shortly before engagements and other meaningful moments. When disabled, every recorded match snapshot is played in chronological order.</p>
                     </details>
                 </div>
             </div>
@@ -810,7 +831,7 @@ export function createMatchDetailPage({
 
     function handleInput(event) {
         if (playback && event.target.matches("[data-match-timeline]")) {
-            playback.seek(event.target.value);
+            playback.seek(event.target.value, { preservePlayback: !timelineScrub.dragging });
             return;
         }
         if (event.target.matches("[data-match-marker-size]")) {
@@ -819,6 +840,34 @@ export function createMatchDetailPage({
             setText("[data-match-marker-size-output]", `${size}/4`);
             rememberPlaybackPreferences();
         }
+    }
+
+    function handleTimelinePointerDown(event) {
+        const timeline = event.target.closest("[data-match-timeline]");
+        if (!playback || !timeline) return;
+        timelineScrub = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            dragging: false,
+            wasPlaying: playback.state().playing,
+            target: timeline
+        };
+        timeline.setPointerCapture?.(event.pointerId);
+    }
+
+    function handleTimelinePointerMove(event) {
+        if (!playback || timelineScrub.pointerId !== event.pointerId || timelineScrub.dragging) return;
+        if (Math.abs(event.clientX - timelineScrub.startX) < 4) return;
+        timelineScrub.dragging = true;
+        if (timelineScrub.wasPlaying) playback.pause();
+    }
+
+    function finishTimelineScrub(event) {
+        if (timelineScrub.pointerId !== event.pointerId) return;
+        const { dragging, wasPlaying, target, pointerId } = timelineScrub;
+        timelineScrub = emptyTimelineScrub();
+        if (target?.hasPointerCapture?.(pointerId)) target.releasePointerCapture(pointerId);
+        if (dragging && wasPlaying) playback?.play();
     }
 
     async function handleSubmit(event) {
@@ -926,20 +975,31 @@ export function createMatchDetailPage({
             leaveReplayFullscreen();
             return;
         }
-        if (!playback || !event.target.closest("[data-match-viewer-controls], [data-match-map]")) return;
-        if (["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(event.target.tagName) && event.key === " ") return;
+        if (!playback || !activeMatchId || isReplayShortcutField(event.target)) return;
         if (event.key === " ") {
             event.preventDefault();
             playback.togglePlay();
         } else if (event.key === "ArrowLeft") {
             event.preventDefault();
-            playback.previous();
+            playback.seekBy(-5000);
         } else if (event.key === "ArrowRight") {
             event.preventDefault();
-            playback.next();
+            playback.seekBy(5000);
         } else if (event.key === "Escape") {
             mapRenderer?.closeTooltip();
         }
+    }
+
+    function emptyTimelineScrub() {
+        return { pointerId: null, startX: 0, dragging: false, wasPlaying: false, target: null };
+    }
+
+    function isReplayShortcutField(target) {
+        return Boolean(
+            target?.closest?.(
+                "input, textarea, select, button, [contenteditable]:not([contenteditable='false']), [role='textbox']"
+            )
+        );
     }
 
     function replayFullscreenTarget() {
