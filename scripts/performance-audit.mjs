@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "@playwright/test";
+import { chromium, firefox, webkit } from "@playwright/test";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, "..");
@@ -17,6 +17,11 @@ const idleSeconds = boundedNumber(argumentsMap.get("--idle"), 60, 1, 600);
 const settleSeconds = boundedNumber(argumentsMap.get("--settle"), 2, 0, 30);
 const profileId = String(argumentsMap.get("--profile") || "").trim();
 const matchId = String(argumentsMap.get("--match") || "").trim();
+const browserName = String(argumentsMap.get("--browser") || "chromium")
+    .trim()
+    .toLowerCase();
+const browserChannel = String(argumentsMap.get("--channel") || "").trim();
+const disableGpu = argumentsMap.has("--disable-gpu");
 const outputPath = path.resolve(
     projectRoot,
     argumentsMap.get("--output") || path.join("artifacts", "performance", `${timestampForFile()}-${label}.json`)
@@ -50,7 +55,16 @@ if (matchId) {
     });
 }
 
-const browser = await chromium.launch({ headless: !argumentsMap.has("--headed") });
+const browserType = { chromium, firefox, webkit }[browserName];
+if (!browserType) throw new Error(`Unsupported browser '${browserName}'. Use chromium, firefox, or webkit.`);
+if (browserChannel && browserName !== "chromium") {
+    throw new Error("--channel is supported only with --browser=chromium.");
+}
+const browser = await browserType.launch({
+    headless: !argumentsMap.has("--headed"),
+    ...(browserChannel ? { channel: browserChannel } : {}),
+    ...(disableGpu && browserName === "chromium" ? { args: ["--disable-gpu"] } : {})
+});
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
 await context.addInitScript(installPagePerformanceObservers);
 
@@ -61,6 +75,12 @@ const report = {
     capturedAt: new Date().toISOString(),
     idleSeconds,
     settleSeconds,
+    browser: {
+        name: browserName,
+        channel: browserChannel || "bundled",
+        headed: argumentsMap.has("--headed"),
+        disableGpu
+    },
     pages: []
 };
 
@@ -109,6 +129,12 @@ async function auditRoute(context, route) {
     });
     await page.waitForLoadState("load", { timeout: 30_000 }).catch(() => {});
     if (settleSeconds) await page.waitForTimeout(settleSeconds * 1000);
+    await page.evaluate(() => {
+        const audit = globalThis.__cobPerformanceAudit;
+        if (!audit) return;
+        audit.frameDurations.length = 0;
+        audit.longTasks.length = 0;
+    });
     phase = "idle";
     if (idleSeconds) await page.waitForTimeout(idleSeconds * 1000);
     phase = "complete";
@@ -141,8 +167,59 @@ async function auditRoute(context, route) {
             framesOver20Ms: frameDurations.filter((duration) => duration > 20).length,
             framesOver50Ms: frameDurations.filter((duration) => duration > 50).length,
             p95FrameMs: percentile(frameDurations, 0.95),
+            estimatedRefreshHz: frameDurations.length
+                ? Math.round(1000 / Math.max(1, percentile(frameDurations, 0.5)))
+                : 0,
+            device: collectDeviceProfile(),
+            rendering: collectRenderingProfile(),
             publicDataDiagnostics: globalThis.__cobPublicDataDiagnostics || null
         };
+
+        function collectDeviceProfile() {
+            const canvas = globalThis.document.createElement("canvas");
+            const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            const debugInfo = gl?.getExtension("WEBGL_debug_renderer_info");
+            return {
+                userAgent: navigator.userAgent,
+                platform: navigator.userAgentData?.platform || navigator.platform || "",
+                hardwareConcurrency: navigator.hardwareConcurrency || 0,
+                deviceMemoryGb: navigator.deviceMemory || 0,
+                devicePixelRatio: globalThis.devicePixelRatio || 1,
+                viewport: `${globalThis.innerWidth}x${globalThis.innerHeight}`,
+                screen: `${globalThis.screen?.width || 0}x${globalThis.screen?.height || 0}`,
+                colorDepth: globalThis.screen?.colorDepth || 0,
+                reducedMotion: globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches || false,
+                connectionType: navigator.connection?.effectiveType || "unknown",
+                webglVendor: debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : "unavailable",
+                webglRenderer: debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : "unavailable"
+            };
+        }
+
+        function collectRenderingProfile() {
+            const elements = [...globalThis.document.querySelectorAll("body *")];
+            let fixedElements = 0;
+            let backdropFilterElements = 0;
+            let filterElements = 0;
+            let largeShadowElements = 0;
+            for (const element of elements) {
+                const style = globalThis.getComputedStyle(element);
+                if (style.position === "fixed") fixedElements += 1;
+                if (style.backdropFilter && style.backdropFilter !== "none") backdropFilterElements += 1;
+                if (style.filter && style.filter !== "none") filterElements += 1;
+                if (style.boxShadow && style.boxShadow !== "none" && element.getBoundingClientRect().width > 500) {
+                    largeShadowElements += 1;
+                }
+            }
+            return {
+                activeAnimations: globalThis.document
+                    .getAnimations()
+                    .filter((animation) => animation.playState === "running").length,
+                fixedElements,
+                backdropFilterElements,
+                filterElements,
+                largeShadowElements
+            };
+        }
 
         function percentile(values, fraction) {
             if (!values.length) return 0;
@@ -280,6 +357,10 @@ function printSummary(result, targetPath) {
             apiP95Ms: page.requests.apiP95Ms,
             longTasks: page.browser.longTaskCount,
             p95FrameMs: page.browser.p95FrameMs,
+            refreshHz: page.browser.estimatedRefreshHz,
+            webgl: page.browser.device.webglRenderer,
+            backdrop: page.browser.rendering.backdropFilterElements,
+            animations: page.browser.rendering.activeAnimations,
             domNodes: page.browser.domNodes
         }))
     );
