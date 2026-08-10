@@ -21,7 +21,7 @@ const STORAGE_KEY = "cob_playtest_page_state_v1";
 
 export async function initializePlaytestsPage() {
     await whenReady();
-    const shell = await initializeSiteShell();
+    const shell = await initializeSiteShell({ loadStatus: false });
     const state = createState(shell);
     restorePreferences(state);
 

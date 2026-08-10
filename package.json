@@ -17,7 +17,9 @@
         "format": "prettier --config config/prettier.config.js --write \"src/*/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\" \"config/**/*.{js,json}\" package.json \".github/**/*.yml\" public/site.webmanifest",
         "format:check": "prettier --config config/prettier.config.js --check \"src/*/**/*.js\" \"scripts/**/*.mjs\" \"tests/**/*.js\" \"config/**/*.{js,json}\" package.json \".github/**/*.yml\" public/site.webmanifest",
         "test": "vitest run --config config/vitest.config.js",
-        "test:e2e": "npm run build && playwright test --config config/playwright.config.js"
+        "test:e2e": "npm run build && playwright test --config config/playwright.config.js",
+        "audit:performance": "node scripts/performance-audit.mjs",
+        "benchmark:zombie-telemetry": "npm run build && node scripts/zombie-telemetry-benchmark.mjs"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",

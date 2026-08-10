@@ -498,11 +498,30 @@ export function renderAdminDocumentationContent({ loading, sections, error }) {
         <article class="admin-command-group">
             <h3>${escapeHtml(section.title)}</h3>
             ${section.summary ? `<p>${escapeHtml(section.summary)}</p>` : ""}
-            <ul class="command-list">${(Array.isArray(section.entries) ? section.entries : []).map((entry) => `<li><code>${escapeHtml(entry.command || "")}</code><em>${escapeHtml(entry.description || "")}</em></li>`).join("")}</ul>
+            <ul class="command-list admin-command-list">${(Array.isArray(section.entries) ? section.entries : []).map(renderAdminCommandEntry).join("")}</ul>
         </article>
     `
         )
         .join("")}</section>`;
+}
+
+function renderAdminCommandEntry(entry) {
+    const metadata = [
+        ["Mode", entry.mode],
+        ["Permission", entry.permission],
+        ["Persistence", entry.persistence],
+        ["Active match", entry.activeMatch]
+    ].filter(([, value]) => String(value || "").trim());
+    return `<li class="admin-command-entry">
+        <div class="admin-command-value admin-command-code"><span>Command</span><code>${escapeHtml(entry.command || "")}</code></div>
+        ${metadata
+            .map(
+                ([label, value]) =>
+                    `<div class="admin-command-value"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`
+            )
+            .join("")}
+        <div class="admin-command-description"><span>Description</span><p>${escapeHtml(entry.description || "")}</p></div>
+    </li>`;
 }
 
 function renderFeedbackCategories() {

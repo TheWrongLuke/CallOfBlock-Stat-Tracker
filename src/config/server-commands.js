@@ -1,7 +1,11 @@
 function command(commandText, permission, mode, scope, activeMatch, description) {
     return {
         command: commandText,
-        description: `Permission: ${permission} | Mode: ${mode} | ${scope} | Active match: ${activeMatch}. ${description}`
+        permission,
+        mode,
+        persistence: scope,
+        activeMatch,
+        description
     };
 }
 

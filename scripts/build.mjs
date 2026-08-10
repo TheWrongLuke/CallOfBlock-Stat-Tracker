@@ -60,7 +60,7 @@ const routeViewAllowlist = {
     playtests: new Set(["playtests-view", "community-admin-view"]),
     feedback: new Set(["feedback-view", "ticket-view"]),
     help: new Set(["home-view"]),
-    about: new Set(["home-view"])
+    about: new Set()
 };
 
 for (const [id, page] of Object.entries(pages)) {
@@ -119,7 +119,40 @@ function renderPublicPage(html, { id, page, canonicalUrl, socialImageUrl, public
             /<script type="module" src="\.\/src\/entries\/home\.js\?v=[^"]*"><\/script>/i,
             `<script type="module" src="./src/entries/${entry}.js?v=page-runtime-1"></script>`
         );
-    return pruneRouteViews(rendered, id);
+    return pruneRouteViews(pruneSharedPageShell(renderPageHero(rendered, id, page), id), id);
+}
+
+function renderPageHero(html, routeId, page) {
+    if (routeId === "home") return html;
+    const intro = (Array.isArray(page.intro) ? page.intro : []).map((paragraph) => escapeHtml(paragraph)).join(" ");
+    return html
+        .replace(/(<p class="eyebrow">)[\s\S]*?(<\/p>)/i, `$1${escapeHtml(page.kicker || "Call of Block")}$2`)
+        .replace(
+            /(<h1 class="hero-site-title"[^>]*><a class="hero-title-link"[^>]*>)[\s\S]*?(<\/a><\/h1>)/i,
+            `$1${escapeHtml(page.heading || page.title)}$2`
+        )
+        .replace(/(<p class="hero-text">)[\s\S]*?(<\/p>)/i, `$1\n                ${intro}\n            $2`);
+}
+
+function pruneSharedPageShell(html, routeId) {
+    let output = html;
+    if (routeId !== "home") {
+        output = output.replace(/\s*<div class="hero-champions">[\s\S]*?(?=\s*<div class="hero-status">)/i, "");
+    }
+    if (!new Set(["home", "stats"]).has(routeId)) {
+        output = output.replace(/\s*<div class="hero-status">[\s\S]*?<\/div>(?=\s*<\/header>)/i, "");
+    }
+    if (routeId !== "stats") {
+        output = output.replace(/\s*<script src="\.\/src\/config\/store-catalog\.js\?v=[^"]*"><\/script>/i, "");
+    }
+    if (routeId === "help") {
+        const helpContent = output.match(/<!-- HELP_CONTENT_START -->([\s\S]*?)<!-- HELP_CONTENT_END -->/i)?.[1] || "";
+        output = output.replace(
+            /<main class="home-view" id="home-view">[\s\S]*?<\/main>/i,
+            `<main class="home-view" id="home-view">${helpContent}</main>`
+        );
+    }
+    return output.replace(/\s*<!-- HELP_CONTENT_(?:START|END) -->\s*/gi, "\n");
 }
 
 function pruneRouteViews(html, routeId) {
@@ -146,7 +179,7 @@ function pageStructuredData(id, page, canonicalUrl, publicSiteUrl) {
             "@context": "https://schema.org",
             "@type": "WebSite",
             name: "Call of Block",
-            alternateName: ["Call of Block 2", "COB"],
+            alternateName: ["Call of Block 2", "CallOfBlock", "COB"],
             url: publicSiteUrl
         };
     }

@@ -1,0 +1,237 @@
+{
+  "telemetryVersion": 1,
+  "matchId": "fixture-zombie",
+  "mode": "zombieSurvival",
+  "startedAt": "2026-08-10T10:00:00.000Z",
+  "endedAt": "2026-08-10T10:00:03.000Z",
+  "durationMs": 3000,
+  "status": "completed",
+  "map": {
+    "mapId": "shmar",
+    "mapVersion": "1",
+    "label": "Shmar",
+    "imageUrl": "./assets/maps/shmar.png",
+    "worldMinX": -464,
+    "worldMaxX": 367,
+    "worldMinZ": -448,
+    "worldMaxZ": 367,
+    "rotationDegrees": 0,
+    "flipX": false,
+    "flipY": false,
+    "calibrated": true,
+    "calibrationSource": "provided_corner_bounds"
+  },
+  "capture": {
+    "snapshotIntervalMs": 1000,
+    "zombieSnapshotIntervalMs": 1000,
+    "engagementInactivityMs": 15000
+  },
+  "participants": [
+    {
+      "playerId": "p_alpha",
+      "name": "Alpha",
+      "teamId": "solo-1"
+    }
+  ],
+  "snapshots": [
+    {
+      "snapshotId": "snapshot-1",
+      "timeMs": 0,
+      "reason": "match_start",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "solo-1",
+          "x": -120,
+          "y": 72,
+          "z": -80,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": []
+    },
+    {
+      "snapshotId": "snapshot-2",
+      "timeMs": 1000,
+      "reason": "periodic",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "solo-1",
+          "x": -118,
+          "y": 72,
+          "z": -78,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": []
+    },
+    {
+      "snapshotId": "snapshot-3",
+      "timeMs": 2000,
+      "reason": "periodic",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "solo-1",
+          "x": -116,
+          "y": 72,
+          "z": -76,
+          "health": 20,
+          "maxHealth": 20,
+          "armor": 4,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": []
+    },
+    {
+      "snapshotId": "snapshot-4",
+      "timeMs": 3000,
+      "reason": "zombie_survival_match_end",
+      "players": [
+        {
+          "playerId": "p_alpha",
+          "teamId": "solo-1",
+          "x": -114,
+          "y": 72,
+          "z": -74,
+          "health": 16,
+          "maxHealth": 20,
+          "armor": 2,
+          "alive": true,
+          "connected": true,
+          "vehicleId": null
+        }
+      ],
+      "vehicles": []
+    }
+  ],
+  "zombieSnapshots": [
+    {
+      "timeMs": 0,
+      "zombies": []
+    },
+    {
+      "timeMs": 1000,
+      "zombies": [
+        { "zombieId": "z-1", "type": "normal", "x": -90, "y": 72, "z": -70 },
+        { "zombieId": "z-2", "type": "runner", "x": -88, "y": 72, "z": -66 }
+      ]
+    },
+    {
+      "timeMs": 2000,
+      "zombies": [
+        { "zombieId": "z-1", "type": "normal", "x": -96, "y": 72, "z": -72 },
+        { "zombieId": "z-2", "type": "runner", "x": -94, "y": 72, "z": -70 }
+      ]
+    },
+    {
+      "timeMs": 2200,
+      "zombies": [
+        { "zombieId": "z-1", "type": "normal", "x": -97, "y": 72, "z": -72 }
+      ]
+    },
+    {
+      "timeMs": 3000,
+      "zombies": [
+        { "zombieId": "z-1", "type": "normal", "x": -102, "y": 72, "z": -73 },
+        { "zombieId": "z-3", "type": "armored", "x": -84, "y": 72, "z": -62 }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "eventId": "match-start-1",
+      "type": "match_start",
+      "timeMs": 0,
+      "snapshotId": "snapshot-1"
+    },
+    {
+      "eventId": "zombie-damage-1",
+      "type": "zombie_damage",
+      "timeMs": 1500,
+      "attackerId": "p_alpha",
+      "targetKind": "zombie",
+      "targetId": "z-1",
+      "attackId": "attack-1",
+      "weaponId": "tacz:mk14",
+      "weaponLabel": "MK14",
+      "damage": 6,
+      "attackerPosition": { "x": -117, "y": 72, "z": -77 },
+      "targetPosition": { "x": -93, "y": 72, "z": -71 }
+    },
+    {
+      "eventId": "zombie-damage-2",
+      "type": "zombie_damage",
+      "timeMs": 1500,
+      "attackerId": "p_alpha",
+      "targetKind": "zombie",
+      "targetId": "z-2",
+      "attackId": "attack-1",
+      "weaponId": "tacz:mk14",
+      "weaponLabel": "MK14",
+      "damage": 6,
+      "attackerPosition": { "x": -117, "y": 72, "z": -77 },
+      "targetPosition": { "x": -91, "y": 72, "z": -68 }
+    },
+    {
+      "eventId": "zombie-death-1",
+      "type": "zombie_death",
+      "timeMs": 2200,
+      "attackerId": "p_alpha",
+      "targetKind": "zombie",
+      "targetId": "z-2",
+      "weaponId": "tacz:mk14",
+      "weaponLabel": "MK14",
+      "attackerPosition": { "x": -116, "y": 72, "z": -76 },
+      "targetPosition": { "x": -95, "y": 72, "z": -70 },
+      "variant": "runner"
+    },
+    {
+      "eventId": "zombie-end-1",
+      "type": "zombie_survival_match_end",
+      "timeMs": 3000,
+      "snapshotId": "snapshot-4"
+    }
+  ],
+  "engagements": [],
+  "result": {
+    "winner": {
+      "type": "player",
+      "playerId": "p_alpha",
+      "teamId": "solo-1",
+      "survivingPlayerIds": ["p_alpha"]
+    },
+    "mvp": {
+      "playerId": "p_alpha",
+      "reason": "longest_survival",
+      "score": 3
+    },
+    "finalScores": null,
+    "participants": [
+      {
+        "playerId": "p_alpha",
+        "teamId": "solo-1",
+        "won": true,
+        "placement": 1,
+        "kills": 2,
+        "deaths": 0
+      }
+    ],
+    "endReason": "Fixture complete"
+  },
+  "replays": []
+}

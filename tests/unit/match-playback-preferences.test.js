@@ -25,7 +25,8 @@ describe("match playback preferences", () => {
             markers: {
                 size: 4,
                 showIcons: true,
-                showNames: true
+                showNames: true,
+                zombieRadiusBlocks: 2.5
             }
         });
     });
@@ -42,7 +43,7 @@ describe("match playback preferences", () => {
             speed: 0.5,
             skipIdle: false,
             filters: { zone: false, vehicles: true },
-            markers: { size: 2, showIcons: true, showNames: true }
+            markers: { size: 2, showIcons: true, showNames: true, zombieRadiusBlocks: 2.5 }
         });
     });
 
@@ -58,7 +59,19 @@ describe("match playback preferences", () => {
         ).toEqual({
             size: 2,
             showIcons: false,
-            showNames: false
+            showNames: false,
+            zombieRadiusBlocks: 2.5
         });
+    });
+
+    it("persists an independent half-block zombie radius", () => {
+        expect(
+            normalizeMatchPlaybackPreferences({
+                markers: { size: 4, zombieRadiusBlocks: 3.5 }
+            }).markers
+        ).toMatchObject({ size: 4, zombieRadiusBlocks: 3.5 });
+        expect(
+            normalizeMatchPlaybackPreferences({ markers: { zombieRadiusBlocks: 99 } }).markers.zombieRadiusBlocks
+        ).toBe(4);
     });
 });

@@ -5,7 +5,8 @@ const CURRENT_ICON_SIZE_PX = 34;
 const DEFAULT_MARKER_OPTIONS = Object.freeze({
     size: 2,
     showIcons: true,
-    showNames: true
+    showNames: true,
+    zombieRadiusBlocks: 2.5
 });
 const TEAM_COLORS = ["#7ec8ff", "#81d66d", "#ffcb6b", "#ff7f76", "#c79bff", "#65d8cb", "#ff9f62", "#f58fca"];
 const VEHICLE_LABELS = new Map([
@@ -33,8 +34,10 @@ export class MatchMapRenderer {
         this.markerOptions = normalizeMarkerOptions(markerOptions);
         this.playerMarkers = new Map();
         this.vehicleMarkers = new Map();
+        this.zombieMarkers = new Map();
         this.playerStates = new Map();
         this.vehicleStates = new Map();
+        this.zombieStates = new Map();
         this.currentEvents = [];
         this.currentTimeMs = 0;
         this.lockedPlayerId = "";
@@ -47,21 +50,26 @@ export class MatchMapRenderer {
         this.renderBase();
     }
 
-    update(snapshot, events = [], currentEventId = "", combatEvent = null) {
+    update(snapshot, events = [], currentEventId = "", combatEvents = []) {
         if (!snapshot) return;
-        this.currentEvents =
-            combatEvent && !events.some((event) => event.eventId === combatEvent.eventId)
-                ? [...events, combatEvent].sort((a, b) => a.timeMs - b.timeMs)
-                : events;
+        const activeCombatEvents = Array.isArray(combatEvents) ? combatEvents : combatEvents ? [combatEvents] : [];
+        this.currentEvents = [
+            ...new Map([...events, ...activeCombatEvents].map((event) => [event.eventId, event])).values()
+        ].sort((a, b) => a.timeMs - b.timeMs);
         this.currentTimeMs = snapshot.timeMs;
         this.playerStates = new Map(snapshot.players.map((player) => [player.playerId, player]));
         this.vehicleStates = new Map(snapshot.vehicles.map((vehicle) => [vehicle.vehicleId, vehicle]));
+        this.zombieStates = new Map((snapshot.zombies || []).map((zombie) => [zombie.zombieId, zombie]));
         const selectedEvent = events.find((event) => event.eventId === currentEventId) || null;
-        const activeEvent = selectedEvent || combatEvent || events.at(-1) || null;
-        const selectedCombatEvent =
-            selectedEvent && (selectedEvent.type === "damage" || selectedEvent.type === "elimination")
-                ? selectedEvent
-                : null;
+        const activeEvent = selectedEvent || activeCombatEvents.at(-1) || events.at(-1) || null;
+        let selectedCombatEvents = [];
+        if (selectedEvent && ["damage", "elimination", "zombie_damage"].includes(selectedEvent.type)) {
+            selectedCombatEvents = selectedEvent.attackId
+                ? this.telemetry.events.filter(
+                      (event) => event.type === "zombie_damage" && event.attackId === selectedEvent.attackId
+                  )
+                : [selectedEvent];
+        }
         const highlighted = new Set(
             events.flatMap((event) => [
                 event.attackerId,
@@ -98,10 +106,11 @@ export class MatchMapRenderer {
             marker.setAttribute("aria-label", this.playerTooltipText(participant, state));
         }
 
+        this.updateZombies(snapshot.zombies || []);
         this.updateVehicles(snapshot.vehicles);
         this.updateZone(snapshot.zone);
         this.updateScore(snapshot.scores);
-        this.updateEventLines(selectedCombatEvent || combatEvent);
+        this.updateEventLines(selectedCombatEvents.length ? selectedCombatEvents : activeCombatEvents);
         if (this.lockedPlayerId) this.showTooltip(this.lockedPlayerId);
         else if (this.lockedVehicleId) this.showVehicleTooltip(this.lockedVehicleId);
     }
@@ -121,6 +130,7 @@ export class MatchMapRenderer {
         this.container.replaceChildren();
         this.playerMarkers.clear();
         this.vehicleMarkers.clear();
+        this.zombieMarkers.clear();
     }
 
     renderBase() {
@@ -177,6 +187,13 @@ export class MatchMapRenderer {
         this.lines.setAttribute("preserveAspectRatio", "none");
         this.lines.setAttribute("aria-hidden", "true");
         this.stage.append(this.lines);
+
+        if (this.telemetry.mode === "zombieSurvival" && this.telemetry.features?.zombieTracking) {
+            this.zombieLayer = document.createElement("div");
+            this.zombieLayer.className = "tactical-zombie-layer";
+            this.zombieLayer.setAttribute("aria-hidden", "true");
+            this.stage.append(this.zombieLayer);
+        }
 
         this.vehicleLayer = document.createElement("div");
         this.vehicleLayer.className = "tactical-vehicle-layer";
@@ -284,8 +301,39 @@ export class MatchMapRenderer {
         this.stage.style.setProperty("--tactical-player-icon-size", `${round(iconSize)}px`);
         this.stage.style.setProperty("--tactical-player-dot-size", `${dotSize}px`);
         this.stage.style.setProperty("--tactical-vehicle-marker-size", `${round(iconSize)}px`);
+        const zombieDiameter = Math.max(3, blockScale * this.markerOptions.zombieRadiusBlocks * 2);
+        this.stage.style.setProperty("--tactical-zombie-marker-size", `${round(zombieDiameter)}px`);
         this.stage.classList.toggle("show-player-icons", this.markerOptions.showIcons);
         this.stage.classList.toggle("show-player-names", this.markerOptions.showNames);
+        if (this.zombieStates.size) this.updateZombies([...this.zombieStates.values()]);
+    }
+
+    updateZombies(zombies) {
+        if (!this.zombieLayer) return;
+        const visibleIds = new Set();
+        const stageWidth = this.stage.clientWidth;
+        const stageHeight = this.stage.clientHeight;
+        for (const zombie of zombies || []) {
+            const point = mapCoordinateToPercent(this.telemetry.map, zombie.x, zombie.z);
+            if (!point) continue;
+            visibleIds.add(zombie.zombieId);
+            let marker = this.zombieMarkers.get(zombie.zombieId);
+            if (!marker) {
+                marker = document.createElement("span");
+                marker.className = "tactical-zombie-marker";
+                marker.dataset.tacticalZombie = zombie.zombieId;
+                this.zombieLayer.append(marker);
+                this.zombieMarkers.set(zombie.zombieId, marker);
+            }
+            const x = (point.x / 100) * stageWidth;
+            const y = (point.y / 100) * stageHeight;
+            marker.style.transform = `translate3d(${round(x)}px, ${round(y)}px, 0) translate(-50%, -50%)`;
+        }
+        this.zombieMarkers.forEach((marker, id) => {
+            if (visibleIds.has(id)) return;
+            marker.remove();
+            this.zombieMarkers.delete(id);
+        });
     }
 
     updateVehicles(vehicles) {
@@ -359,34 +407,42 @@ export class MatchMapRenderer {
             : `Target ${scores.target ?? "unavailable"}`;
     }
 
-    updateEventLines(event) {
+    updateEventLines(events) {
         this.lines.replaceChildren();
-        if (!event) return;
-        const start =
-            event.killerPosition ||
-            event.attackerPosition ||
-            this.positionForPlayer(event.killerId || event.attackerId);
-        const end = event.victimPosition || this.positionForPlayer(event.victimId);
-        if (!start || !end) return;
-        const startPoint = mapCoordinateToPercent(this.telemetry.map, start.x, start.z);
-        const endPoint = mapCoordinateToPercent(this.telemetry.map, end.x, end.z);
-        if (!startPoint || !endPoint) return;
+        for (const event of Array.isArray(events) ? events : events ? [events] : []) {
+            const start =
+                event.killerPosition ||
+                event.attackerPosition ||
+                this.positionForPlayer(event.killerId || event.attackerId);
+            const end = event.targetPosition || event.victimPosition || this.positionForPlayer(event.victimId);
+            if (!start || !end) continue;
+            const startPoint = mapCoordinateToPercent(this.telemetry.map, start.x, start.z);
+            const endPoint = mapCoordinateToPercent(this.telemetry.map, end.x, end.z);
+            if (!startPoint || !endPoint) continue;
 
-        const line = document.createElementNS(SVG_NS, "line");
-        line.setAttribute("x1", String(startPoint.x * 10));
-        line.setAttribute("y1", String(startPoint.y * 10));
-        line.setAttribute("x2", String(endPoint.x * 10));
-        line.setAttribute("y2", String(endPoint.y * 10));
-        line.classList.add(event.type === "elimination" ? "kill-line" : "engagement-line");
-        this.lines.append(line);
+            const line = document.createElementNS(SVG_NS, "line");
+            line.setAttribute("x1", String(startPoint.x * 10));
+            line.setAttribute("y1", String(startPoint.y * 10));
+            line.setAttribute("x2", String(endPoint.x * 10));
+            line.setAttribute("y2", String(endPoint.y * 10));
+            line.classList.add(
+                event.type === "zombie_damage"
+                    ? "zombie-hit-line"
+                    : event.type === "elimination"
+                      ? "kill-line"
+                      : "engagement-line"
+            );
+            this.lines.append(line);
 
-        const distance = eventDistance3d(event, start, end);
-        if (distance !== null) {
-            const label = document.createElementNS(SVG_NS, "text");
-            label.setAttribute("x", String(((startPoint.x + endPoint.x) / 2) * 10));
-            label.setAttribute("y", String(((startPoint.y + endPoint.y) / 2) * 10));
-            label.textContent = `${round(distance)} blocks`;
-            this.lines.append(label);
+            const zombieTarget = event.type === "zombie_damage" || event.targetKind === "zombie";
+            const distance = zombieTarget ? null : eventDistance3d(event, start, end);
+            if (distance !== null) {
+                const label = document.createElementNS(SVG_NS, "text");
+                label.setAttribute("x", String(((startPoint.x + endPoint.x) / 2) * 10));
+                label.setAttribute("y", String(((startPoint.y + endPoint.y) / 2) * 10));
+                label.textContent = `${round(distance)} blocks`;
+                this.lines.append(label);
+            }
         }
     }
 
@@ -524,10 +580,14 @@ function createPlayerAvatar(presentation, participant, className) {
 
 function normalizeMarkerOptions(value = {}) {
     const rawSize = Number(value.size);
+    const rawZombieRadius = Number(value.zombieRadiusBlocks);
     return {
         size: Number.isFinite(rawSize) ? Math.max(0, Math.min(4, Math.round(rawSize))) : DEFAULT_MARKER_OPTIONS.size,
         showIcons: value.showIcons === undefined ? DEFAULT_MARKER_OPTIONS.showIcons : value.showIcons === true,
-        showNames: value.showNames === undefined ? DEFAULT_MARKER_OPTIONS.showNames : value.showNames === true
+        showNames: value.showNames === undefined ? DEFAULT_MARKER_OPTIONS.showNames : value.showNames === true,
+        zombieRadiusBlocks: Number.isFinite(rawZombieRadius)
+            ? Math.max(0.5, Math.min(4, Math.round(rawZombieRadius * 2) / 2))
+            : DEFAULT_MARKER_OPTIONS.zombieRadiusBlocks
     };
 }
 

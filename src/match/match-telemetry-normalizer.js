@@ -27,6 +27,8 @@ const EVENT_TYPES = new Set([
     "difficulty_phase_change",
     "population_pressure",
     "population_override_changed",
+    "zombie_damage",
+    "zombie_death",
     "player_death",
     "player_disconnect",
     "player_reconnect",
@@ -47,15 +49,35 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
     if (!matchId || (expectedMatchId && matchId !== expectedMatchId)) {
         throw new Error("The telemetry match ID does not match this route.");
     }
+    const mode = enumText(raw.mode, ["battleRoyale", "deathmatch", "duel", "zombieSurvival"], "unknown");
     const participants = array(raw.participants).map(normalizeParticipant).filter(Boolean);
     const participantIds = new Set(participants.map((participant) => participant.playerId));
     const warnings = [];
+    const sourceSnapshots = array(raw.snapshots);
+    const hasEmbeddedZombieTrack = sourceSnapshots.some(
+        (snapshot) => snapshot && Object.prototype.hasOwnProperty.call(snapshot, "zombies")
+    );
+    const hasDedicatedZombieTrack = Array.isArray(raw.zombieSnapshots);
+    const zombieTrackingAvailable = mode === "zombieSurvival" && (hasDedicatedZombieTrack || hasEmbeddedZombieTrack);
 
-    const snapshots = array(raw.snapshots)
+    const snapshots = sourceSnapshots
         .map((snapshot, index) => normalizeSnapshot(snapshot, index, participantIds, warnings))
         .filter(Boolean)
         .sort((a, b) => a.timeMs - b.timeMs || a.sourceIndex - b.sourceIndex)
         .map(({ sourceIndex: _sourceIndex, ...snapshot }) => snapshot);
+    const zombieSnapshotSource = hasDedicatedZombieTrack
+        ? array(raw.zombieSnapshots)
+        : sourceSnapshots
+              .filter((snapshot) => snapshot && Object.prototype.hasOwnProperty.call(snapshot, "zombies"))
+              .map((snapshot) => ({ timeMs: snapshot.timeMs, zombies: snapshot.zombies }));
+    const zombieSnapshots =
+        mode === "zombieSurvival"
+            ? zombieSnapshotSource
+                  .map((snapshot, index) => normalizeZombieSnapshot(snapshot, index, warnings))
+                  .filter(Boolean)
+                  .sort((a, b) => a.timeMs - b.timeMs || a.sourceIndex - b.sourceIndex)
+                  .map(({ sourceIndex: _sourceIndex, ...snapshot }) => snapshot)
+            : [];
 
     const snapshotIds = new Set(snapshots.map((snapshot) => snapshot.snapshotId));
     const events = array(raw.events)
@@ -72,6 +94,7 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
     const highestTime = Math.max(
         0,
         ...snapshots.map((snapshot) => snapshot.timeMs),
+        ...zombieSnapshots.map((snapshot) => snapshot.timeMs),
         ...events.map((event) => event.timeMs)
     );
     const durationMs = finiteNonNegative(raw.durationMs) ?? highestTime;
@@ -83,7 +106,7 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
     return {
         telemetryVersion: MATCH_TELEMETRY_VERSION,
         matchId,
-        mode: enumText(raw.mode, ["battleRoyale", "deathmatch", "duel", "zombieSurvival"], "unknown"),
+        mode,
         startedAt: validDateText(raw.startedAt),
         endedAt: validDateText(raw.endedAt),
         durationMs: Math.max(durationMs, highestTime),
@@ -91,10 +114,15 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
         map,
         capture: {
             snapshotIntervalMs: finitePositive(raw.capture?.snapshotIntervalMs),
+            zombieSnapshotIntervalMs: finitePositive(raw.capture?.zombieSnapshotIntervalMs),
             engagementInactivityMs: finitePositive(raw.capture?.engagementInactivityMs)
+        },
+        features: {
+            zombieTracking: zombieTrackingAvailable
         },
         participants,
         snapshots,
+        zombieSnapshots,
         events,
         engagements,
         result: normalizeResult(raw.result, participantIds, warnings),
@@ -156,6 +184,18 @@ export function validateMatchTelemetry(telemetry) {
             const point = mapCoordinateToPercent(telemetry.map, player.x, player.z);
             if (point?.outsideBounds)
                 warnings.push(`${player.playerId} is outside calibrated bounds at ${snapshot.timeMs}ms.`);
+        }
+    }
+    let previousZombieSnapshot = -1;
+    for (const snapshot of array(telemetry.zombieSnapshots)) {
+        if (snapshot.timeMs < previousZombieSnapshot) errors.push("Zombie snapshots are out of order.");
+        previousZombieSnapshot = snapshot.timeMs;
+        const zombieIds = new Set();
+        for (const zombie of snapshot.zombies) {
+            if (zombieIds.has(zombie.zombieId)) {
+                errors.push(`Zombie snapshot at ${snapshot.timeMs}ms repeats ${zombie.zombieId}.`);
+            }
+            zombieIds.add(zombie.zombieId);
         }
     }
 
@@ -222,9 +262,38 @@ function normalizeSnapshot(value, index, participantIds, warnings) {
             .map((player) => normalizePlayerState(player, participantIds))
             .filter(Boolean),
         vehicles: array(value.vehicles).map(normalizeVehicleState).filter(Boolean),
+        zombies: array(value.zombies).map(normalizeZombieState).filter(Boolean),
         zone: normalizeZone(value.zone),
         scores: normalizeScores(value.scores),
         sourceIndex: index
+    };
+}
+
+function normalizeZombieSnapshot(value, index, warnings) {
+    const timeMs = finiteNonNegative(value?.timeMs);
+    if (timeMs === null) {
+        warnings.push(`Skipped zombie snapshot ${index + 1} because its time is invalid.`);
+        return null;
+    }
+    return {
+        timeMs,
+        zombies: array(value.zombies).map(normalizeZombieState).filter(Boolean),
+        sourceIndex: index
+    };
+}
+
+function normalizeZombieState(value) {
+    const zombieId = text(value?.zombieId);
+    const x = finite(value?.x);
+    const y = finite(value?.y);
+    const z = finite(value?.z);
+    if (!zombieId || x === null || y === null || z === null) return null;
+    return {
+        zombieId,
+        type: text(value.type) || "normal",
+        x,
+        y,
+        z
     };
 }
 
@@ -314,7 +383,11 @@ function normalizeEvent(value, index, participantIds, snapshotIds, warnings) {
         attackerPosition: normalizePosition(value.attackerPosition),
         killerPosition: normalizePosition(value.killerPosition),
         victimPosition: normalizePosition(value.victimPosition),
+        targetPosition: normalizePosition(value.targetPosition),
         position: normalizePosition(value.position),
+        targetKind: text(value.targetKind),
+        targetId: text(value.targetId),
+        attackId: text(value.attackId),
         zone: normalizeZone(value.zone),
         sourceIndex: index
     };

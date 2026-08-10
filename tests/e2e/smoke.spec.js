@@ -8,6 +8,26 @@ const statsExportFixture = JSON.parse(
 const liveStatsExportFixture = JSON.parse(
     readFileSync(new URL("../../data/stats.json", import.meta.url), "utf8").replace(/^\uFEFF/, "")
 );
+const zombieTelemetryFixture = JSON.parse(
+    readFileSync(new URL("../../data/match-telemetry/fixture-zombie.json", import.meta.url), "utf8")
+);
+
+function zombieTelemetryWithCount(count) {
+    const fixture = structuredClone(zombieTelemetryFixture);
+    fixture.matchId = `fixture-zombie-${count}`;
+    fixture.events = fixture.events.filter((event) => !["zombie_damage", "zombie_death"].includes(event.type));
+    fixture.zombieSnapshots = [0, 1000, 2000, 3000].map((timeMs, snapshotIndex) => ({
+        timeMs,
+        zombies: Array.from({ length: count }, (_value, index) => ({
+            zombieId: `z-${index + 1}`,
+            type: index % 10 === 0 ? "runner" : "normal",
+            x: -420 + ((index * 31 + snapshotIndex * 3) % 740),
+            y: 70 + (index % 4),
+            z: -410 + ((index * 47 + snapshotIndex * 2) % 720)
+        }))
+    }));
+    return fixture;
+}
 
 const supabaseStub = `
 (() => {
@@ -445,7 +465,7 @@ test("statistics refresh only on demand and preserves the active route", async (
     const routeBeforeRefresh = await page.evaluate(() => window.location.hash);
     await page.locator("[data-stats-refresh]").click();
     await expect(page.locator("[data-stats-refresh-status]")).toContainText("last refreshed");
-    expect(statsRequests).toBe(requestsAfterLoad + 1);
+    expect(statsRequests).toBe(requestsAfterLoad + 2);
     await expect.poll(() => page.evaluate(() => window.location.hash)).toBe(routeBeforeRefresh);
     await expect(page.locator("#leaderboard-view")).toBeVisible();
 });
@@ -489,19 +509,70 @@ test("the signed-in homepage account pill opens the profile drawer and reveals a
     await expect(drawer).toBeHidden();
 });
 
+test("homepage profile and notification drawers have one deterministic owner", async ({ page }) => {
+    await openAdminApp(page, "");
+    const result = await page.evaluate(async () => {
+        const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+        const failures = [];
+        const heading = () => document.querySelector("#account-side-panel-host h2")?.textContent || "";
+        for (let index = 0; index < 20; index += 1) {
+            document.querySelector("[data-shell-account-open]")?.click();
+            await frame();
+            if (heading() !== "PROFILE") failures.push(`profile-open-${index}`);
+            document.querySelector("[data-shell-account-close]")?.click();
+            await frame();
+            if (heading()) failures.push(`profile-close-${index}`);
+        }
+        for (let index = 0; index < 20; index += 1) {
+            document.querySelector("[data-notification-panel-open]")?.click();
+            await frame();
+            if (heading() !== "NOTIFICATIONS") failures.push(`notification-open-${index}`);
+            document.querySelector("[data-home-notification-close]")?.click();
+            await frame();
+            if (heading()) failures.push(`notification-close-${index}`);
+        }
+        for (let index = 0; index < 20; index += 1) {
+            document.querySelector("[data-shell-account-open]")?.click();
+            document.querySelector("[data-notification-panel-open]")?.click();
+            await frame();
+            if (heading() !== "NOTIFICATIONS") failures.push(`profile-to-notifications-${index}`);
+            document.querySelector("[data-shell-account-open]")?.click();
+            await frame();
+            if (heading() !== "PROFILE") failures.push(`notifications-to-profile-${index}`);
+            document.querySelector("[data-shell-account-close]")?.click();
+            await frame();
+        }
+        return {
+            failures,
+            drawerCount: document.querySelectorAll("#account-side-panel-host .profile-drawer").length,
+            bodyOpen: document.body.classList.contains("account-drawer-open")
+        };
+    });
+    expect(result).toEqual({ failures: [], drawerCount: 0, bodyOpen: false });
+});
+
 test("statistics payloads follow the active route instead of loading the full export", async ({ page }) => {
     const requestedRows = [];
     page.on("request", (request) => {
-        if (!request.url().includes("/rest/v1/cob_stats_exports")) return;
-        requestedRows.push(new URL(request.url()).searchParams.get("id"));
+        if (request.url().includes("/rest/v1/cob_stats_exports")) {
+            requestedRows.push(new URL(request.url()).searchParams.get("id"));
+        }
     });
 
-    await openApp(page);
+    await installPageStubs(page, countingSupabaseStub);
+    await page.goto("/");
+    await page.waitForLoadState("domcontentloaded");
     await expect.poll(() => requestedRows.includes("eq.home")).toBe(true);
+    await expect.poll(() => requestedRows.includes("eq.status")).toBe(true);
     expect(requestedRows).not.toContain("eq.live");
 
     await page.locator(".tracker-float").click();
     await expect.poll(() => requestedRows.includes("eq.mode:battleRoyale")).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__supabaseTableRequests?.public_profiles || 0)).toBe(1);
+    const inventoryRequestCount = await page.evaluate(
+        () => window.__supabaseTableRequests?.public_profile_cosmetic_inventory || 0
+    );
+    expect(inventoryRequestCount).toBeLessThanOrEqual(1);
 
     await page.getByRole("button", { name: "Weapons stat view" }).click();
     await expect.poll(() => requestedRows.includes("eq.weapons:battleRoyale")).toBe(true);
@@ -557,6 +628,8 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "stats",
             title: "Call of Block Stats Tracker | Minecraft PvP Leaderboards",
             canonical: "https://callofblock.com/stats/",
+            heading: "Call of Block Stats Tracker",
+            intro: "Compare Battle Royale, Deathmatch, Duel and Zombie Survival",
             view: "#leaderboard-view"
         },
         {
@@ -564,6 +637,8 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "playtests",
             title: "Call of Block Playtests | Join Minecraft PvP Testing",
             canonical: "https://callofblock.com/playtests/",
+            heading: "Call of Block Playtests",
+            intro: "Vote for dates and availability",
             view: "#playtests-view"
         },
         {
@@ -571,6 +646,8 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "feedback",
             title: "Call of Block Feedback & Support",
             canonical: "https://callofblock.com/feedback/",
+            heading: "Call of Block Feedback & Support",
+            intro: "Send bug reports, cheat reports, balance feedback",
             view: "#feedback-view"
         },
         {
@@ -578,6 +655,8 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "help",
             title: "Call of Block Help | Server, Accounts and Stats",
             canonical: "https://callofblock.com/help/",
+            heading: "Call of Block Help",
+            intro: "Find current player instructions",
             view: "#help"
         },
         {
@@ -585,6 +664,8 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             route: "about",
             title: "About Call of Block | Competitive Minecraft PvP Project",
             canonical: "https://callofblock.com/about/",
+            heading: "About Call of Block",
+            intro: "independent Minecraft 1.20.1 Forge multiplayer project",
             view: "#about-the-creator"
         }
     ];
@@ -599,11 +680,15 @@ test("canonical public pages load directly with unique indexable metadata", asyn
         await expect(page.locator("meta[property='og:url']")).toHaveAttribute("content", entry.canonical);
         await expect(page.locator("body")).toHaveAttribute("data-public-route", entry.route);
         await expect(page.locator(entry.view)).toBeVisible();
-        await expect(page.getByRole("heading", { level: 1, name: "Call of Block" })).toBeVisible();
+        await expect(page.getByRole("heading", { level: 1, name: entry.heading })).toBeVisible();
+        if (entry.intro) await expect(page.locator(".hero-text")).toContainText(entry.intro);
         await expect(page.locator("#public-page-title")).toHaveCount(0);
         const structuredData = JSON.parse(await page.locator("#page-structured-data").textContent());
         if (entry.route === "home") {
             expect(structuredData).toMatchObject({ "@type": "WebSite", name: "Call of Block" });
+            expect(structuredData.alternateName).toEqual(
+                expect.arrayContaining(["Call of Block 2", "CallOfBlock", "COB"])
+            );
         } else {
             expect(structuredData["@graph"].some((item) => item["@type"] === "BreadcrumbList")).toBe(true);
         }
@@ -616,6 +701,11 @@ test("canonical public pages load directly with unique indexable metadata", asyn
         expect(horizontalOverflow).toBeLessThanOrEqual(1);
     }
     expect(descriptions.size).toBe(pages.length);
+
+    await page.goto("/about/");
+    await expect(page.locator("#about-the-creator")).toContainText("official website");
+    await expect(page.getByRole("link", { name: "Official modpack on CurseForge" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Official modpack on Modrinth" })).toBeVisible();
 
     const primaryLinks = await page
         .locator("nav[aria-label='Primary navigation'] a")
@@ -638,6 +728,7 @@ test("public entry points share styling without loading unrelated tracker code",
             performance.getEntriesByType("resource").map((entry) => entry.name)
         );
         expect(resources.some((url) => /\/src\/app\.js(?:\?|$)/.test(url))).toBe(false);
+        expect(resources.some((url) => /\/src\/config\/store-catalog\.js(?:\?|$)/.test(url))).toBe(false);
         const stylesheets = await page
             .locator("link[rel='stylesheet']")
             .evaluateAll((links) => links.map((link) => new URL(link.href).pathname));
@@ -650,6 +741,7 @@ test("public entry points share styling without loading unrelated tracker code",
         performance.getEntriesByType("resource").map((entry) => entry.name)
     );
     expect(statsResources.some((url) => /\/src\/app\.js(?:\?|$)/.test(url))).toBe(true);
+    expect(statsResources.some((url) => /\/src\/config\/store-catalog\.js(?:\?|$)/.test(url))).toBe(true);
 });
 
 test("robots and sitemap expose only canonical public pages", async ({ request }) => {
@@ -726,6 +818,32 @@ test("a player profile can be opened from existing test data", async ({ page }) 
     await expect(firstProfileLink).toBeVisible();
     await firstProfileLink.click();
     await expect(page.locator("#player-view")).toBeVisible();
+});
+
+test("profile percentile context is real, rank-first for small populations, and keyboard accessible", async ({
+    page
+}) => {
+    const payload = structuredClone(statsExportFixture);
+    const profile = payload.profiles.find((entry) => entry.battleRoyale);
+    profile.battleRoyale.percentiles = {
+        wins: {
+            mode: "battleRoyale",
+            metric: "wins",
+            value: profile.battleRoyale.stats.wins,
+            rank: 1,
+            qualifiedPlayers: 4,
+            topPercent: 25,
+            minimumGames: 3
+        }
+    };
+    await installPageStubs(page, supabaseStub, payload);
+    await page.goto(`/stats/#player=${encodeURIComponent(profile.playerId)}&tab=overview`);
+    const percentile = page.locator(".percentile-context").first();
+    await expect(percentile).toHaveText("#1 of 4");
+    await expect(percentile).toHaveAttribute("aria-label", /Top 25% of 4 qualified Battle Royale players\. Rank #1\./);
+    await percentile.focus();
+    await expect(percentile).toBeFocused();
+    await expect(page.locator(".percentile-context", { hasText: "Top 0.0%" })).toHaveCount(0);
 });
 
 test("legacy duplicate profile IDs resolve to the canonical merged profile", async ({ page }) => {
@@ -843,6 +961,33 @@ test("protected admin content waits for profile verification", async ({ page }) 
         "/cob match invalidate <matchId> --dry-run <reason>"
     );
     await expect(page.locator("#admin-documentation-body")).not.toContainText("/bradmin");
+});
+
+test("complete admin command documentation stays readable without page overflow", async ({ page }) => {
+    await openAdminApp(page, "#admin-help");
+    const body = page.locator("#admin-documentation-body");
+    await expect(body.locator(".admin-command-entry").first()).toBeVisible();
+    await expect(body).toContainText("Permission");
+    await expect(body).toContainText("Persistence");
+
+    for (const width of [320, 360, 390, 430, 768]) {
+        await page.setViewportSize({ width, height: width === 768 ? 900 : 780 });
+        const dimensions = await page.evaluate(() => ({
+            viewport: window.innerWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            commandWidths: [...document.querySelectorAll(".admin-command-code code")].map((entry) => ({
+                client: entry.clientWidth,
+                scroll: entry.scrollWidth
+            }))
+        }));
+        expect(dimensions.documentWidth, `document overflow at ${width}px`).toBeLessThanOrEqual(
+            dimensions.viewport + 1
+        );
+        expect(
+            dimensions.commandWidths.every((entry) => entry.scroll <= entry.client + 1),
+            `command overflow at ${width}px`
+        ).toBe(true);
+    }
 });
 
 test("public command help uses only the canonical cob command root", async ({ page }) => {
@@ -1198,7 +1343,10 @@ test("profile editing preview reflects the complete unsaved cosmetic draft", asy
     await page.locator('[data-cosmetic-picker-open="icon"]').click();
     await page.locator('[data-cosmetic-option="default"]').click();
     await page.locator("[data-cosmetic-picker-close]").click();
-    await expect(preview.locator("[data-account-preview-img]")).toHaveAttribute("src", /assets\/branding\/icon\.png/);
+    await expect(preview.locator("[data-account-preview-img]")).toHaveAttribute(
+        "src",
+        /assets\/branding\/icon-256\.webp/
+    );
 
     await page.locator('[data-cosmetic-picker-open="background"]').click();
     await page.locator('[data-cosmetic-option="night"]').click();
@@ -1244,6 +1392,8 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     await expect(matchView.locator("[data-match-marker-size]")).toHaveValue("2");
     await expect(matchView.locator("[data-match-player-icons]")).toBeChecked();
     await expect(matchView.locator("[data-match-player-names]")).toBeChecked();
+    await expect(matchView.locator("[data-match-zombie-size]")).toHaveCount(0);
+    await expect(matchView.locator(".tactical-zombie-layer")).toHaveCount(0);
     await expect(matchView.locator(".tactical-map-stage")).toHaveClass(/show-player-icons/);
     await expect(matchView.locator(".tactical-map-stage")).toHaveClass(/show-player-names/);
 
@@ -1446,6 +1596,102 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     );
     expect(horizontalOverflow).toBeLessThanOrEqual(1);
     expect(pageErrors).toEqual([]);
+});
+
+test("Zombie Survival replay tracks an interpolated horde with independent controls and multi-hit lines", async ({
+    page
+}) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openApp(page, "#view=match&match=fixture-zombie");
+
+    const matchView = page.locator("#match-view");
+    const timeline = matchView.locator("[data-match-timeline]");
+    const zombieSize = matchView.locator("[data-match-zombie-size]");
+    await expect(matchView.getByRole("heading", { level: 2, name: "Shmar" })).toBeVisible();
+    await expect(matchView.locator(".tactical-zombie-layer")).toBeVisible();
+    await expect(zombieSize).toHaveValue("2.5");
+    await expect(matchView.locator("[data-match-zombie-size-output]")).toHaveText("2.5 blocks");
+
+    await timeline.evaluate((element) => {
+        element.value = "1500";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator(".tactical-zombie-marker")).toHaveCount(2);
+    await expect(matchView.locator(".tactical-event-lines .zombie-hit-line")).toHaveCount(2);
+    await expect(matchView.locator(".tactical-event-lines text")).toHaveCount(0);
+
+    const initialSizes = await matchView.locator(".tactical-map-stage").evaluate((stage) => ({
+        player: stage.querySelector(".tactical-player-icon").getBoundingClientRect().width,
+        zombie: stage.querySelector(".tactical-zombie-marker").getBoundingClientRect().width
+    }));
+    await matchView.locator('[data-tactical-zombie="z-1"]').evaluate((marker) => {
+        marker.dataset.reuseProbe = "same-node";
+    });
+    await zombieSize.evaluate((element) => {
+        element.value = "4";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const resized = await matchView.locator(".tactical-map-stage").evaluate((stage) => ({
+        player: stage.querySelector(".tactical-player-icon").getBoundingClientRect().width,
+        zombie: stage.querySelector(".tactical-zombie-marker").getBoundingClientRect().width
+    }));
+    expect(resized.zombie).toBeGreaterThan(initialSizes.zombie);
+    expect(resized.player).toBeCloseTo(initialSizes.player, 1);
+
+    await timeline.evaluate((element) => {
+        element.value = "1800";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator('[data-tactical-zombie="z-1"]')).toHaveAttribute("data-reuse-probe", "same-node");
+    await timeline.evaluate((element) => {
+        element.value = "2200";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator('[data-tactical-zombie="z-2"]')).toHaveCount(0);
+    await timeline.evaluate((element) => {
+        element.value = "3000";
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(matchView.locator('[data-tactical-zombie="z-3"]')).toBeVisible();
+
+    const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+    await page.reload();
+    await expect(zombieSize).toHaveValue("4");
+});
+
+test("configured Zombie Survival horde sizes reuse lightweight markers responsively", async ({ page }) => {
+    for (const count of [25, 50, 100]) {
+        const fixture = zombieTelemetryWithCount(count);
+        await page.route(`**/data/match-telemetry/fixture-zombie-${count}.json`, (route) =>
+            route.fulfill({ contentType: "application/json", body: JSON.stringify(fixture) })
+        );
+        await openApp(page, `#view=match&match=fixture-zombie-${count}`);
+
+        const matchView = page.locator("#match-view");
+        const timeline = matchView.locator("[data-match-timeline]");
+        await expect(matchView.locator(".tactical-zombie-marker")).toHaveCount(count);
+        const updateResult = await timeline.evaluate((element) => {
+            const stage = element.closest("#match-view").querySelector(".tactical-map-stage");
+            const firstMarker = stage.querySelector('[data-tactical-zombie="z-1"]');
+            firstMarker.dataset.performanceProbe = "reused";
+            const startedAt = performance.now();
+            for (let index = 0; index < 120; index++) {
+                element.value = String((index * 23) % 3000);
+                element.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+            return {
+                elapsedMs: performance.now() - startedAt,
+                markerCount: stage.querySelectorAll(".tactical-zombie-marker").length,
+                reused: stage.querySelector('[data-tactical-zombie="z-1"]')?.dataset.performanceProbe === "reused"
+            };
+        });
+        expect(updateResult.markerCount).toBe(count);
+        expect(updateResult.reused).toBe(true);
+        expect(updateResult.elapsedMs).toBeLessThan(2500);
+    }
 });
 
 test("match routes support Back and Forward plus legacy, partial, and failure states", async ({ page }) => {

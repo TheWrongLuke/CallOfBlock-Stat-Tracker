@@ -168,6 +168,39 @@ describe("match telemetry normalization", () => {
             runtimePopulationCap: 100
         });
     });
+
+    it("normalizes the additive Zombie Survival horde track without changing old modes", async () => {
+        const zombie = normalizeMatchTelemetry(await fixture("fixture-zombie"), "fixture-zombie");
+        const battleRoyale = normalizeMatchTelemetry(await fixture("fixture-br"), "fixture-br");
+        const legacyZombie = normalizeMatchTelemetry(
+            {
+                ...(await fixture("fixture-partial")),
+                matchId: "legacy-zombie",
+                mode: "zombieSurvival"
+            },
+            "legacy-zombie"
+        );
+
+        expect(zombie.features.zombieTracking).toBe(true);
+        expect(zombie.capture.zombieSnapshotIntervalMs).toBe(1000);
+        expect(zombie.zombieSnapshots).toHaveLength(5);
+        expect(zombie.zombieSnapshots[1].zombies[0]).toMatchObject({
+            zombieId: "z-1",
+            type: "normal",
+            x: -90,
+            z: -70
+        });
+        expect(zombie.events.filter((event) => event.type === "zombie_damage")).toHaveLength(2);
+        expect(zombie.events[1]).toMatchObject({
+            targetKind: "zombie",
+            targetId: "z-1",
+            attackId: "attack-1"
+        });
+        expect(battleRoyale.features.zombieTracking).toBe(false);
+        expect(battleRoyale.zombieSnapshots).toEqual([]);
+        expect(legacyZombie.features.zombieTracking).toBe(false);
+        expect(validateMatchTelemetry(zombie).valid).toBe(true);
+    });
 });
 
 describe("match tactical playback", () => {
@@ -282,6 +315,32 @@ describe("match tactical playback", () => {
         controller.seek(28_500);
         controller.setFilter("eliminations", false);
         expect(controller.state().combatEvent).toBeNull();
+        controller.destroy();
+    });
+
+    it("interpolates zombie motion and keeps simultaneous multi-target hits", async () => {
+        const telemetry = normalizeMatchTelemetry(await fixture("fixture-zombie"), "fixture-zombie");
+        const controller = new MatchPlaybackController(telemetry);
+
+        controller.setSkipIdle(false);
+        controller.seek(1500);
+        const state = controller.state();
+        expect(state.snapshot.zombies).toHaveLength(2);
+        expect(state.snapshot.zombies.find((zombie) => zombie.zombieId === "z-1")).toMatchObject({
+            x: -93,
+            z: -71
+        });
+        expect(state.combatEvents.map((event) => event.targetId)).toEqual(["z-1", "z-2"]);
+        expect(state.combatEvents.every((event) => event.attackId === "attack-1")).toBe(true);
+
+        controller.seek(2199);
+        expect(controller.state().snapshot.zombies.some((zombie) => zombie.zombieId === "z-2")).toBe(true);
+        controller.seek(2200);
+        expect(controller.state().snapshot.zombies.some((zombie) => zombie.zombieId === "z-2")).toBe(false);
+        controller.seek(2999);
+        expect(controller.state().snapshot.zombies.some((zombie) => zombie.zombieId === "z-3")).toBe(false);
+        controller.seek(3000);
+        expect(controller.state().snapshot.zombies.some((zombie) => zombie.zombieId === "z-3")).toBe(true);
         controller.destroy();
     });
 

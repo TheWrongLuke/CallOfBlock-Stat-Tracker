@@ -16,11 +16,15 @@ export async function initializeHomePage() {
     await whenReady();
 
     const shell = await initializeSiteShell({ loadStatus: false });
-    const data = await shell.loadStatsSlice("home");
+    const [home, status] = await Promise.all([
+        shell.loadStatsSlice("home"),
+        shell.loadStatsSlice("status", { fallback: false })
+    ]);
+    const data = mergeHomeStatus(home, status);
     renderHeroStatus(data);
 
     const [profiles, catalog, ownProfileResult] = await Promise.all([
-        loadPublicProfiles(shell.client),
+        loadPublicProfiles(shell.client, data),
         loadCosmeticCatalog(shell.client),
         shell.session?.user ? syncDiscordProfile(shell.client) : Promise.resolve({ data: null, error: null })
     ]);
@@ -34,7 +38,7 @@ export async function initializeHomePage() {
     renderHome(data, profiles, catalog);
     if (shell.session?.user) {
         const { initializeHomeNotifications } = await import("../features/home-notifications.js");
-        await initializeHomeNotifications(shell.client);
+        await initializeHomeNotifications(shell.client, shell.drawer);
     }
     void renderUpcomingPlaytest(shell.client);
     startChampionCarousel();
@@ -140,12 +144,40 @@ async function renderUpcomingPlaytest(client) {
     </div><div class="playtest-promo-actions upcoming-event-actions"><a href="/playtests/">Open playtest scheduler</a><span>Confirmed</span></div>`;
 }
 
-async function loadPublicProfiles(client) {
+async function loadPublicProfiles(client, data) {
     if (!client) return [];
     const columns =
         "id, username, avatar_url, display_name, minecraft_player_name, minecraft_player_id, avatar_source, custom_avatar_url, pfp_border, profile_title, unlocked_titles";
-    const result = await client.from("public_profiles").select(columns).limit(200);
+    const names = [
+        ...new Set([
+            "RTXLuke",
+            ...["battleRoyale", "deathmatch"].flatMap((mode) =>
+                (Array.isArray(data?.modes?.[mode]?.players) ? data.modes[mode].players : []).map(
+                    (player) => player?.name
+                )
+            )
+        ])
+    ].filter((name) => /^[A-Za-z0-9_]{1,16}$/.test(String(name || "")));
+    const filters = ["profile_title.eq.owner"];
+    if (names.length) filters.push(`minecraft_player_name.in.(${names.join(",")})`);
+    const result = await client
+        .from("public_profiles")
+        .select(columns)
+        .or(filters.join(","))
+        .limit(Math.max(2, names.length + 1));
     return result.error || !Array.isArray(result.data) ? [] : result.data;
+}
+
+function mergeHomeStatus(home, status) {
+    const summary = home && typeof home === "object" ? home : {};
+    const generatedAt = status?.generatedAt || status?.updatedAt || summary.generatedAt || "";
+    const age = Date.now() - Date.parse(generatedAt);
+    const stale = generatedAt && Number.isFinite(age) && age > 45_000;
+    const liveStatus = status?.liveStatus || summary.liveStatus || {};
+    return {
+        ...summary,
+        liveStatus: stale ? { ...liveStatus, onlinePlayers: 0, state: "offline", label: "Offline" } : liveStatus
+    };
 }
 
 async function loadCosmeticCatalog(client) {
@@ -176,7 +208,7 @@ function profileAvatar(profile, player, catalog, size) {
         const item = catalog.get(`icon:${source}`);
         if (item?.image_url) return item.image_url;
     }
-    if (source === "default") return "/assets/branding/icon.png";
+    if (source === "default") return "/assets/branding/icon-256.webp";
     return skinHeadUrl(profile?.minecraft_player_name || player?.name || "Steve", size);
 }
 
@@ -210,9 +242,11 @@ function startChampionCarousel() {
     if (!carousel) return;
     let mode = "battleRoyale";
     let timer = 0;
+    let visible = true;
     const restart = () => {
         window.clearInterval(timer);
         timer = window.setInterval(() => {
+            if (document.hidden || !visible) return;
             mode = mode === "battleRoyale" ? "deathmatch" : "battleRoyale";
             const panel = carousel.querySelector(`[data-champion-panel="${mode}"]`);
             if (panel) carousel.scrollTo({ left: panel.offsetLeft - carousel.offsetLeft, behavior: "smooth" });
@@ -226,8 +260,19 @@ function startChampionCarousel() {
             restart();
         }, 120);
     });
+    const observer = new IntersectionObserver((entries) => {
+        visible = entries[0]?.isIntersecting !== false;
+    });
+    observer.observe(carousel);
     restart();
-    window.addEventListener("pagehide", () => window.clearInterval(timer), { once: true });
+    window.addEventListener(
+        "pagehide",
+        () => {
+            window.clearInterval(timer);
+            observer.disconnect();
+        },
+        { once: true }
+    );
 }
 
 function redirectLegacyRoute() {

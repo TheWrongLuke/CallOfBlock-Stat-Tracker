@@ -262,7 +262,7 @@ const PROFILE_ICONS = [
         label: "Call of Block",
         category: "Default",
         rarity: "common",
-        image: "./assets/branding/icon.png",
+        image: "./assets/branding/icon-256.webp",
         unlock: "default"
     },
     {
@@ -515,6 +515,7 @@ const state = {
     authMessage: "",
     accountProfiles: [],
     accountProfilesReady: false,
+    accountProfilesQueryKey: "",
     accountProfileIndex: emptyAccountProfileIndex(),
     cosmeticOwnershipCache: new Map(),
     accountMessage: "",
@@ -714,6 +715,7 @@ const state = {
     cache: emptyCache()
 };
 let activeBadgeProgressHost = null;
+const statsDataCache = new Map();
 let badgeTooltipFrame = 0;
 let adminTicketSearchTimer = 0;
 let progressionSearchTimer = 0;
@@ -724,6 +726,8 @@ let weeklyTemplateLoadPromise = null;
 let matchDetailPage = null;
 let matchDetailLoadPromise = null;
 let accountProfilesRequest = null;
+let accountProfilesRequestKey = "";
+let accountProfilesGeneration = 0;
 let remotePlaytestsRequest = null;
 let cosmeticCatalogRequest = null;
 
@@ -976,7 +980,7 @@ async function applyAuthSession(session, shouldRender = false) {
         resetPlaytestViewer();
         await loadCosmeticCatalog({ force: true });
         await loadBadgeCatalogOverrides({ force: true });
-        await loadAccountProfiles();
+        await refreshAccountProfilesAfterAuth();
         if (pageNeedsPlaytestData()) await loadRemotePlaytests({ silent: true });
         applyRoute();
         enforceProtectedAdminRoute();
@@ -989,7 +993,7 @@ async function applyAuthSession(session, shouldRender = false) {
     await loadCosmeticCatalog({ force: true });
     await loadBadgeCatalogOverrides({ force: true });
     await claimProgressionCosmetics();
-    await loadAccountProfiles();
+    await refreshAccountProfilesAfterAuth();
     await loadOwnNotifications();
     if (pageNeedsPlaytestData()) await loadRemotePlaytests({ silent: true });
     await syncWeeklyMissions();
@@ -1071,7 +1075,7 @@ async function signOutDiscord() {
     resetPlaytestViewer();
     await loadCosmeticCatalog({ force: true });
     await loadBadgeCatalogOverrides({ force: true });
-    await loadAccountProfiles();
+    await loadAccountProfiles({ force: true });
     if (pageNeedsPlaytestData()) await loadRemotePlaytests({ silent: true });
     enforceProtectedAdminRoute();
     render();
@@ -2699,6 +2703,11 @@ async function loadData() {
 async function ensureStatsDataForRoute() {
     const sliceId = desiredStatsSliceId();
     if (statsSliceSatisfied(sliceId)) return true;
+    const cached = statsDataCache.get(sliceId);
+    if (cached) {
+        applyData(cached.data, cached.preview, cached.dataMode, { fullRender: true, sliceId });
+        return true;
+    }
     if (state.statsRefresh.request) {
         if (state.statsRefresh.requestSliceId === sliceId) return state.statsRefresh.request;
         state.statsRefresh.controller?.abort();
@@ -2760,13 +2769,20 @@ function statsApiSliceUrl(apiUrl, sliceId) {
 
 async function refreshData({ initial, signal = null, sliceId = desiredStatsSliceId() }) {
     let loadedSliceId = sliceId;
-    let supabaseData = await fetchSupabaseExport({ signal, rowId: sliceId });
+    const [initialSupabaseData, statusData] = await Promise.all([
+        fetchSupabaseExport({ signal, rowId: sliceId }),
+        fetchSupabaseExport({ signal, rowId: "status" })
+    ]);
+    let supabaseData = initialSupabaseData;
     if (!isStatsExport(supabaseData) && sliceId !== state.supabaseRowId) {
         supabaseData = await fetchSupabaseExport({ signal, rowId: state.supabaseRowId });
         loadedSliceId = state.supabaseRowId;
     }
     if (isStatsExport(supabaseData)) {
-        applyData(supabaseData, false, "Supabase database", { fullRender: initial, sliceId: loadedSliceId });
+        applyData(mergeCurrentLiveStatus(supabaseData, statusData), false, "Supabase database", {
+            fullRender: initial,
+            sliceId: loadedSliceId
+        });
         return true;
     }
 
@@ -2778,7 +2794,10 @@ async function refreshData({ initial, signal = null, sliceId = desiredStatsSlice
             loadedSliceId = state.supabaseRowId;
         }
         if (isStatsExport(apiData)) {
-            applyData(apiData, false, "Live API", { fullRender: initial, sliceId: loadedSliceId });
+            applyData(mergeCurrentLiveStatus(apiData, statusData), false, "Live API", {
+                fullRender: initial,
+                sliceId: loadedSliceId
+            });
             return true;
         }
     }
@@ -2799,8 +2818,23 @@ async function refreshData({ initial, signal = null, sliceId = desiredStatsSlice
         }
     }
 
-    applyData(data || emptyExport(), preview, dataMode, { fullRender: initial, sliceId: state.supabaseRowId });
+    applyData(mergeCurrentLiveStatus(data || emptyExport(), statusData), preview, dataMode, {
+        fullRender: initial,
+        sliceId: state.supabaseRowId
+    });
     return true;
+}
+
+function mergeCurrentLiveStatus(data, statusData) {
+    const stats = data && typeof data === "object" ? data : {};
+    const generatedAt = statusData?.generatedAt || statusData?.updatedAt || stats.generatedAt || "";
+    const age = Date.now() - Date.parse(generatedAt);
+    const stale = generatedAt && Number.isFinite(age) && age > 45_000;
+    const liveStatus = statusData?.liveStatus || stats.liveStatus || {};
+    return {
+        ...stats,
+        liveStatus: stale ? { ...liveStatus, onlinePlayers: 0, state: "offline", label: "Offline" } : liveStatus
+    };
 }
 
 function manuallyRefreshStats() {
@@ -2895,7 +2929,7 @@ async function fetchSupabaseExport({ signal = null, rowId = state.supabaseRowId 
 
     try {
         const response = await performanceDiagnostics.fetch(url, {
-            cache: "no-store",
+            ...(rowId === "status" ? { cache: "no-store" } : {}),
             signal,
             headers: {
                 apikey: state.supabaseKey,
@@ -2964,18 +2998,42 @@ async function selectOwnProfile(userId) {
     return { ...baseResult, extended: false, cosmeticsExtended: false };
 }
 
-async function loadAccountProfiles() {
-    if (accountProfilesRequest) return accountProfilesRequest;
-    const request = loadAccountProfilesNow();
+async function loadAccountProfiles({ force = false } = {}) {
+    const target = accountProfileQueryTarget();
+    if (!force && state.accountProfilesReady && state.accountProfilesQueryKey === target.key) return;
+    if (accountProfilesRequest && accountProfilesRequestKey === target.key) return accountProfilesRequest;
+    const generation = ++accountProfilesGeneration;
+    const request = loadAccountProfilesNow(target, generation);
     accountProfilesRequest = request;
+    accountProfilesRequestKey = target.key;
     try {
         return await request;
     } finally {
-        if (accountProfilesRequest === request) accountProfilesRequest = null;
+        if (accountProfilesRequest === request) {
+            accountProfilesRequest = null;
+            accountProfilesRequestKey = "";
+        }
     }
 }
 
-async function loadAccountProfilesNow() {
+async function refreshAccountProfilesAfterAuth() {
+    if (state.data) {
+        await loadAccountProfiles({ force: true });
+        return;
+    }
+
+    // Stats data defines the smallest useful public-profile query. Waiting for
+    // it avoids an owner-only request immediately followed by the real slice.
+    accountProfilesGeneration += 1;
+    accountProfilesRequest = null;
+    accountProfilesRequestKey = "";
+    state.accountProfiles = state.authProfile ? [state.authProfile] : [];
+    state.accountProfilesReady = false;
+    state.accountProfilesQueryKey = "";
+    rebuildAccountProfileIndex();
+}
+
+async function loadAccountProfilesNow(target, generation) {
     if (!state.authClient) {
         state.accountProfiles = [];
         state.accountProfilesReady = true;
@@ -2984,28 +3042,59 @@ async function loadAccountProfilesNow() {
     }
 
     try {
-        const [{ data, error }, inventoryResult] = await Promise.all([
-            fetchPublicProfiles({ limit: 1000 }),
-            fetchPublicCosmeticInventory()
-        ]);
+        const { data, error } = await fetchPublicProfiles({
+            minecraftNames: target.names,
+            includeOwner: true,
+            limit: target.names.length + 2
+        });
         if (error) throw error;
+        const profileIds = [
+            ...(Array.isArray(data) ? data.map((profile) => profile.id) : []),
+            state.authProfile?.id
+        ].filter(Boolean);
+        const inventoryResult = await fetchPublicCosmeticInventory(profileIds);
+        if (generation !== accountProfilesGeneration) return;
         const inventoryRows = inventoryResult.error ? [] : inventoryResult.data;
         state.accountProfiles = attachCosmeticInventory(Array.isArray(data) ? data : [], inventoryRows);
         if (state.authProfile) {
             state.authProfile = attachCosmeticInventory([state.authProfile], inventoryRows)[0] || state.authProfile;
         }
         state.accountProfilesReady = true;
+        state.accountProfilesQueryKey = target.key;
         rebuildAccountProfileIndex();
     } catch (error) {
+        if (generation !== accountProfilesGeneration) return;
         console.warn("Could not load account profiles", error);
         state.accountProfiles = state.authProfile ? [state.authProfile] : [];
         state.accountProfilesReady = true;
+        state.accountProfilesQueryKey = target.key;
         rebuildAccountProfileIndex();
     }
 
     // Stats and public account data load independently. Refresh account-backed
     // surfaces when the latter arrives so an already-open preview is not stale.
     if (state.data) render();
+}
+
+function accountProfileQueryTarget() {
+    const names = new Set(["RTXLuke"]);
+    for (const profile of Array.isArray(state.data?.profiles) ? state.data.profiles : []) {
+        const name = cleanMinecraftName(profile?.name);
+        if (name) names.add(name);
+    }
+    for (const mode of Object.values(state.data?.modes || {})) {
+        for (const player of Array.isArray(mode?.players) ? mode.players : []) {
+            const name = cleanMinecraftName(player?.name);
+            if (name) names.add(name);
+        }
+    }
+    const sorted = [...names].sort((first, second) => first.localeCompare(second));
+    return { names: sorted, key: sorted.map((name) => name.toLowerCase()).join("|") };
+}
+
+function cleanMinecraftName(value) {
+    const name = String(value || "").trim();
+    return /^[A-Za-z0-9_]{1,16}$/.test(name) ? name : "";
 }
 
 function resetNotificationState() {
@@ -3197,7 +3286,7 @@ async function claimCosmeticGift(notificationId) {
         notifications.giftPopupId = "";
         notifications.message = `${item.cosmeticName || "Cosmetic"} was added to your collection.`;
         state.accountMessage = notifications.message;
-        await loadAccountProfiles();
+        await loadAccountProfiles({ force: true });
         await loadOwnNotifications({ force: true, showPopup: false });
     } catch (error) {
         notifications.error = String(error?.message || "Could not claim this gift.");
@@ -3215,12 +3304,14 @@ function renderNotificationSurfaces() {
     renderNotificationGiftDialog();
 }
 
-async function fetchPublicCosmeticInventory() {
-    if (!state.authClient) return { data: [], error: null };
+async function fetchPublicCosmeticInventory(profileIds = []) {
+    const ids = [...new Set(profileIds.filter(Boolean))];
+    if (!state.authClient || !ids.length) return { data: [], error: null };
     return state.authClient
         .from(PUBLIC_COSMETIC_INVENTORY_VIEW)
         .select("profile_id, cosmetic_type, cosmetic_id, acquired_at")
-        .limit(10000);
+        .in("profile_id", ids)
+        .limit(Math.max(50, ids.length * 40));
 }
 
 function attachCosmeticInventory(profiles, inventoryRows) {
@@ -3344,12 +3435,18 @@ async function loadProfilesForVoteRows(availabilityRows) {
     return new Map((rows || []).map((profile) => [profile.id, profile]));
 }
 
-async function fetchPublicProfiles({ userIds = null, limit = 0 } = {}) {
+async function fetchPublicProfiles({ userIds = null, minecraftNames = null, includeOwner = false, limit = 0 } = {}) {
     if (!state.authClient) return { data: [], error: null };
 
     const run = async (table, columns) => {
         let query = state.authClient.from(table).select(columns);
         if (Array.isArray(userIds) && userIds.length) query = query.in("id", userIds);
+        const names = Array.isArray(minecraftNames) ? minecraftNames.map(cleanMinecraftName).filter(Boolean) : [];
+        if (names.length || includeOwner) {
+            const filters = includeOwner ? ["profile_title.eq.owner"] : [];
+            if (names.length) filters.push(`minecraft_player_name.in.(${names.join(",")})`);
+            query = query.or(filters.join(","));
+        }
         if (limit) query = query.limit(limit);
         return query;
     };
@@ -3595,6 +3692,8 @@ function initialsForName(value) {
 }
 
 function applyData(data, preview, dataMode, { fullRender = true, sliceId = state.supabaseRowId } = {}) {
+    const resolvedSliceId = data?.slice?.id || sliceId;
+    statsDataCache.set(resolvedSliceId, { data, preview, dataMode });
     const signature = exportSignature(data, sliceId);
     if (signature === state.dataSignature && state.preview === preview && state.dataMode === dataMode) return;
 
@@ -3605,6 +3704,7 @@ function applyData(data, preview, dataMode, { fullRender = true, sliceId = state
     state.dataSliceId = data.slice?.id || sliceId;
     state.dataSignature = signature;
     rebuildCache();
+    void loadAccountProfiles();
     void syncWeeklyMissions();
 
     const canonicalSelectedId = canonicalPlayerId(previousSelectedId);
@@ -3885,7 +3985,7 @@ function renderCreatorIdentity() {
     if (!(image instanceof HTMLImageElement)) return;
     const account = creatorAccountProfile();
     const profile = account ? accountLinkedStatsProfile(account) : null;
-    image.src = account ? accountAvatarUrl(account, profile, 160) : "./assets/branding/icon.png";
+    image.src = account ? accountAvatarUrl(account, profile, 160) : "./assets/branding/icon-256.webp";
     image.alt = account ? `${accountDisplayName(account)} profile icon` : "Creator profile icon";
 }
 
@@ -5996,7 +6096,7 @@ async function reloadProgressionAdminData() {
     state.store.catalogLoaded = false;
     state.store.loaded = false;
     await loadProgressionAdminData({ force: true });
-    await loadAccountProfiles();
+    await loadAccountProfiles({ force: true });
 }
 
 function formatReconciliationResult(value) {
@@ -6408,7 +6508,7 @@ async function submitProgressionGrant(form) {
         progression.playerMessage = `${cosmetic.name} was sent to ${profile.display_name || profile.username || "the selected player"}. It will be owned after they claim it.`;
         progression.loaded = false;
         await loadProgressionAdminData({ force: true });
-        await loadAccountProfiles();
+        await loadAccountProfiles({ force: true });
         if (profileId === state.authSession?.user?.id) await loadOwnNotifications({ force: true });
     } catch (error) {
         console.error("Could not grant cosmetic", error);
@@ -6457,7 +6557,7 @@ async function submitProgressionRevoke(form) {
         progression.playerRevokeKey = "";
         progression.loaded = false;
         await loadProgressionAdminData({ force: true });
-        await loadAccountProfiles();
+        await loadAccountProfiles({ force: true });
         if (profileId === state.authSession?.user?.id) await loadOwnNotifications({ force: true, showPopup: false });
         const reearned = progression.grants.some(
             (entry) =>
@@ -7343,7 +7443,7 @@ async function submitCatalogForm(form) {
         state.store.editingKey = key;
         state.store.loaded = false;
         await loadStoreData({ force: true });
-        if (reconciliation) await loadAccountProfiles();
+        if (reconciliation) await loadAccountProfiles({ force: true });
         state.store.message = `${name} ${editing ? "updated" : "created"}.${reconciliation ? ` ${formatReconciliationResult(reconciliation.data)}` : ""}`;
     } catch (error) {
         console.error("Could not save cosmetic catalog item", error);
@@ -7434,7 +7534,7 @@ async function toggleCatalogItemActive(key) {
         }
         state.store.loaded = false;
         await loadStoreData({ force: true });
-        if (reconciliation) await loadAccountProfiles();
+        if (reconciliation) await loadAccountProfiles({ force: true });
         state.store.message = `${item.name} ${item.active ? "archived" : "restored"}.${reconciliation ? ` ${formatReconciliationResult(reconciliation.data)}` : ""}`;
     } catch (error) {
         console.error("Could not change cosmetic visibility", error);
@@ -7636,7 +7736,7 @@ async function finalizeStoreCheckoutReturn() {
         state.authProfileExtended = ownProfile.extended;
         state.authCosmeticInventoryExtended = ownProfile.cosmeticsExtended;
         applyPlaytestProfile(ownProfile.data);
-        await loadAccountProfiles();
+        await loadAccountProfiles({ force: true });
 
         const type = String(data?.cosmetic_type || state.store.checkoutType || "");
         const id = String(data?.cosmetic_id || state.store.checkoutItemId || "");
@@ -13115,7 +13215,7 @@ async function submitAccountForm(form) {
         if (error) throw error;
         verifySavedProfile(data, payload);
         applyPlaytestProfile(data);
-        await loadAccountProfiles();
+        await loadAccountProfiles({ force: true });
         state.accountMessage = "Profile saved.";
     } catch (error) {
         console.error("Failed to save account profile", error);
@@ -14386,12 +14486,12 @@ function renderPlayerProfileHero(profile) {
                 </div>
             </div>
             <div class="player-profile-quickstats">
-                ${renderStatCard("BR Wins", br.stats.wins)}
-                ${renderStatCard("BR Kills", br.stats.kills)}
-                ${renderStatCard("DM Wins", dm.stats.wins)}
-                ${renderStatCard("DM Kills", dm.stats.kills)}
-                ${duel.exists ? renderStatCard("Duel Wins", duel.wins) : ""}
-                ${zombie.exists ? renderStatCard("Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000)) : ""}
+                ${renderStatCard("BR Wins", br.stats.wins, br.percentiles?.wins)}
+                ${renderStatCard("BR Kills", br.stats.kills, br.percentiles?.kills)}
+                ${renderStatCard("DM Wins", dm.stats.wins, dm.percentiles?.wins)}
+                ${renderStatCard("DM Kills", dm.stats.kills, dm.percentiles?.kills)}
+                ${duel.exists ? renderStatCard("Duel Wins", duel.wins, duel.percentiles?.wins) : ""}
+                ${zombie.exists ? renderStatCard("Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000), zombie.percentiles?.longestSurvivalMs) : ""}
             </div>
         </section>
     `;
@@ -14444,22 +14544,22 @@ function renderOverviewTab(profile) {
 
     return `
         <section class="detail-grid">
-            ${renderStatCard("BR Wins", br.stats.wins)}
-            ${renderStatCard("BR Kills", br.stats.kills)}
+            ${renderStatCard("BR Wins", br.stats.wins, br.percentiles?.wins)}
+            ${renderStatCard("BR Kills", br.stats.kills, br.percentiles?.kills)}
             ${renderStatCard("BR Games", br.stats.games)}
-            ${renderStatCard("BR Playtime", formatDuration(br.stats.playtimeSeconds))}
-            ${renderStatCard("DM Wins", dm.stats.wins)}
-            ${renderStatCard("DM Kills", dm.stats.kills)}
+            ${renderStatCard("BR Playtime", formatDuration(br.stats.playtimeSeconds), br.percentiles?.playtimeSeconds)}
+            ${renderStatCard("DM Wins", dm.stats.wins, dm.percentiles?.wins)}
+            ${renderStatCard("DM Kills", dm.stats.kills, dm.percentiles?.kills)}
             ${renderStatCard("DM Games", dm.stats.games)}
-            ${renderStatCard("DM Playtime", formatDuration(dm.stats.playtimeSeconds))}
-            ${renderStatCard("DM Win Rate", formatPercent(dm.derived.winRate))}
-            ${renderStatCard("DM HS%", formatPercent(dm.derived.headshotRate))}
+            ${renderStatCard("DM Playtime", formatDuration(dm.stats.playtimeSeconds), dm.percentiles?.playtimeSeconds)}
+            ${renderStatCard("DM Win Rate", formatPercent(dm.derived.winRate), dm.percentiles?.winRate)}
+            ${renderStatCard("DM HS%", formatPercent(dm.derived.headshotRate), dm.percentiles?.headshotRate)}
             ${renderStatCard("DM Highest Streak", dm.stats.bestKillStreak)}
             ${renderStatCard("Top DM Kills", dm.stats.topMatchKills)}
-            ${duel.exists ? renderStatCard("Duel Wins", duel.wins) : ""}
-            ${duel.exists ? renderStatCard("Duel Round Wins", duel.roundWins) : ""}
-            ${zombie.exists ? renderStatCard("Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000)) : ""}
-            ${zombie.exists ? renderStatCard("Zombie Kills", zombie.zombieKills) : ""}
+            ${duel.exists ? renderStatCard("Duel Wins", duel.wins, duel.percentiles?.wins) : ""}
+            ${duel.exists ? renderStatCard("Duel Round Wins", duel.roundWins, duel.percentiles?.roundWins) : ""}
+            ${zombie.exists ? renderStatCard("Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000), zombie.percentiles?.longestSurvivalMs) : ""}
+            ${zombie.exists ? renderStatCard("Zombie Kills", zombie.zombieKills, zombie.percentiles?.zombieKills) : ""}
         </section>
         <section class="detail-section">
             <h3>Profile Snapshot</h3>
@@ -14786,13 +14886,13 @@ function renderDuelModeBlock(payload, options = {}) {
         "Duel",
         [
             ["Games", duel.games],
-            ["Wins", duel.wins],
+            ["Wins", duel.wins, duel.percentiles?.wins],
             ["Losses", duel.losses],
-            ["Round Wins", duel.roundWins],
+            ["Round Wins", duel.roundWins, duel.percentiles?.roundWins],
             ["Round Losses", duel.roundLosses],
-            ["Kills", duel.kills],
+            ["Kills", duel.kills, duel.percentiles?.kills],
             ["Deaths", duel.deaths],
-            ["Damage", formatNumber(duel.damage)],
+            ["Damage", formatNumber(duel.damage), duel.percentiles?.damage],
             ["Flawless Rounds", duel.flawlessRounds]
         ],
         options
@@ -14806,12 +14906,16 @@ function renderZombieSurvivalModeBlock(payload, options = {}) {
     return renderSpecialModeBlock(
         "Zombie Survival",
         [
-            ["Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000)],
-            ["Total Survival", formatDuration(zombie.totalSurvivalMs / 1000)],
+            [
+                "Longest Survival",
+                formatDuration(zombie.longestSurvivalMs / 1000),
+                zombie.percentiles?.longestSurvivalMs
+            ],
+            ["Total Survival", formatDuration(zombie.totalSurvivalMs / 1000), zombie.percentiles?.totalSurvivalMs],
             ["Average Survival", formatDuration(zombie.averageSurvivalMs / 1000)],
             ["Games", zombie.games],
-            ["Zombie Kills", zombie.zombieKills],
-            ["Highest Match Kills", zombie.highestMatchKills],
+            ["Zombie Kills", zombie.zombieKills, zombie.percentiles?.zombieKills],
+            ["Highest Match Kills", zombie.highestMatchKills, zombie.percentiles?.highestMatchKills],
             ["Special Zombie Kills", specialZombieKillCount(zombie.variantKills)],
             ["Times Last Survivor", zombie.lastSurvivorCount],
             ["Chests Opened", zombie.chestsOpened],
@@ -14828,7 +14932,7 @@ function renderSpecialModeBlock(label, statItems, options = {}) {
         <section class="mode-block special-mode-block">
             <h3>${escapeHtml(label)}</h3>
             <div class="profile-stats ${compact ? "profile-stats-compact" : "profile-stats-detail"}">
-                ${visibleItems.map(([statLabel, value]) => renderProfileStat(statLabel, value)).join("")}
+                ${visibleItems.map(([statLabel, value, percentile]) => renderProfileStat(statLabel, value, percentile)).join("")}
             </div>
         </section>
     `;
@@ -14866,15 +14970,15 @@ function renderModeBlock(label, payload, options = {}) {
     const derived = player.derived;
     const compact = options.compact;
     const statItems = [
-        ["Wins", stats.wins],
-        ["Kills", stats.kills],
+        ["Wins", stats.wins, player.percentiles?.wins],
+        ["Kills", stats.kills, player.percentiles?.kills],
         ["Games", stats.games],
         ["Deaths", stats.deaths],
-        ["Win Rate", formatPercent(derived.winRate)],
-        ["Avg Kills", formatNumber(derived.avgKills)],
-        ["Playtime", formatDuration(stats.playtimeSeconds)],
-        ["HS%", formatPercent(derived.headshotRate)],
-        ["KD Ratio", formatNumber(derived.kdRatio)]
+        ["Win Rate", formatPercent(derived.winRate), player.percentiles?.winRate],
+        ["Avg Kills", formatNumber(derived.avgKills), player.percentiles?.avgKills],
+        ["Playtime", formatDuration(stats.playtimeSeconds), player.percentiles?.playtimeSeconds],
+        ["HS%", formatPercent(derived.headshotRate), player.percentiles?.headshotRate],
+        ["KD Ratio", formatNumber(derived.kdRatio), player.percentiles?.kdRatio]
     ];
     if (!compact) {
         statItems.push(["Highest Streak", stats.bestKillStreak]);
@@ -14885,7 +14989,7 @@ function renderModeBlock(label, payload, options = {}) {
         <section class="mode-block">
             <h3>${escapeHtml(label)}</h3>
             <div class="profile-stats ${compact ? "profile-stats-compact" : "profile-stats-detail"}">
-                ${statItems.map(([statLabel, value]) => renderProfileStat(statLabel, value)).join("")}
+                ${statItems.map(([statLabel, value, percentile]) => renderProfileStat(statLabel, value, percentile)).join("")}
             </div>
             ${
                 compact
@@ -15103,16 +15207,35 @@ function renderWeaponRow(entry) {
     `;
 }
 
-function renderStatCard(label, value) {
-    return `<article class="detail-stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`;
+function renderStatCard(label, value, percentile = null) {
+    return `<article class="detail-stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong>${renderPercentileContext(percentile)}</article>`;
 }
 
 function renderSnapshotItem(label, value) {
     return `<article class="snapshot-item"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></article>`;
 }
 
-function renderProfileStat(label, value) {
-    return `<div class="profile-stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`;
+function renderProfileStat(label, value, percentile = null) {
+    return `<div class="profile-stat"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong>${renderPercentileContext(percentile)}</div>`;
+}
+
+function renderPercentileContext(context) {
+    const rank = Math.max(1, Math.round(number(context?.rank)));
+    const population = Math.max(0, Math.round(number(context?.qualifiedPlayers)));
+    if (!context || population < 2 || rank > population) return "";
+    const percent = formatTopPercent(context.topPercent);
+    const mode = PUBLIC_MODE_LABELS[context.mode] || labelFromIdentifier(context.mode || "overall");
+    const minimumGames = Math.max(1, Math.round(number(context.minimumGames)));
+    const label = population < 20 ? `#${rank} of ${population}` : `Top ${percent}`;
+    const tooltip = `Top ${percent} of ${population} qualified ${mode} players. Rank #${rank}. Minimum ${minimumGames} completed ${minimumGames === 1 ? "match" : "matches"}. Ties share the same rank.`;
+    return `<button class="percentile-context" type="button" aria-label="${escapeHtml(tooltip)}" data-tooltip="${escapeHtml(tooltip)}">${escapeHtml(label)}</button>`;
+}
+
+function formatTopPercent(value) {
+    const percent = Math.max(0, number(value));
+    if (percent > 0 && percent < 0.1) return "<0.1%";
+    const precision = percent < 10 && Math.abs(percent - Math.round(percent)) > 0.049 ? 1 : 0;
+    return `${percent.toFixed(precision)}%`;
 }
 
 function renderEmptyDetail(text) {
@@ -15263,7 +15386,8 @@ function normalizeDuelProfile(value) {
         deaths: number(value?.deaths),
         damage: number(value?.damage),
         flawlessRounds: number(value?.flawlessRounds),
-        kitsUsed: normalizeNumberMap(value?.kitsUsed)
+        kitsUsed: normalizeNumberMap(value?.kitsUsed),
+        percentiles: value?.percentiles || {}
     };
 }
 
@@ -15284,7 +15408,8 @@ function normalizeZombieSurvivalProfile(value) {
         lastSurvivorCount: number(value?.lastSurvivorCount),
         chestsOpened: number(value?.chestsOpened),
         vehiclesUsed: number(value?.vehiclesUsed),
-        deathReasons: normalizeNumberMap(value?.deathReasons)
+        deathReasons: normalizeNumberMap(value?.deathReasons),
+        percentiles: value?.percentiles || {}
     };
 }
 

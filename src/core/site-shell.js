@@ -1,56 +1,84 @@
+import { getDrawerController } from "./drawer-controller.js";
+
 const CONTACT_EMAIL_CODES = [
     108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64,
     103, 109, 97, 105, 108, 46, 99, 111, 109
 ];
 
+const statsSliceCache = new Map();
+const statsSliceRequests = new Map();
+let siteShellPromise = null;
+
 export async function initializeSiteShell({ loadStatus = true } = {}) {
+    if (!siteShellPromise) siteShellPromise = initializeSiteShellOnce();
+    const shell = await siteShellPromise;
+    if (loadStatus) await shell.loadHeroStatus();
+    return shell;
+}
+
+async function initializeSiteShellOnce() {
     bindContactLinks();
     bindAvatarFallbacks();
     bindStaticHashNavigation();
 
     const client = createSupabaseClient();
+    const drawer = getDrawerController();
     const shell = {
         client,
+        drawer,
         session: null,
         profile: null,
-        accountPanelOpen: false,
         accountPanelAddon: null,
+        heroStatusRequest: null,
+        get accountPanelOpen() {
+            return drawer.isActive("profile");
+        },
         signIn() {
             return client ? signIn(client) : Promise.resolve();
         },
         signOut() {
             return client?.auth?.signOut ? client.auth.signOut() : Promise.resolve();
         },
-        async loadStatsSlice(id) {
-            return loadStatsSlice(id);
+        async loadStatsSlice(id, options = {}) {
+            return loadStatsSlice(id, options);
+        },
+        async loadHeroStatus({ force = false } = {}) {
+            if (shell.heroStatusRequest && !force) return shell.heroStatusRequest;
+            const request = Promise.all([
+                loadStatsSlice("home", { force }),
+                loadStatsSlice("status", { force, fallback: false })
+            ]).then(([home, status]) => {
+                const data = mergeHomeStatus(home, status);
+                renderHeroStatus(data);
+                return data;
+            });
+            shell.heroStatusRequest = request;
+            try {
+                return await request;
+            } finally {
+                if (shell.heroStatusRequest === request) shell.heroStatusRequest = null;
+            }
         },
         setProfile(profile) {
             shell.profile = profile || null;
             renderAccountWidget(shell);
-            renderAccountPanel(shell);
+            if (!shell.session?.user) drawer.close();
+            else drawer.refresh("profile");
         },
         setAccountPanelAddon(renderer) {
             shell.accountPanelAddon = typeof renderer === "function" ? renderer : null;
-            renderAccountPanel(shell);
+            drawer.refresh("profile");
         },
         refreshAccountPanel() {
             renderAccountWidget(shell);
-            renderAccountPanel(shell);
+            drawer.refresh("profile");
         }
     };
-    document.addEventListener("cob:notification-panel-open", () => closeAccountPanel(shell, false));
+    drawer.register("profile", ({ host }) => renderAccountPanel(shell, host));
+    drawer.subscribe(() => renderAccountWidget(shell));
 
     renderAccountWidget(shell, false);
-    const tasks = [initializeAuth(shell)];
-    if (loadStatus) {
-        tasks.push(
-            loadStatsSlice("home").then((data) => {
-                renderHeroStatus(data);
-                return data;
-            })
-        );
-    }
-    await Promise.allSettled(tasks);
+    await initializeAuth(shell);
     return shell;
 }
 
@@ -115,27 +143,74 @@ function createSupabaseClient() {
     });
 }
 
-async function loadStatsSlice(id) {
+async function loadStatsSlice(id, { force = false, fallback = id !== "status" } = {}) {
     const baseUrl = String(window.COB_SUPABASE_URL || "").replace(/\/+$/, "");
     const key = String(window.COB_SUPABASE_KEY || "").trim();
     if (!baseUrl || !key) return null;
+    const cached = statsSliceCache.get(id);
+    const maxAge = id === "status" ? 15_000 : 300_000;
+    if (!force && cached && Date.now() - cached.storedAt < maxAge) return cached.payload;
+    if (!force && statsSliceRequests.has(id)) return statsSliceRequests.get(id);
+
+    const request = fetchStatsSlice(id, { baseUrl, key, fallback }).finally(() => {
+        if (statsSliceRequests.get(id) === request) statsSliceRequests.delete(id);
+    });
+    statsSliceRequests.set(id, request);
+    const payload = await request;
+    if (payload) statsSliceCache.set(id, { payload, storedAt: Date.now() });
+    return payload;
+}
+
+async function fetchStatsSlice(id, { baseUrl, key, fallback }) {
     const table = String(window.COB_SUPABASE_TABLE || "cob_stats_exports");
     const fallbackId = String(window.COB_SUPABASE_ROW_ID || "live");
-    for (const rowId of [...new Set([id, fallbackId])]) {
+    const rowIds = fallback ? [...new Set([id, fallbackId])] : [id];
+    for (const rowId of rowIds) {
         const url = `${baseUrl}/rest/v1/${encodeURIComponent(table)}?id=eq.${encodeURIComponent(rowId)}&select=payload&limit=1`;
+        const startedAt = performance.now();
         try {
             const response = await fetch(url, {
-                cache: "no-store",
+                ...(rowId === "status" ? { cache: "no-store" } : {}),
                 headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" }
             });
+            const text = await response.text();
+            recordPublicDataRequest(rowId, startedAt, response.status, text.length);
             if (!response.ok) continue;
-            const rows = await response.json();
+            const rows = JSON.parse(text);
             if (rows?.[0]?.payload) return rows[0].payload;
         } catch (error) {
+            recordPublicDataRequest(rowId, startedAt, 0, 0, error);
             console.warn(`Could not load the ${rowId} statistics slice`, error);
         }
     }
     return null;
+}
+
+function mergeHomeStatus(home, status) {
+    const summary = home && typeof home === "object" ? home : {};
+    const liveStatus = status?.liveStatus || summary.liveStatus || {};
+    const generatedAt = status?.generatedAt || status?.updatedAt || summary.generatedAt || "";
+    const age = Date.now() - Date.parse(generatedAt);
+    const stale = generatedAt && Number.isFinite(age) && age > 45_000;
+    return {
+        ...summary,
+        liveStatus: stale ? { ...liveStatus, onlinePlayers: 0, state: "offline", label: "Offline" } : liveStatus
+    };
+}
+
+function recordPublicDataRequest(rowId, startedAt, status, responseSize, error = null) {
+    const diagnostics = (globalThis.__cobPublicDataDiagnostics ||= { requests: [] });
+    diagnostics.requests.push({
+        timestamp: new Date().toISOString(),
+        page: document.body?.dataset.publicRoute || "home",
+        operation: "stats-slice",
+        rowId,
+        durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+        responseSize,
+        status,
+        error: error ? String(error?.message || error) : ""
+    });
+    if (diagnostics.requests.length > 200) diagnostics.requests.splice(0, diagnostics.requests.length - 200);
 }
 
 async function initializeAuth(shell) {
@@ -154,6 +229,7 @@ async function initializeAuth(shell) {
                 return;
             }
             shell.session = session || null;
+            if (!shell.session?.user) shell.drawer.close();
             renderAccountWidget(shell, true);
         });
     } catch (error) {
@@ -214,34 +290,20 @@ function renderAccountWidget(shell, ready = true) {
 
 function openAccountPanel(shell) {
     if (!shell.session?.user) return;
-    document.dispatchEvent(new CustomEvent("cob:account-panel-open"));
-    shell.accountPanelOpen = true;
-    renderAccountWidget(shell);
-    renderAccountPanel(shell);
+    shell.drawer.open("profile");
     window.requestAnimationFrame(() => document.querySelector("[data-shell-account-close]")?.focus());
 }
 
 function closeAccountPanel(shell, restoreFocus = true) {
-    if (!shell.accountPanelOpen) return;
-    shell.accountPanelOpen = false;
-    renderAccountWidget(shell);
-    renderAccountPanel(shell);
+    if (!shell.drawer.close("profile")) return;
     if (restoreFocus) {
         window.requestAnimationFrame(() => document.querySelector("[data-shell-account-open]")?.focus());
     }
 }
 
-function renderAccountPanel(shell) {
-    let host = document.getElementById("account-side-panel-host");
-    if (!host) {
-        host = document.createElement("div");
-        host.id = "account-side-panel-host";
-        document.body.appendChild(host);
-    }
-    if (!shell.accountPanelOpen || !shell.session?.user) {
-        document.body.classList.remove("account-drawer-open");
-        if (host.dataset.shellPanel === "profile") host.innerHTML = "";
-        delete host.dataset.shellPanel;
+function renderAccountPanel(shell, host) {
+    if (!shell.drawer.isActive("profile") || !shell.session?.user) {
+        host.innerHTML = "";
         return;
     }
 
@@ -267,8 +329,6 @@ function renderAccountPanel(shell) {
     const title = String(profile.resolved_title_text || "").trim();
     const rarity = cleanRarity(profile.resolved_title_rarity);
     const level = accountLevel(profile.xp);
-    document.body.classList.add("account-drawer-open");
-    host.dataset.shellPanel = "profile";
     host.innerHTML = `<div class="profile-drawer-backdrop" data-shell-account-backdrop>
         <aside class="profile-drawer" role="dialog" aria-modal="true" aria-labelledby="shell-profile-drawer-title">
             <header class="profile-drawer-header">

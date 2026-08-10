@@ -19,7 +19,7 @@ const TICKET_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a
 
 export async function initializeFeedbackPage() {
     await whenReady();
-    const shell = await initializeSiteShell();
+    const shell = await initializeSiteShell({ loadStatus: false });
     const state = createState(shell);
     const draft = createFeedbackDraftSession({ getUserId: () => state.shell.session?.user?.id || "" });
 

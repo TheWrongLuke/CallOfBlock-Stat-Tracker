@@ -1554,6 +1554,7 @@ body.replay-fullscreen-open {
 .tactical-map-grid,
 .tactical-player-layer,
 .tactical-vehicle-layer,
+.tactical-zombie-layer,
 .tactical-event-lines {
     position: absolute;
     inset: 0;
@@ -1625,7 +1626,26 @@ body.replay-fullscreen-open {
 }
 
 .tactical-player-layer,
-.tactical-vehicle-layer {
+.tactical-vehicle-layer,
+.tactical-zombie-layer {
+    pointer-events: none;
+}
+
+.tactical-zombie-layer {
+    z-index: 5;
+    contain: layout paint style;
+}
+
+.tactical-zombie-marker {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--tactical-zombie-marker-size, 5px);
+    height: var(--tactical-zombie-marker-size, 5px);
+    border: 1px solid rgba(255, 225, 225, 0.88);
+    border-radius: 50%;
+    background: #ef3f45;
+    box-shadow: 0 0 0 1px rgba(64, 0, 3, 0.86);
     pointer-events: none;
 }
 
@@ -1854,6 +1874,11 @@ body.replay-fullscreen-open {
     stroke: var(--red);
 }
 
+.tactical-event-lines .zombie-hit-line {
+    stroke: #ff5a60;
+    stroke-dasharray: 4 4;
+}
+
 .tactical-event-lines text {
     paint-order: stroke;
     stroke: rgba(0, 0, 0, 0.88);
@@ -2027,6 +2052,7 @@ body.replay-fullscreen-open {
 
 .match-speed-control,
 .match-marker-controls,
+.match-zombie-controls,
 .match-event-filters {
     display: flex;
     align-items: center;
@@ -2039,6 +2065,7 @@ body.replay-fullscreen-open {
 
 .match-speed-control legend,
 .match-marker-controls legend,
+.match-zombie-controls legend,
 .match-event-filters legend {
     width: 88px;
     color: var(--muted);
@@ -2061,6 +2088,7 @@ body.replay-fullscreen-open {
 
 .match-speed-control input,
 .match-marker-controls input,
+.match-zombie-controls input,
 .match-event-filters input,
 .match-skip-control input {
     accent-color: var(--gold);
@@ -2069,7 +2097,7 @@ body.replay-fullscreen-open {
 .match-marker-size {
     min-height: 34px;
     display: grid;
-    grid-template-columns: auto minmax(100px, 180px) 28px;
+    grid-template-columns: auto minmax(100px, 180px) minmax(36px, max-content);
     gap: 8px;
     align-items: center;
     color: var(--muted);
@@ -2591,6 +2619,7 @@ body.replay-fullscreen-open {
 
     .match-speed-control legend,
     .match-marker-controls legend,
+    .match-zombie-controls legend,
     .match-event-filters legend {
         width: 100%;
     }
@@ -3917,7 +3946,7 @@ body.home-route::before {
     background:
         linear-gradient(90deg, rgba(9, 10, 15, 0.92) 0%, rgba(9, 10, 15, 0.62) 44%, rgba(9, 10, 15, 0.24) 100%),
         linear-gradient(180deg, rgba(9, 13, 16, 0.14) 0%, rgba(9, 13, 16, 0.18) 55%, #090d10 100%),
-        url("../home-hero-bg.png") center / cover no-repeat;
+        url("../home-hero-bg.webp") center / cover no-repeat;
 }
 
 .home-route .hero::after {
@@ -4134,6 +4163,13 @@ body[data-public-route="about"] #home-view {
 
 body[data-public-route="help"] #home-view > :not(.guide-grid, .command-help) {
     display: none;
+}
+
+body[data-public-route="playtests"] .hero,
+body[data-public-route="feedback"] .hero,
+body[data-public-route="help"] .hero,
+body[data-public-route="about"] .hero {
+    grid-template-columns: minmax(0, 1fr);
 }
 
 .account-widget {
@@ -6306,7 +6342,7 @@ body.notification-gift-open {
 
 .admin-command-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 12px;
 }
 
@@ -8766,7 +8802,76 @@ img.identity-avatar {
 }
 
 .profile-stat {
+    position: relative;
     padding: 14px;
+}
+
+.admin-command-list {
+    gap: 0;
+}
+
+.admin-command-entry {
+    grid-template-columns: minmax(260px, 2fr) minmax(120px, 0.8fr) minmax(90px, 0.55fr) minmax(160px, 1fr) minmax(
+            110px,
+            0.65fr
+        );
+    gap: 12px;
+    align-items: start;
+    border-top: 1px solid rgba(238, 244, 241, 0.09);
+    padding: 14px 0;
+}
+
+.admin-command-entry:last-child {
+    padding-bottom: 0;
+}
+
+.admin-command-value,
+.admin-command-description {
+    min-width: 0;
+}
+
+.admin-command-value > span,
+.admin-command-description > span {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--gold);
+    font: 600 0.69rem/1.2 "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.admin-command-value strong,
+.admin-command-description p {
+    display: block;
+    margin: 0;
+    color: rgba(238, 244, 241, 0.78);
+    font: 500 0.82rem/1.45 "Chakra Petch", sans-serif;
+    overflow-wrap: anywhere;
+}
+
+.admin-command-code code {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    padding: 7px 8px;
+    overflow-wrap: anywhere;
+    white-space: normal;
+    word-break: break-word;
+}
+
+.admin-command-description {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+    .admin-command-entry {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 11px 14px;
+    }
+
+    .admin-command-code,
+    .admin-command-description {
+        grid-column: 1 / -1;
+    }
 }
 
 .profile-stat strong {
@@ -11115,6 +11220,10 @@ body.cosmetic-picker-open {
     padding: 18px;
 }
 
+.detail-stat {
+    position: relative;
+}
+
 .detail-stat span,
 .snapshot-item span {
     display: block;
@@ -11128,6 +11237,83 @@ body.cosmetic-picker-open {
     margin-top: 7px;
     font-family: "Chakra Petch", sans-serif;
     font-size: 1.35rem;
+}
+
+.percentile-context {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    margin-top: 9px;
+    border: 1px solid rgba(255, 203, 107, 0.34);
+    border-radius: 999px;
+    padding: 4px 9px;
+    background: rgba(255, 203, 107, 0.08);
+    color: var(--gold);
+    cursor: help;
+    font: 600 0.72rem/1 "Chakra Petch", sans-serif;
+    transition:
+        transform 120ms ease,
+        border-color 120ms ease,
+        background-color 120ms ease;
+}
+
+.percentile-context:hover,
+.percentile-context:focus-visible {
+    border-color: rgba(255, 203, 107, 0.7);
+    background: rgba(255, 203, 107, 0.15);
+    transform: translateY(-1px);
+    outline: none;
+}
+
+.percentile-context::after {
+    position: absolute;
+    z-index: 80;
+    bottom: calc(100% + 9px);
+    left: 50%;
+    width: min(290px, calc(100vw - 32px));
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    padding: 9px 10px;
+    background: #0b1320;
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
+    color: var(--text);
+    content: attr(data-tooltip);
+    font: 500 0.75rem/1.35 "Chakra Petch", sans-serif;
+    opacity: 0;
+    pointer-events: none;
+    text-align: left;
+    transform: translate(-50%, 4px);
+    transition:
+        opacity 140ms ease,
+        transform 140ms ease;
+}
+
+.percentile-context:hover::after,
+.percentile-context:focus-visible::after {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+@media (max-width: 700px) {
+    .percentile-context {
+        min-height: 40px;
+    }
+
+    .percentile-context::after {
+        position: fixed;
+        right: 16px;
+        bottom: 16px;
+        left: 16px;
+        width: auto;
+        transform: translateY(4px);
+    }
+
+    .percentile-context:hover::after,
+    .percentile-context:focus-visible::after {
+        transform: translateY(0);
+    }
 }
 
 .detail-section {
@@ -11395,8 +11581,7 @@ code {
         align-items: start;
     }
 
-    .command-groups,
-    .admin-command-grid {
+    .command-groups {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
@@ -12071,6 +12256,32 @@ code {
 
     .admin-help-hero {
         padding: 18px;
+    }
+
+    .admin-command-group {
+        padding: 14px;
+    }
+
+    .admin-command-entry {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 11px 14px;
+        padding: 16px 0;
+    }
+
+    .admin-command-code,
+    .admin-command-description {
+        grid-column: 1 / -1;
+    }
+
+    .admin-command-value > span,
+    .admin-command-description > span {
+        font-size: 0.72rem;
+    }
+
+    .admin-command-value strong,
+    .admin-command-description p,
+    .admin-command-code code {
+        font-size: 0.82rem;
     }
 
     .podium-list {

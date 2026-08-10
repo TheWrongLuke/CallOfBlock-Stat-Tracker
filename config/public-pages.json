@@ -3,7 +3,7 @@
         "directory": "",
         "path": "/",
         "title": "Call of Block | Competitive Minecraft PvP & Battle Royale",
-        "description": "Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Deathmatch, Zombie Survival, guns, vehicles, destruction, parkour, leaderboards, player profiles and tactical match replays."
+        "description": "Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Team Deathmatch, Free For All, Duels, Zombie Survival, guns, vehicles, destruction, parkour, player statistics and tactical match replays."
     },
     "stats": {
         "directory": "stats",
@@ -61,8 +61,8 @@
         "kicker": "Independent Project",
         "heading": "About Call of Block",
         "intro": [
-            "Call of Block is an independent Minecraft 1.20.1 Forge project built around competitive PvP, community playtests and transparent player statistics.",
-            "Its available and experimental modes combine TacZ weapons, Superb Warfare vehicles, Parcool movement, destructible maps and server-authoritative match tracking."
+            "Call of Block is an independent Minecraft 1.20.1 Forge multiplayer project built around competitive PvP, community playtests and transparent player statistics.",
+            "The official modpack required to play is distributed through CurseForge and Modrinth, while callofblock.com is the official website for server information, statistics, leaderboards, match history, playtests and community tools."
         ]
     }
 }

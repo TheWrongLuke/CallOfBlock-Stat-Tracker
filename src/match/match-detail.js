@@ -348,6 +348,18 @@ export function createMatchDetailPage({
                         <span>Nicknames</span>
                     </label>
                 </fieldset>
+                ${
+                    telemetry.mode === "zombieSurvival" && telemetry.features?.zombieTracking
+                        ? `<fieldset class="match-zombie-controls">
+                            <legend>Zombies</legend>
+                            <label class="match-marker-size">
+                                <span>Zombie size</span>
+                                <input type="range" min="0.5" max="4" step="0.5" value="${playbackPreferences.markers.zombieRadiusBlocks}" data-match-zombie-size>
+                                <output data-match-zombie-size-output>${playbackPreferences.markers.zombieRadiusBlocks} blocks</output>
+                            </label>
+                        </fieldset>`
+                        : ""
+                }
                 <fieldset class="match-event-filters">
                     <legend>Events</legend>
                     ${Object.entries(FILTER_LABELS)
@@ -382,7 +394,7 @@ export function createMatchDetailPage({
                 <div class="match-timeline-track">
                     <input id="match-timeline-range" type="range" min="0" max="${Math.max(1, telemetry.durationMs)}" step="100" value="0" data-match-timeline>
                     <div class="match-timeline-markers" data-match-timeline-markers>
-                        ${telemetry.events.map(renderTimelineMarker).join("")}
+                        ${telemetry.events.filter(isTimelineEvent).map(renderTimelineMarker).join("")}
                     </div>
                 </div>
                 <div>
@@ -612,7 +624,7 @@ export function createMatchDetailPage({
             playbackState.snapshot,
             playbackState.events,
             playbackState.currentEventId,
-            playbackState.combatEvent
+            playbackState.combatEvents
         );
         setText("[data-match-time]", formatMatchTime(playbackState.snapshot?.timeMs || 0));
         setText("[data-match-status]", `${playbackState.statusLabel} - ${playbackState.moment?.label || "Snapshot"}`);
@@ -838,6 +850,13 @@ export function createMatchDetailPage({
             const size = Math.max(0, Math.min(4, Math.round(Number(event.target.value) || 0)));
             mapRenderer?.setMarkerOptions({ size });
             setText("[data-match-marker-size-output]", `${size}/4`);
+            rememberPlaybackPreferences();
+            return;
+        }
+        if (event.target.matches("[data-match-zombie-size]")) {
+            const radius = Math.max(0.5, Math.min(4, Math.round((Number(event.target.value) || 2.5) * 2) / 2));
+            mapRenderer?.setMarkerOptions({ zombieRadiusBlocks: radius });
+            setText("[data-match-zombie-size-output]", `${radius} blocks`);
             rememberPlaybackPreferences();
         }
     }
@@ -1213,6 +1232,10 @@ function filterForEventType(type) {
     if (["rapid_streak", "ace"].includes(type)) return "streaks";
     if (type === "respawn") return "respawns";
     return "";
+}
+
+function isTimelineEvent(event) {
+    return !["zombie_damage", "zombie_death"].includes(event?.type);
 }
 
 function eventPassesFilters(event, filters) {

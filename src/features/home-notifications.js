@@ -2,14 +2,22 @@ import { createNotificationApi } from "../api/notifications.js";
 import { renderGiftNotificationPopup, renderNotificationInbox } from "../views/notifications.js";
 
 const POPUP_SEEN_KEY = "cob_notification_popup_seen_v1";
+let initializationPromise = null;
 
-export async function initializeHomeNotifications(client) {
-    if (!client) return;
+export async function initializeHomeNotifications(client, drawer) {
+    if (!client || !drawer) return;
+    if (initializationPromise) return initializationPromise;
+    initializationPromise = initialize(client, drawer);
+    return initializationPromise;
+}
+
+async function initialize(client, drawer) {
     const api = createNotificationApi(client);
     const state = {
+        drawer,
         items: [],
         loading: false,
-        open: false,
+        loadVersion: 0,
         filter: "all",
         expandedId: "",
         busyId: "",
@@ -19,18 +27,17 @@ export async function initializeHomeNotifications(client) {
     };
 
     document.addEventListener("click", (event) => handleClick(event, api, state));
-    document.addEventListener("cob:account-panel-open", () => {
-        if (!state.open) return;
-        state.open = false;
-        render(state);
-    });
+    drawer.register("notifications", ({ host }) => renderDrawer(state, host));
+    drawer.subscribe(() => renderBell(state));
     await loadNotifications(api, state, true);
 }
 
 async function loadNotifications(api, state, showGift) {
+    const loadVersion = ++state.loadVersion;
     state.loading = true;
     render(state);
     const result = await api.listOwn();
+    if (loadVersion !== state.loadVersion) return;
     state.loading = false;
     if (result.error) {
         state.error = "Notifications could not be loaded right now.";
@@ -53,15 +60,22 @@ async function handleClick(event, api, state) {
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
     if (target.closest("[data-notification-panel-open]")) {
-        document.dispatchEvent(new CustomEvent("cob:notification-panel-open"));
-        state.open = true;
+        state.drawer.open("notifications");
         state.message = "";
         render(state);
+        window.requestAnimationFrame(() => document.querySelector("[data-home-notification-close]")?.focus());
         await loadNotifications(api, state, false);
         return;
     }
     if (target.closest("[data-home-notification-close]")) {
-        state.open = false;
+        state.drawer.close("notifications");
+        render(state);
+        window.requestAnimationFrame(() => document.querySelector("[data-notification-panel-open]")?.focus());
+        return;
+    }
+    const backdrop = target.closest("[data-home-notification-backdrop]");
+    if (backdrop && event.target === backdrop) {
+        state.drawer.close("notifications");
         render(state);
         return;
     }
@@ -150,7 +164,7 @@ async function withBusy(state, id, action) {
 
 function render(state) {
     renderBell(state);
-    renderDrawer(state);
+    state.drawer.refresh("notifications");
     renderGift(state);
 }
 
@@ -159,25 +173,14 @@ function renderBell(state) {
     if (!(button instanceof HTMLButtonElement)) return;
     const unread = state.items.filter((item) => !item.readAt).length;
     button.classList.toggle("has-unread", unread > 0);
-    button.setAttribute("aria-expanded", state.open ? "true" : "false");
+    button.setAttribute("aria-expanded", state.drawer.isActive("notifications") ? "true" : "false");
     button.setAttribute("aria-label", `Open notifications${unread ? `, ${unread} unread` : ""}`);
     button.querySelector(":scope > strong")?.remove();
     if (unread) button.insertAdjacentHTML("beforeend", `<strong>${unread > 99 ? "99+" : unread}</strong>`);
 }
 
-function renderDrawer(state) {
-    let host = document.getElementById("account-side-panel-host");
-    if (!host) {
-        host = document.createElement("div");
-        host.id = "account-side-panel-host";
-        document.body.appendChild(host);
-    }
-    document.body.classList.toggle("account-drawer-open", state.open);
-    if (!state.open) {
-        host.innerHTML = "";
-        return;
-    }
-    host.innerHTML = `<div class="profile-drawer-backdrop">
+function renderDrawer(state, host) {
+    host.innerHTML = `<div class="profile-drawer-backdrop" data-home-notification-backdrop>
         <aside class="profile-drawer notification-drawer" role="dialog" aria-modal="true" aria-labelledby="home-notification-title">
             <header class="profile-drawer-header"><h2 id="home-notification-title">NOTIFICATIONS</h2><button class="profile-drawer-close" type="button" data-home-notification-close aria-label="Close notification panel">&times;</button></header>
             ${renderNotificationInbox({

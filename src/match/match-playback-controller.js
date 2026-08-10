@@ -32,37 +32,43 @@ export class MatchPlaybackController {
         this.sequenceSnapshotIndex = 0;
         this.currentSnapshotIndex = 0;
         this.currentEventId = "";
+        this.eventById = new Map(telemetry.events.map((event) => [event.eventId, event]));
         this.playheadMs = telemetry.snapshots[0]?.timeMs || 0;
         this.rebuildSequence(0);
     }
 
     snapshot() {
-        return interpolateSnapshotAtTime(this.telemetry.snapshots, this.playheadMs);
+        const snapshot = interpolateSnapshotAtTime(this.telemetry.snapshots, this.playheadMs);
+        if (!snapshot) return null;
+        return {
+            ...snapshot,
+            zombies: interpolateZombieStatesAtTime(this.telemetry.zombieSnapshots || [], this.playheadMs)
+        };
     }
 
-    currentEvents() {
-        const snapshot = this.snapshot();
+    currentEvents(snapshot = this.snapshot()) {
         if (!snapshot) return [];
         const tolerance = this.skipIdle ? 1100 : 250;
-        const events = this.telemetry.events.filter(
-            (event) => eventVisible(event, this.filters) && Math.abs(event.timeMs - snapshot.timeMs) <= tolerance
-        );
-        const selected = this.telemetry.events.find(
-            (event) => event.eventId === this.currentEventId && eventVisible(event, this.filters)
-        );
+        const events = eventsWithinTime(
+            this.telemetry.events,
+            snapshot.timeMs - tolerance,
+            snapshot.timeMs + tolerance
+        ).filter((event) => eventVisible(event, this.filters));
+        const selectedCandidate = this.eventById.get(this.currentEventId);
+        const selected = selectedCandidate && eventVisible(selectedCandidate, this.filters) ? selectedCandidate : null;
         if (selected && !events.some((event) => event.eventId === selected.eventId)) events.push(selected);
         return events.sort((a, b) => a.timeMs - b.timeMs);
     }
 
-    currentCombatEvent() {
-        for (let index = this.telemetry.events.length - 1; index >= 0; index--) {
-            const event = this.telemetry.events[index];
-            if (event.timeMs > this.playheadMs) continue;
-            if (event.type !== "damage" && event.type !== "elimination") continue;
-            if (this.playheadMs - event.timeMs >= COMBAT_LINE_DURATION_MS) return null;
-            return eventVisible(event, this.filters) ? event : null;
-        }
-        return null;
+    currentCombatEvents() {
+        return eventsWithinTime(
+            this.telemetry.events,
+            this.playheadMs - COMBAT_LINE_DURATION_MS + 1,
+            this.playheadMs
+        ).filter(
+            (event) =>
+                ["damage", "elimination", "zombie_damage"].includes(event.type) && eventVisible(event, this.filters)
+        );
     }
 
     currentMoment() {
@@ -72,6 +78,7 @@ export class MatchPlaybackController {
     state() {
         const snapshot = this.snapshot();
         const moment = this.currentMoment();
+        const combatEvents = this.currentCombatEvents();
         return {
             playing: this.playing,
             skipIdle: this.skipIdle,
@@ -80,8 +87,9 @@ export class MatchPlaybackController {
             snapshot,
             snapshotIndex: this.currentSnapshotIndex,
             snapshotCount: this.telemetry.snapshots.length,
-            events: this.currentEvents(),
-            combatEvent: this.currentCombatEvent(),
+            events: this.currentEvents(snapshot),
+            combatEvents,
+            combatEvent: combatEvents.at(-1) || null,
             currentEventId: this.currentEventId,
             moment,
             momentIndex: this.skipIdle ? this.sequenceIndex : null,
@@ -410,6 +418,23 @@ export function interpolateSnapshotAtTime(snapshots, timeMs) {
     };
 }
 
+export function interpolateZombieStatesAtTime(snapshots, timeMs) {
+    if (!snapshots.length) return [];
+    const target = Math.max(snapshots[0].timeMs, Math.min(snapshots.at(-1).timeMs, Number(timeMs) || 0));
+    const lowerIndex = snapshotIndexAtOrBefore(snapshots, target);
+    const lower = snapshots[lowerIndex];
+    const upper = snapshots[lowerIndex + 1];
+    if (!upper || target <= lower.timeMs) return lower.zombies;
+    if (target >= upper.timeMs) return upper.zombies;
+    const progress = (target - lower.timeMs) / (upper.timeMs - lower.timeMs);
+    const upperZombies = new Map(upper.zombies.map((zombie) => [zombie.zombieId, zombie]));
+    return lower.zombies.map((zombie) =>
+        upperZombies.has(zombie.zombieId)
+            ? interpolateZombieState(zombie, upperZombies.get(zombie.zombieId), progress)
+            : zombie
+    );
+}
+
 export function buildMeaningfulMoments(telemetry, filters = DEFAULT_FILTERS) {
     const moments = [];
     const coveredEventIds = new Set();
@@ -526,6 +551,32 @@ function interpolateVehicleState(from, to, progress) {
     };
 }
 
+function interpolateZombieState(from, to, progress) {
+    return {
+        ...from,
+        x: lerp(from.x, to.x, progress),
+        y: lerp(from.y, to.y, progress),
+        z: lerp(from.z, to.z, progress)
+    };
+}
+
+function eventsWithinTime(events, minimumTimeMs, maximumTimeMs) {
+    let low = 0;
+    let high = events.length;
+    while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (events[middle].timeMs < minimumTimeMs) low = middle + 1;
+        else high = middle;
+    }
+    const result = [];
+    for (let index = low; index < events.length; index++) {
+        const event = events[index];
+        if (event.timeMs > maximumTimeMs) break;
+        result.push(event);
+    }
+    return result;
+}
+
 function interpolateZone(from, to, progress) {
     if (!from || !to || from.phase !== to.phase) return from;
     return {
@@ -581,6 +632,7 @@ function eventVisible(event, filters) {
     switch (event.type) {
         case "engagement_start":
         case "damage":
+        case "zombie_damage":
             return filters.engagements;
         case "elimination":
         case "team_eliminated":

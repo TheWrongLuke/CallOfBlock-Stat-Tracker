@@ -8,7 +8,8 @@ export const DEFAULT_MATCH_PLAYBACK_PREFERENCES = Object.freeze({
     markers: Object.freeze({
         size: 2,
         showIcons: true,
-        showNames: true
+        showNames: true,
+        zombieRadiusBlocks: 2.5
     })
 });
 
@@ -36,6 +37,10 @@ export function normalizeMatchPlaybackPreferences(value = {}) {
     const markerSize = Number.isFinite(rawMarkerSize)
         ? Math.max(0, Math.min(4, Math.round(rawMarkerSize)))
         : DEFAULT_MATCH_PLAYBACK_PREFERENCES.markers.size;
+    const rawZombieRadius = Number(value?.markers?.zombieRadiusBlocks);
+    const zombieRadiusBlocks = Number.isFinite(rawZombieRadius)
+        ? Math.max(0.5, Math.min(4, Math.round(rawZombieRadius * 2) / 2))
+        : DEFAULT_MATCH_PLAYBACK_PREFERENCES.markers.zombieRadiusBlocks;
     return {
         speed,
         skipIdle: value?.skipIdle === true,
@@ -49,7 +54,8 @@ export function normalizeMatchPlaybackPreferences(value = {}) {
             showNames:
                 value?.markers?.showNames === undefined
                     ? DEFAULT_MATCH_PLAYBACK_PREFERENCES.markers.showNames
-                    : value.markers.showNames === true
+                    : value.markers.showNames === true,
+            zombieRadiusBlocks
         }
     };
 }
