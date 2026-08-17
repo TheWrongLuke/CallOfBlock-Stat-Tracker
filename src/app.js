@@ -4000,6 +4000,7 @@ function renderLeaderboardView() {
 
 function renderRoute() {
     const finishRender = performanceDiagnostics.startRender(`route:${state.view}`);
+    document.body.dataset.appView = state.view;
     document.body.classList.toggle("home-route", usesHomePresentation());
     document.body.classList.toggle("store-route", state.view === "store");
     document.body.classList.toggle(

@@ -4139,6 +4139,11 @@ a[aria-disabled="true"] {
     max-width: calc(100vw - 36px);
 }
 
+.mobile-brand,
+.mobile-site-menu {
+    display: none;
+}
+
 .tracker-float,
 .store-float {
     position: static;
@@ -11592,7 +11597,192 @@ code {
     }
 }
 
-@media (max-width: 700px) {
+@media (max-width: 900px) {
+    body {
+        padding: 56px 0 20px;
+        font-size: 14px;
+    }
+
+    .floating-actions {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: auto;
+        left: 0;
+        width: 100%;
+        max-width: none;
+        height: 56px;
+        flex-wrap: nowrap;
+        gap: 5px;
+        border-bottom: 1px solid var(--line);
+        padding: 6px 10px;
+        background: rgba(8, 14, 22, 0.96);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(14px);
+    }
+
+    .mobile-brand {
+        display: inline-flex;
+        align-items: center;
+        min-width: 0;
+        min-height: 40px;
+        margin-right: auto;
+        color: var(--text);
+        font: 700 0.86rem/1 "Chakra Petch", sans-serif;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .mobile-site-menu {
+        position: relative;
+        display: block;
+        flex: 0 0 auto;
+    }
+
+    .mobile-site-menu > summary {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+        cursor: pointer;
+        list-style: none;
+    }
+
+    .mobile-site-menu > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .mobile-menu-icon,
+    .mobile-menu-icon::before,
+    .mobile-menu-icon::after {
+        width: 17px;
+        height: 2px;
+        display: block;
+        border-radius: 2px;
+        background: currentcolor;
+        content: "";
+        transition: transform 140ms ease, opacity 140ms ease;
+    }
+
+    .mobile-menu-icon {
+        position: relative;
+    }
+
+    .mobile-menu-icon::before,
+    .mobile-menu-icon::after {
+        position: absolute;
+        left: 0;
+    }
+
+    .mobile-menu-icon::before {
+        top: -5px;
+    }
+
+    .mobile-menu-icon::after {
+        top: 5px;
+    }
+
+    .mobile-site-menu[open] .mobile-menu-icon {
+        background: transparent;
+    }
+
+    .mobile-site-menu[open] .mobile-menu-icon::before {
+        top: 0;
+        transform: rotate(45deg);
+    }
+
+    .mobile-site-menu[open] .mobile-menu-icon::after {
+        top: 0;
+        transform: rotate(-45deg);
+    }
+
+    .mobile-site-menu nav {
+        position: fixed;
+        z-index: 30;
+        top: 56px;
+        right: 10px;
+        width: min(250px, calc(100vw - 20px));
+        display: grid;
+        gap: 2px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 6px;
+        background: rgba(9, 15, 24, 0.99);
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.46);
+    }
+
+    .mobile-site-menu nav a {
+        min-height: 42px;
+        display: flex;
+        align-items: center;
+        border-radius: 5px;
+        padding: 8px 10px;
+        color: var(--text);
+        font: 600 0.82rem "Chakra Petch", sans-serif;
+        text-decoration: none;
+    }
+
+    .mobile-site-menu nav a:hover,
+    .mobile-site-menu nav a:focus-visible {
+        background: rgba(255, 203, 107, 0.1);
+        color: var(--gold);
+    }
+
+    .tracker-float {
+        display: none;
+    }
+
+    .store-float,
+    .stats-refresh-button,
+    .account-widget > button,
+    .account-pill,
+    .notification-bell-button {
+        width: 42px;
+        min-width: 42px;
+        height: 42px;
+        min-height: 42px;
+        flex: 0 0 42px;
+        border-radius: 50%;
+        padding: 0;
+        box-shadow: none;
+    }
+
+    .store-float {
+        font-size: 0.68rem;
+    }
+
+    .stats-refresh-button [data-stats-refresh-label],
+    .account-pill > span:last-child {
+        display: none;
+    }
+
+    .stats-refresh-button {
+        min-width: 42px;
+    }
+
+    .account-widget {
+        flex: 0 0 auto;
+        gap: 5px;
+    }
+
+    .account-widget > button:not(.account-pill, .notification-bell-button) {
+        width: auto;
+        flex-basis: auto;
+        border-radius: 999px;
+        padding: 0 10px;
+        font-size: 0.72rem;
+    }
+
+    .account-pill .account-avatar-frame {
+        width: 32px;
+        height: 32px;
+        flex: 0 0 32px;
+    }
+
     .leaderboard-panel > .panel-header {
         display: grid;
         width: 100%;
@@ -11626,31 +11816,143 @@ code {
         padding-left: 0;
     }
 
-    body {
-        padding-bottom: 76px;
-    }
-
     .app-shell {
-        width: min(100vw - 16px, 100%);
+        width: min(100vw - 24px, 100%);
         margin: 12px auto 0;
     }
 
     .hero,
     .panel {
-        padding: 18px;
-        border-radius: 22px;
+        padding: 14px;
+        border-radius: 10px;
+    }
+
+    .hero-site-title {
+        margin: 6px 0 8px;
+        font-size: clamp(2.1rem, 9vw, 2.6rem);
+        line-height: 0.94;
+    }
+
+    .hero-text {
+        font-size: 0.88rem;
+        line-height: 1.45;
+    }
+
+    .eyebrow,
+    .panel-kicker,
+    .meta-label {
+        font-size: 0.66rem;
+    }
+
+    .hero-links,
+    .top-nav {
+        gap: 7px;
+        margin-top: 12px;
+    }
+
+    .hero-links .join-link,
+    .top-nav button {
+        min-height: 40px;
+        padding: 7px 11px;
+        font-size: 0.78rem;
+    }
+
+    .status-card {
+        min-height: 66px;
+        border-radius: 8px;
+        padding: 9px 10px;
+    }
+
+    .status-card span {
+        font-size: 0.64rem;
+    }
+
+    .status-card strong {
+        margin-top: 4px;
+        font-size: 0.96rem;
+        line-height: 1.12;
+    }
+
+    .status-card time,
+    .status-card .status-mode,
+    .status-card small {
+        font-size: 0.68rem;
+    }
+
+    .panel-header {
+        gap: 10px;
+    }
+
+    .panel-header h2 {
+        margin-top: 4px;
+        font-size: 1.45rem;
+    }
+
+    .badge-picker,
+    .account-option-row,
+    .account-form-grid,
+    .mission-row {
+        grid-template-columns: 1fr;
     }
 
     .summary-grid,
     .profile-stats,
     .hero-status,
     .account-stat-grid,
-    .player-profile-quickstats,
-    .badge-picker,
-    .account-option-row,
-    .account-form-grid,
-    .mission-row {
-        grid-template-columns: 1fr;
+    .player-profile-quickstats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .summary-grid {
+        gap: 8px;
+        margin: 12px 0;
+    }
+
+    .summary-card {
+        min-height: 68px;
+        padding: 10px 11px;
+    }
+
+    .summary-card strong {
+        margin-top: 4px;
+        font-size: 1.22rem;
+    }
+
+    .summary-card span {
+        font-size: 0.72rem;
+    }
+
+    .toolbar {
+        gap: 8px;
+        margin: 8px 0 10px;
+    }
+
+    .account-hero,
+    .account-panel,
+    .account-login-panel {
+        gap: 10px;
+        border-radius: 10px;
+        padding: 12px;
+    }
+
+    .account-avatar-large {
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
+    }
+
+    .account-hero h2 {
+        margin: 3px 0;
+        font-size: 1.55rem;
+        line-height: 1;
+    }
+
+    .profile-bg-custom {
+        min-height: 150px;
+    }
+
+    .account-custom-preview {
+        min-height: 230px;
     }
 
     .cosmetic-picker-backdrop {
@@ -11711,20 +12013,20 @@ code {
     }
 
     .account-custom-preview {
-        min-height: 300px;
-        padding: 14px;
+        min-height: 230px;
+        padding: 11px;
     }
 
     .account-custom-preview-identity {
-        grid-template-columns: 104px minmax(0, 1fr);
+        grid-template-columns: 72px minmax(0, 1fr);
         align-items: end;
-        gap: 12px;
+        gap: 9px;
     }
 
     .account-preview-avatar {
-        width: 104px;
-        height: 104px;
-        border-radius: 18px;
+        width: 72px;
+        height: 72px;
+        border-radius: 13px;
     }
 
     .search-box,
@@ -11761,7 +12063,8 @@ code {
         overflow-x: auto;
         overflow-y: hidden;
         flex-wrap: nowrap;
-        padding-bottom: 6px;
+        gap: 6px;
+        padding-bottom: 4px;
         scroll-snap-type: x proximity;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: thin;
@@ -11772,30 +12075,34 @@ code {
     .player-tabs .tab-pill,
     .history-filters .tab-pill {
         flex: 0 0 auto;
+        min-height: 40px;
         white-space: nowrap;
         scroll-snap-align: start;
-        padding: 9px 13px;
-        font-size: 0.9rem;
+        padding: 7px 10px;
+        font-size: 0.76rem;
     }
 
     .player-profile-hero {
-        gap: 14px;
-        padding: 16px;
+        gap: 10px;
+        padding: 12px;
+        border-radius: 10px;
     }
 
     .player-profile-identity {
         align-items: flex-start;
+        gap: 10px;
     }
 
     .player-profile-avatar {
-        width: 82px;
-        height: 82px;
-        border-radius: 18px;
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
     }
 
     .player-profile-hero h3 {
-        font-size: clamp(2rem, 10vw, 3.1rem);
-        line-height: 0.92;
+        margin: 3px 0;
+        font-size: clamp(1.3rem, 6vw, 1.55rem);
+        line-height: 1;
         overflow-wrap: anywhere;
     }
 
@@ -11804,42 +12111,67 @@ code {
     .snapshot-grid,
     .profile-stats {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .player-profile-quickstats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    body[data-app-view="player"] .player-view {
+        padding: 10px;
+    }
+
+    body[data-app-view="player"] .player-view-header > div {
+        display: none;
+    }
+
+    body[data-app-view="player"] .back-button {
+        min-height: 40px;
+        justify-self: start;
+        padding: 7px 12px;
+        font-size: 0.76rem;
+    }
+
+    body[data-app-view="player"] .player-detail-body {
         gap: 10px;
+        margin-top: 10px;
     }
 
     .detail-stat,
     .snapshot-item,
     .profile-stat {
-        padding: 12px;
+        min-height: 62px;
+        padding: 9px 10px;
         min-width: 0;
     }
 
     .detail-stat span,
     .snapshot-item span,
     .profile-stat span {
-        font-size: 0.78rem;
+        font-size: 0.7rem;
     }
 
     .detail-stat strong,
     .snapshot-item strong,
     .profile-stat strong {
-        font-size: 1.08rem;
+        font-size: 1rem;
         line-height: 1.05;
         overflow-wrap: anywhere;
     }
 
     .table-wrap {
-        border-radius: 16px;
+        border-radius: 8px;
     }
 
     .leaderboard-table {
-        min-width: 680px;
-        font-size: 0.72rem;
+        min-width: 630px;
+        font-size: 0.68rem;
     }
 
     .leaderboard-table th,
     .leaderboard-table td {
-        padding: 6px 7px;
+        padding: 5px 6px;
     }
 
     .leaderboard-table th:first-child,
@@ -11881,9 +12213,9 @@ code {
     }
 
     .leaderboard-avatar {
-        width: 28px;
-        height: 28px;
-        border-radius: 8px;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
     }
 
     .leaderboard-player .player-name {
@@ -11913,7 +12245,7 @@ code {
     .community-admin-view,
     .account-view,
     .player-view {
-        width: min(100vw - 16px, 100%);
+        width: min(100vw - 24px, 100%);
         margin-top: 12px;
     }
 
@@ -11933,21 +12265,21 @@ code {
 
     .weapon-table {
         border: 1px solid var(--line);
-        border-radius: 16px;
+        border-radius: 8px;
         background: rgba(0, 0, 0, 0.12);
     }
 
     .weapon-row {
-        min-width: 600px;
+        min-width: 570px;
         grid-template-columns: minmax(120px, 1.15fr) repeat(6, minmax(56px, 0.55fr));
         gap: 6px;
         margin: 0;
         border: 0;
         border-bottom: 1px solid var(--line);
         border-radius: 0;
-        padding: 6px 7px;
+        padding: 5px 6px;
         background: rgba(0, 0, 0, 0.08);
-        font-size: 0.72rem;
+        font-size: 0.68rem;
     }
 
     .weapon-row:last-child {
@@ -12000,13 +12332,78 @@ code {
     .calendar-card,
     .heatmap-card,
     .results-card {
-        padding: 16px;
-        border-radius: 18px;
+        padding: 12px;
+        border-radius: 9px;
     }
 
     .playtests-hero h2,
     .playtest-detail-head h3 {
-        font-size: clamp(2.1rem, 12vw, 3.7rem);
+        max-width: none;
+        font-size: clamp(1.65rem, 8vw, 2rem);
+        line-height: 0.98;
+    }
+
+    .playtests-view,
+    .community-admin-view {
+        gap: 12px;
+    }
+
+    .playtests-layout,
+    .playtests-sidebar,
+    .playtest-list,
+    .playtest-summary-grid,
+    .playtest-analytics-grid,
+    .calendar-vote-grid {
+        gap: 8px;
+    }
+
+    .playtest-side-block,
+    .playtest-slot-card {
+        padding: 11px;
+        border-radius: 9px;
+    }
+
+    .playtest-list-item {
+        min-height: 68px;
+        gap: 3px;
+        border-radius: 7px;
+        padding: 9px 10px;
+    }
+
+    .playtest-list-item span,
+    .playtest-list-item small,
+    .identity-row small,
+    .muted-line {
+        font-size: 0.72rem;
+    }
+
+    .main-date-card > strong,
+    .best-date-card > strong,
+    .preference-summary-card > strong {
+        font-size: clamp(1.4rem, 7vw, 1.8rem);
+    }
+
+    .main-date-card,
+    .best-date-card,
+    .preference-summary-card {
+        gap: 7px;
+    }
+
+    .playtests-hero-actions,
+    .admin-action-grid,
+    .vote-row {
+        gap: 7px;
+    }
+
+    .playtests-hero-actions a,
+    .playtests-hero-actions button,
+    .identity-block a,
+    .identity-block button,
+    .admin-action-grid button,
+    .playtest-create-form button {
+        min-height: 40px;
+        padding: 7px 10px;
+        font-size: 0.76rem;
     }
 
     .form-grid,
@@ -12070,12 +12467,60 @@ code {
     }
 
     .home-route .hero {
-        padding: 220px 16px 28px;
-        min-height: 92svh;
+        min-height: 0;
+        grid-template-columns: 1fr;
+        gap: 12px;
+        align-items: start;
+        padding: 18px 12px 16px;
+        background:
+            linear-gradient(90deg, rgba(9, 10, 15, 0.88), rgba(9, 10, 15, 0.44)),
+            linear-gradient(180deg, rgba(9, 13, 16, 0.1), rgba(9, 13, 16, 0.66)),
+            url("../home-hero-bg.webp") center / cover no-repeat;
+    }
+
+    .home-route .hero-copy {
+        order: 1;
+    }
+
+    .home-route .hero-status {
+        position: relative;
+        inset: auto;
+        order: 2;
+        width: 100%;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .home-route .hero-champions {
+        order: 3;
+        width: 100%;
+        padding-top: 0;
     }
 
     .home-route .hero-site-title {
-        font-size: clamp(4rem, 19vw, 6.3rem);
+        max-width: none;
+        margin: 5px 0 8px;
+        font-size: clamp(2.2rem, 10vw, 2.7rem);
+        line-height: 0.9;
+    }
+
+    .home-route .hero-text {
+        max-width: 54ch;
+        display: -webkit-box;
+        overflow: hidden;
+        font-size: 0.82rem;
+        line-height: 1.4;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 4;
+    }
+
+    .home-route .hero-links a {
+        display: none;
+    }
+
+    .home-route .hero-links a:nth-child(2),
+    .home-route .hero-links a:nth-child(3) {
+        display: inline-flex;
     }
 
     .top-nav {
@@ -12084,20 +12529,6 @@ code {
 
     .top-nav button {
         padding: 9px 12px;
-    }
-
-    .floating-actions {
-        top: 10px;
-        right: 10px;
-        gap: 8px;
-        flex-wrap: wrap;
-        max-width: calc(100vw - 20px);
-    }
-
-    .tracker-float,
-    .store-float {
-        min-height: 48px;
-        padding: 10px 16px;
     }
 
     .store-view {
@@ -12205,34 +12636,207 @@ code {
         min-height: 138px;
     }
 
-    .home-route .hero-status {
-        top: 10px;
-        right: 10px;
-        width: min(360px, calc(100vw - 20px));
-        gap: 8px;
-    }
-
     .home-route .floating-actions,
     .home-route.home-scrolled .floating-actions {
-        top: auto;
-        right: 12px;
-        bottom: 12px;
+        top: 0;
+        right: 0;
+        bottom: auto;
     }
 
     .account-pill {
-        max-width: min(190px, calc(100vw - 120px));
+        max-width: 42px;
     }
 
     .home-route .status-card {
-        padding: 10px;
-    }
-
-    .home-route .hero-status {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        min-height: 58px;
+        border-radius: 7px;
+        padding: 7px 8px;
     }
 
     .home-route .status-card strong {
-        font-size: 0.96rem;
+        margin-top: 2px;
+        font-size: 0.78rem;
+    }
+
+    .home-route .status-card span,
+    .home-route .status-card small {
+        font-size: 0.58rem;
+        line-height: 1.25;
+    }
+
+    body[data-public-route="playtests"] .hero-status,
+    body[data-public-route="feedback"] .hero-status,
+    body[data-public-route="help"] .hero-status,
+    body[data-public-route="about"] .hero-status,
+    body:not(.home-route) .hero-links {
+        display: none;
+    }
+
+    body[data-app-view="player"] .app-shell > .hero,
+    body[data-app-view="match"] .app-shell > .hero,
+    body[data-app-view="account"] .app-shell > .hero,
+    body[data-app-view="store"] .app-shell > .hero,
+    body[data-app-view="ticket"] .app-shell > .hero,
+    body[data-app-view="adminHelp"] .app-shell > .hero,
+    body[data-app-view="adminTickets"] .app-shell > .hero,
+    body[data-app-view="adminProgression"] .app-shell > .hero,
+    body[data-app-view="communityAdmin"] .app-shell > .hero {
+        display: none;
+    }
+
+    .home-route .hero-champions .section-heading {
+        margin-bottom: 5px;
+        text-align: left;
+    }
+
+    .home-route .hero-champions .section-heading h2 {
+        font-size: 1.3rem;
+        line-height: 1;
+    }
+
+    .home-route .hero-champions .featured-list {
+        margin-top: 6px;
+    }
+
+    .home-route .podium-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-areas: "first second third";
+        gap: 6px;
+    }
+
+    .home-route .podium-rank-4,
+    .home-route .podium-rank-5 {
+        display: none;
+    }
+
+    .home-route .podium-rank-1,
+    .home-route .podium-rank-2,
+    .home-route .podium-rank-3 {
+        min-height: 92px;
+        grid-template-columns: 1fr;
+        align-content: center;
+        gap: 5px;
+        border-radius: 7px;
+        padding: 7px 5px;
+        text-align: center;
+        justify-items: center;
+    }
+
+    .home-route .podium-rank-1 .featured-avatar,
+    .home-route .podium-rank-2 .featured-avatar,
+    .home-route .podium-rank-3 .featured-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 7px;
+    }
+
+    .home-route .podium-rank-1 .featured-player-main div,
+    .home-route .podium-rank-2 .featured-player-main div,
+    .home-route .podium-rank-3 .featured-player-main div {
+        justify-content: center;
+    }
+
+    .home-route .podium-list .featured-player-main {
+        gap: 2px;
+    }
+
+    .home-route .podium-list .featured-player-main strong,
+    .home-route .podium-list .featured-player-stat strong {
+        max-width: 100%;
+        font-size: 0.68rem;
+    }
+
+    .home-route .podium-list .featured-player-main small,
+    .home-route .podium-list .featured-player-stat span {
+        font-size: 0.58rem;
+    }
+
+    .home-route .podium-list .featured-player-stat,
+    .home-route .podium-rank-1 .featured-player-stat,
+    .home-route .podium-rank-2 .featured-player-stat {
+        grid-column: auto;
+        justify-items: center;
+        text-align: center;
+    }
+
+    .home-view {
+        gap: 18px;
+        width: calc(100vw - 24px);
+        margin: 16px auto 0;
+    }
+
+    .landing-intro,
+    .info-grid,
+    .guide-grid {
+        gap: 8px;
+    }
+
+    .landing-intro > article,
+    .latest-panel,
+    .info-panel,
+    .guide-panel,
+    .command-help {
+        border-radius: 9px;
+        padding: 13px;
+    }
+
+    .landing-intro h2,
+    .section-heading h2,
+    .podium-panel h3,
+    .info-panel h3 {
+        font-size: 1.5rem;
+        line-height: 1;
+    }
+
+    .landing-intro p:not(.panel-kicker),
+    .info-panel p,
+    .guide-panel p,
+    .command-help p {
+        margin-top: 8px;
+        font-size: 0.84rem;
+        line-height: 1.45;
+    }
+
+    .latest-match-card,
+    .latest-empty {
+        gap: 6px;
+        margin-top: 9px;
+    }
+
+    .latest-match-card strong,
+    .latest-empty strong {
+        font-size: 1.1rem;
+    }
+
+    .info-grid {
+        padding-bottom: 0;
+    }
+
+    .info-panel {
+        min-height: 0;
+        align-content: start;
+        gap: 6px;
+    }
+
+    .info-panel span {
+        font-size: 0.78rem;
+    }
+
+    .info-panel a,
+    .featured-header a {
+        min-height: 40px;
+        margin-top: 3px;
+        padding: 7px 11px;
+        font-size: 0.76rem;
+    }
+
+    .join-section,
+    .playtest-promo,
+    .video-section,
+    .br-map-section,
+    .guide-panel,
+    .command-help {
+        border-radius: 10px;
     }
 
     .join-cards {
@@ -12250,22 +12854,42 @@ code {
     }
 
     .admin-help-view {
-        width: min(100vw - 32px, 100%);
+        gap: 10px;
+        width: min(100vw - 24px, 100%);
         margin-top: 12px;
     }
 
     .admin-help-hero {
-        padding: 18px;
+        gap: 10px;
+        border-radius: 9px;
+        padding: 12px;
+    }
+
+    .admin-help-hero h2 {
+        margin-top: 4px;
+        font-size: 1.65rem;
+        line-height: 1;
+    }
+
+    .admin-help-hero p:not(.panel-kicker) {
+        margin-top: 8px;
+        font-size: 0.82rem;
+        line-height: 1.42;
     }
 
     .admin-command-group {
-        padding: 14px;
+        border-radius: 8px;
+        padding: 11px;
+    }
+
+    .admin-command-group h3 {
+        font-size: 1rem;
     }
 
     .admin-command-entry {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 11px 14px;
-        padding: 16px 0;
+        gap: 7px 10px;
+        padding: 10px 0;
     }
 
     .admin-command-code,
@@ -12281,7 +12905,238 @@ code {
     .admin-command-value strong,
     .admin-command-description p,
     .admin-command-code code {
-        font-size: 0.82rem;
+        font-size: 0.76rem;
+        line-height: 1.4;
+    }
+
+    .feedback-view,
+    .ticket-view,
+    .admin-tickets-view,
+    .admin-progression-view {
+        width: min(100% - 24px, 100%);
+        margin: 10px auto 28px;
+    }
+
+    .feedback-hero,
+    .ticket-detail-header {
+        gap: 10px;
+        padding: 8px 0 14px;
+    }
+
+    .feedback-hero h2,
+    .ticket-detail-header h2 {
+        margin: 3px 0 5px;
+        font-size: 1.55rem;
+    }
+
+    .feedback-hero p,
+    .ticket-detail-header p {
+        font-size: 0.84rem;
+        line-height: 1.42;
+    }
+
+    .feedback-body,
+    .admin-tickets-body,
+    .ticket-detail-body,
+    #admin-documentation-body {
+        padding-top: 12px;
+    }
+
+    .feedback-layout {
+        gap: 12px;
+    }
+
+    .ticket-create {
+        border-radius: 8px;
+        padding: 12px;
+    }
+
+    .feedback-form-grid {
+        gap: 9px;
+        margin-top: 12px;
+    }
+
+    .feedback-form-grid label,
+    .ticket-reply-form label,
+    .admin-ticket-controls label,
+    .ticket-filter-row label,
+    .admin-ticket-toolbar label {
+        gap: 4px;
+    }
+
+    .feedback-form-grid label > span,
+    .ticket-reply-form label > span,
+    .admin-ticket-controls label > span,
+    .ticket-filter-row label > span,
+    .admin-ticket-toolbar label > span {
+        font-size: 0.66rem;
+    }
+
+    .profile-drawer {
+        padding: 12px;
+    }
+
+    .profile-drawer-header {
+        top: -12px;
+        min-height: 52px;
+        margin: -12px -12px 10px;
+        padding: 7px 12px;
+    }
+
+    .profile-drawer-header h2 {
+        font-size: 0.92rem;
+    }
+
+    .profile-drawer-close {
+        width: 40px;
+        height: 40px;
+        font-size: 1.15rem;
+    }
+
+    .profile-drawer-identity {
+        gap: 9px;
+        margin-bottom: 10px;
+    }
+
+    .profile-drawer-identity .account-avatar-frame {
+        width: 48px;
+        height: 48px;
+        flex-basis: 48px;
+    }
+
+    .profile-drawer-identity > div > strong {
+        font-size: 0.95rem;
+    }
+
+    .profile-drawer-actions,
+    .profile-drawer-actions.admin {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .profile-drawer-customize,
+    .profile-drawer-support,
+    .profile-drawer-tickets,
+    .profile-drawer-progression,
+    .profile-drawer-docs,
+    .profile-drawer-store {
+        min-height: 40px;
+        padding: 6px 7px;
+        font-size: 0.72rem;
+    }
+
+    .profile-drawer-gifts,
+    .profile-drawer-missions,
+    .notification-inbox {
+        gap: 8px;
+        margin-top: 12px;
+    }
+
+    .profile-drawer-missions .mission-row {
+        gap: 6px;
+        padding: 9px;
+    }
+
+    .notification-inbox-heading {
+        gap: 8px;
+    }
+
+    .notification-inbox-heading h3 {
+        font-size: 1.05rem;
+    }
+
+    .notification-item-summary {
+        min-height: 62px;
+        grid-template-columns: 42px minmax(0, 1fr) auto;
+        gap: 7px;
+        padding: 8px;
+    }
+
+    .notification-cosmetic-preview {
+        width: 42px;
+        height: 42px;
+    }
+
+    .match-view {
+        width: calc(100% - 24px);
+        margin: 10px auto 28px;
+    }
+
+    .match-detail-shell,
+    .match-playback-layout,
+    .match-playback-controls {
+        gap: 8px;
+    }
+
+    .match-detail-header {
+        gap: 10px;
+        padding-bottom: 12px;
+    }
+
+    .match-detail-header h2 {
+        font-size: 1.55rem;
+    }
+
+    .match-result-summary {
+        gap: 7px;
+    }
+
+    .match-result-summary article {
+        min-height: 66px;
+        padding: 9px 10px;
+    }
+
+    .match-map-panel,
+    .match-event-panel,
+    .match-scoreboard,
+    .match-replays,
+    .match-diagnostics {
+        border-radius: 7px;
+        padding: 8px;
+    }
+
+    .match-section-heading {
+        gap: 8px;
+        margin-bottom: 7px;
+    }
+
+    .match-fullscreen-button,
+    .match-control-row button {
+        min-height: 40px;
+        padding: 6px 8px;
+        font-size: 0.7rem;
+    }
+
+    .match-control-row {
+        gap: 5px;
+    }
+
+    .match-speed-control,
+    .match-marker-controls,
+    .match-zombie-controls,
+    .match-event-filters {
+        gap: 5px;
+    }
+
+    .match-speed-control label,
+    .match-marker-controls > label:not(.match-marker-size),
+    .match-event-filters label,
+    .match-skip-control > label {
+        min-height: 40px;
+        padding: 5px 8px;
+        font-size: 0.7rem;
+    }
+
+    .match-marker-size {
+        min-height: 36px;
+        grid-template-columns: auto minmax(72px, 1fr) auto;
+        gap: 6px;
+        font-size: 0.7rem;
+    }
+
+    .match-timeline {
+        gap: 3px;
+        margin-top: 8px;
     }
 
     .podium-list {
@@ -12376,5 +13231,85 @@ code {
     .footer-link-list a,
     .footer-link-list button {
         font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .floating-actions {
+        gap: 4px;
+        padding-inline: 8px;
+    }
+
+    .mobile-brand {
+        width: 42px;
+        flex: 0 0 42px;
+        font-size: 0;
+    }
+
+    .mobile-brand::before {
+        content: "COB";
+        font-size: 0.78rem;
+    }
+
+    .mobile-site-menu > summary,
+    .store-float,
+    .stats-refresh-button,
+    .account-widget > button,
+    .account-pill,
+    .notification-bell-button {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
+        flex-basis: 40px;
+    }
+
+    .account-pill {
+        max-width: 40px;
+    }
+
+    .home-route .hero-site-title {
+        font-size: 2.2rem;
+    }
+
+    .home-route .hero-text {
+        font-size: 0.78rem;
+    }
+
+    .profile-drawer-actions,
+    .profile-drawer-actions.admin {
+        grid-template-columns: 1fr;
+    }
+
+    .player-profile-quickstats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) and (max-height: 520px) and (orientation: landscape) {
+    .home-route .hero {
+        grid-template-columns: minmax(0, 1.1fr) minmax(220px, 0.9fr);
+        gap: 10px;
+        padding-block: 12px;
+    }
+
+    .home-route .hero-copy {
+        order: 1;
+    }
+
+    .home-route .hero-status {
+        order: 2;
+    }
+
+    .home-route .hero-champions {
+        display: none;
+    }
+
+    .home-route .hero-site-title {
+        font-size: 2.15rem;
+    }
+
+    .home-route .hero-text {
+        -webkit-line-clamp: 3;
     }
 }

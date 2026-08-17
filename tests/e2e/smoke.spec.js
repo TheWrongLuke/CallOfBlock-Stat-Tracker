@@ -431,6 +431,18 @@ async function openDelayedAdminApp(page, hash = "#admin-help") {
     await page.waitForLoadState("domcontentloaded");
 }
 
+async function openStatsFromHome(page) {
+    const desktopTracker = page.locator(".tracker-float");
+    if (await desktopTracker.isVisible()) {
+        await desktopTracker.click();
+        return;
+    }
+
+    const mobileMenu = page.locator(".mobile-site-menu");
+    await mobileMenu.locator("summary").click();
+    await mobileMenu.getByRole("link", { name: "Stats Tracker" }).click();
+}
+
 test("homepage and primary navigation load without fatal errors", async ({ page }) => {
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -441,12 +453,84 @@ test("homepage and primary navigation load without fatal errors", async ({ page 
     await expect(page.locator("[data-stats-refresh-control]")).toBeHidden();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-    await page.locator(".tracker-float").click();
+    await openStatsFromHome(page);
     await expect(page.locator("#leaderboard-view")).toBeVisible();
     await expect(page.locator("[data-stats-refresh-control]")).toBeVisible();
     await expect(page.locator("[data-stats-refresh-label]")).toHaveText(/^\d+[smh]$/);
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
     expect(pageErrors).toEqual([]);
+});
+
+test("public pages keep the compact mobile shell at supported widths", async ({ page }) => {
+    await installPageStubs(page, supabaseStub);
+    const routes = ["/", "/stats/", "/playtests/", "/feedback/", "/help/", "/about/"];
+    const viewports = [
+        { width: 320, height: 780 },
+        { width: 360, height: 800 },
+        { width: 390, height: 844 },
+        { width: 430, height: 900 },
+        { width: 768, height: 900 }
+    ];
+
+    for (const viewport of viewports) {
+        await page.setViewportSize(viewport);
+        for (const route of routes) {
+            await page.goto(route);
+            await page.waitForLoadState("domcontentloaded");
+            await expect(page.locator("h1")).toBeVisible();
+            const layout = await page.evaluate(() => {
+                const header = document.querySelector(".floating-actions");
+                const hero = document.querySelector(".hero");
+                const h1 = document.querySelector("h1");
+                const homeContent = document.querySelector("#home-view");
+                return {
+                    route: document.body.dataset.publicRoute,
+                    viewportHeight: window.innerHeight,
+                    documentWidth: document.documentElement.scrollWidth,
+                    viewportWidth: document.documentElement.clientWidth,
+                    headerHeight: header?.getBoundingClientRect().height || 0,
+                    heroHeight: hero?.getBoundingClientRect().height || 0,
+                    h1Size: Number.parseFloat(getComputedStyle(h1).fontSize),
+                    homeContentTop: homeContent?.getBoundingClientRect().top || 0
+                };
+            });
+
+            expect(layout.documentWidth, `${route} overflow at ${viewport.width}px`).toBeLessThanOrEqual(
+                layout.viewportWidth + 1
+            );
+            expect(layout.headerHeight, `${route} header at ${viewport.width}px`).toBeGreaterThanOrEqual(52);
+            expect(layout.headerHeight, `${route} header at ${viewport.width}px`).toBeLessThanOrEqual(60);
+            expect(layout.h1Size, `${route} h1 at ${viewport.width}px`).toBeLessThanOrEqual(44);
+
+            if (layout.route === "home") {
+                expect(layout.homeContentTop, `home fold at ${viewport.width}px`).toBeLessThan(layout.viewportHeight);
+            } else if (!["stats"].includes(layout.route)) {
+                expect(layout.heroHeight, `${route} hero at ${viewport.width}px`).toBeLessThan(
+                    layout.viewportHeight / 2
+                );
+            }
+        }
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/help/");
+    const mobileMenu = page.locator(".mobile-site-menu");
+    await mobileMenu.locator("summary").click();
+    await expect(mobileMenu.getByRole("link", { name: "Stats Tracker" })).toBeVisible();
+    await expect(mobileMenu.getByRole("link", { name: "About" })).toBeVisible();
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto("/");
+    await page.waitForLoadState("domcontentloaded");
+    const landscape = await page.evaluate(() => ({
+        heroHeight: document.querySelector(".hero")?.getBoundingClientRect().height || 0,
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: document.documentElement.clientWidth,
+        championsVisible: getComputedStyle(document.querySelector(".hero-champions")).display !== "none"
+    }));
+    expect(landscape.documentWidth).toBeLessThanOrEqual(landscape.viewportWidth + 1);
+    expect(landscape.heroHeight).toBeLessThan(280);
+    expect(landscape.championsVisible).toBe(false);
 });
 
 test("statistics refresh only on demand and preserves the active route", async ({ page }) => {
@@ -566,7 +650,7 @@ test("statistics payloads follow the active route instead of loading the full ex
     await expect.poll(() => requestedRows.includes("eq.status")).toBe(true);
     expect(requestedRows).not.toContain("eq.live");
 
-    await page.locator(".tracker-float").click();
+    await openStatsFromHome(page);
     await expect.poll(() => requestedRows.includes("eq.mode:battleRoyale")).toBe(true);
     await expect.poll(() => page.evaluate(() => window.__supabaseTableRequests?.public_profiles || 0)).toBe(1);
     const inventoryRequestCount = await page.evaluate(
