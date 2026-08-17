@@ -432,9 +432,9 @@ async function openDelayedAdminApp(page, hash = "#admin-help") {
 }
 
 async function openStatsFromHome(page) {
-    const desktopTracker = page.locator(".tracker-float");
-    if (await desktopTracker.isVisible()) {
-        await desktopTracker.click();
+    const desktopStats = page.locator('.site-header-nav a[data-site-route="stats"]');
+    if (await desktopStats.isVisible()) {
+        await desktopStats.click();
         return;
     }
 
@@ -497,7 +497,7 @@ test("public pages keep the compact mobile shell at supported widths", async ({ 
             await page.waitForLoadState("domcontentloaded");
             await expect(page.locator("h1")).toBeVisible();
             const layout = await page.evaluate(() => {
-                const header = document.querySelector(".floating-actions");
+                const header = document.querySelector(".site-header");
                 const hero = document.querySelector(".hero");
                 const h1 = document.querySelector("h1");
                 const homeContent = document.querySelector("#home-view");
@@ -506,6 +506,7 @@ test("public pages keep the compact mobile shell at supported widths", async ({ 
                     viewportHeight: window.innerHeight,
                     documentWidth: document.documentElement.scrollWidth,
                     viewportWidth: document.documentElement.clientWidth,
+                    headerWidth: header?.getBoundingClientRect().width || 0,
                     headerHeight: header?.getBoundingClientRect().height || 0,
                     heroHeight: hero?.getBoundingClientRect().height || 0,
                     h1Size: Number.parseFloat(getComputedStyle(h1).fontSize),
@@ -515,6 +516,9 @@ test("public pages keep the compact mobile shell at supported widths", async ({ 
 
             expect(layout.documentWidth, `${route} overflow at ${viewport.width}px`).toBeLessThanOrEqual(
                 layout.viewportWidth + 1
+            );
+            expect(layout.headerWidth, `${route} header width at ${viewport.width}px`).toBeGreaterThanOrEqual(
+                layout.viewportWidth - 1
             );
             expect(layout.headerHeight, `${route} header at ${viewport.width}px`).toBeGreaterThanOrEqual(52);
             expect(layout.headerHeight, `${route} header at ${viewport.width}px`).toBeLessThanOrEqual(60);
@@ -549,6 +553,64 @@ test("public pages keep the compact mobile shell at supported widths", async ({ 
     expect(landscape.documentWidth).toBeLessThanOrEqual(landscape.viewportWidth + 1);
     expect(landscape.heroHeight).toBeLessThan(280);
     expect(landscape.championsVisible).toBe(false);
+});
+
+test("desktop routes share one compact header with active navigation", async ({ page }) => {
+    await installPageStubs(page, supabaseStub);
+    const desktopWidths = [1024, 1280, 1440, 1920];
+
+    for (const width of desktopWidths) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto("/");
+        await page.waitForLoadState("domcontentloaded");
+        const layout = await page.evaluate(() => {
+            const header = document.querySelector(".site-header")?.getBoundingClientRect();
+            const brand = document.querySelector(".site-header-brand")?.getBoundingClientRect();
+            const navigation = document.querySelector(".site-header-nav")?.getBoundingClientRect();
+            const actions = document.querySelector(".site-header-actions")?.getBoundingClientRect();
+            const hero = document.querySelector(".hero")?.getBoundingClientRect();
+            return {
+                headerHeight: header?.height || 0,
+                brandRight: brand?.right || 0,
+                navigationLeft: navigation?.left || 0,
+                navigationRight: navigation?.right || 0,
+                actionsLeft: actions?.left || 0,
+                heroTop: hero?.top || 0,
+                headerBottom: header?.bottom || 0,
+                documentWidth: document.documentElement.scrollWidth,
+                viewportWidth: document.documentElement.clientWidth
+            };
+        });
+
+        expect(layout.headerHeight, `desktop header at ${width}px`).toBeGreaterThanOrEqual(60);
+        expect(layout.headerHeight, `desktop header at ${width}px`).toBeLessThanOrEqual(68);
+        expect(layout.brandRight).toBeLessThanOrEqual(layout.navigationLeft + 1);
+        expect(layout.navigationRight).toBeLessThanOrEqual(layout.actionsLeft + 1);
+        expect(layout.heroTop).toBeGreaterThanOrEqual(layout.headerBottom - 1);
+        expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+        await expect(page.locator(".site-header-nav")).toBeVisible();
+        await expect(page.locator(".mobile-site-menu")).toBeHidden();
+        await expect(page.locator(".tracker-float")).toHaveCount(0);
+    }
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const routes = [
+        ["/", "home"],
+        ["/stats/", "stats"],
+        ["/playtests/", "playtests"],
+        ["/feedback/", "feedback"],
+        ["/help/", "help"],
+        ["/about/", "about"]
+    ];
+    for (const [path, route] of routes) {
+        await page.goto(path);
+        await page.waitForLoadState("domcontentloaded");
+        await expect(page.locator(`.site-header-nav a[data-site-route="${route}"]`)).toHaveAttribute(
+            "aria-current",
+            "page"
+        );
+        await expect(page.locator('.site-header-nav a[aria-current="page"]')).toHaveCount(1);
+    }
 });
 
 test("statistics refresh only on demand and preserves the active route", async ({ page }) => {
@@ -602,12 +664,26 @@ test("the homepage reuses its public statistics cache after a reload", async ({ 
 test("the signed-in homepage account pill opens the profile drawer and reveals admin Store access", async ({
     page
 }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
     await openAdminApp(page, "");
     const accountButton = page.locator("[data-shell-account-open]");
     await expect(accountButton).toBeVisible();
     await expect(accountButton).toContainText("Test Admin");
     await expect(page.locator(".store-float")).toBeVisible();
     await expect(page.locator(".store-float")).toHaveAttribute("href", "/stats/#store");
+    await expect(page.locator("[data-notification-panel-open]")).toBeVisible();
+    const headerLayout = await page.evaluate(() => {
+        const navigation = document.querySelector(".site-header-nav")?.getBoundingClientRect();
+        const actions = document.querySelector(".site-header-actions")?.getBoundingClientRect();
+        return {
+            navigationRight: navigation?.right || 0,
+            actionsLeft: actions?.left || 0,
+            documentWidth: document.documentElement.scrollWidth,
+            viewportWidth: document.documentElement.clientWidth
+        };
+    });
+    expect(headerLayout.navigationRight).toBeLessThanOrEqual(headerLayout.actionsLeft + 1);
+    expect(headerLayout.documentWidth).toBeLessThanOrEqual(headerLayout.viewportWidth + 1);
 
     await accountButton.click();
     const drawer = page.locator("#account-side-panel-host .profile-drawer");

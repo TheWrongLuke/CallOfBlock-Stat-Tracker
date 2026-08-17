@@ -48,6 +48,42 @@
     <link rel="stylesheet" href="/assets/css/styles.css?v=tactical-replay-1">
 </head>
 <body class="home-route" data-public-route="home">
+<header class="site-header">
+    <div class="site-header-inner">
+        <a class="site-header-brand" href="/" aria-label="Call of Block home">Call of Block</a>
+        <nav class="site-header-nav" aria-label="Primary navigation">
+            <a href="/" data-site-route="home">Home</a>
+            <a href="/stats/" data-site-route="stats">Stats</a>
+            <a href="/playtests/" data-site-route="playtests">Playtests</a>
+            <a href="/feedback/" data-site-route="feedback">Feedback</a>
+            <a href="/help/" data-site-route="help">Help</a>
+            <a href="/about/" data-site-route="about">About</a>
+        </nav>
+        <div class="site-header-actions" aria-label="Site actions">
+            <a class="mobile-brand" href="/" aria-label="Call of Block home">Call of Block</a>
+            <details class="mobile-site-menu">
+                <summary aria-label="Open site navigation"><span class="mobile-menu-icon" aria-hidden="true"></span></summary>
+                <nav aria-label="Mobile navigation">
+                    <a href="/" data-site-route="home">Home</a>
+                    <a href="/stats/" data-site-route="stats">Stats Tracker</a>
+                    <a href="/playtests/" data-site-route="playtests">Playtests</a>
+                    <a href="/feedback/" data-site-route="feedback">Feedback</a>
+                    <a href="/help/" data-site-route="help">Help</a>
+                    <a href="/about/" data-site-route="about">About</a>
+                </nav>
+            </details>
+            <a class="store-float hidden" href="/stats/#store" data-route="store" data-admin-store-link hidden>Store</a>
+            <div class="stats-refresh-control hidden" data-stats-refresh-control aria-live="polite">
+                <button type="button" class="stats-refresh-button" data-stats-refresh>
+                    <span class="stats-refresh-symbol" aria-hidden="true">&#8635;</span>
+                    <span data-stats-refresh-label>Load</span>
+                </button>
+                <span class="sr-only" data-stats-refresh-status>Loading statistics...</span>
+            </div>
+            <div class="account-widget" id="account-widget" aria-live="polite"></div>
+        </div>
+    </div>
+</header>
 <div class="app-shell">
     <header class="hero">
         <div class="hero-copy">
@@ -56,14 +92,6 @@
             <p class="hero-text">
                 Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Team Deathmatch, Free For All, Duels, experimental Zombie Survival, TacZ guns, Superb Warfare vehicles, destructible maps, Parcool movement, player statistics, and tactical match replays.
             </p>
-            <nav class="hero-links" aria-label="Primary navigation">
-                <a class="join-link" href="/">Home</a>
-                <a class="join-link" href="/stats/">Stats Tracker</a>
-                <a class="join-link" href="/playtests/">Playtests</a>
-                <a class="join-link" href="/feedback/">Feedback</a>
-                <a class="join-link" href="/help/">Help</a>
-                <a class="join-link" href="/about/">About</a>
-            </nav>
         </div>
         <div class="hero-champions">
             <div class="section-heading">
@@ -111,31 +139,6 @@
             </article>
         </div>
     </header>
-    <div class="floating-actions" aria-label="Site actions">
-        <a class="mobile-brand" href="/" aria-label="Call of Block home">Call of Block</a>
-        <details class="mobile-site-menu">
-            <summary aria-label="Open site navigation"><span class="mobile-menu-icon" aria-hidden="true"></span></summary>
-            <nav aria-label="Mobile navigation">
-                <a href="/">Home</a>
-                <a href="/stats/">Stats Tracker</a>
-                <a href="/playtests/">Playtests</a>
-                <a href="/feedback/">Feedback</a>
-                <a href="/help/">Help</a>
-                <a href="/about/">About</a>
-            </nav>
-        </details>
-        <a class="store-float hidden" href="/stats/#store" data-route="store" data-admin-store-link hidden>Store</a>
-        <div class="stats-refresh-control hidden" data-stats-refresh-control aria-live="polite">
-            <button type="button" class="stats-refresh-button" data-stats-refresh>
-                <span class="stats-refresh-symbol" aria-hidden="true">&#8635;</span>
-                <span data-stats-refresh-label>Load</span>
-            </button>
-            <span class="sr-only" data-stats-refresh-status>Loading statistics...</span>
-        </div>
-        <a class="tracker-float" href="/stats/">Tracker</a>
-        <div class="account-widget" id="account-widget" aria-live="polite"></div>
-    </div>
-
     <!-- PUBLIC_PAGE_INTRO -->
 
     <main class="home-view" id="home-view">

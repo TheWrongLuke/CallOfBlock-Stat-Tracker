@@ -2199,7 +2199,6 @@ function bindStaticEvents() {
         render();
     });
 
-    window.addEventListener("scroll", updateFloatingButtonPosition, { passive: true });
 }
 
 function startChampionRotation() {
@@ -3954,7 +3953,7 @@ function rebuildCache() {
 function render() {
     const finishRender = performanceDiagnostics.startRender(state.view);
     renderHeroStatus();
-    renderTopNav();
+    renderHeaderActions();
     renderStatsRefreshControl();
     renderCreatorIdentity();
     renderAccountWidget();
@@ -4053,7 +4052,6 @@ function renderRoute() {
     }
     toggleRouteView("player-view", state.view === "player");
     toggleRouteView("match-view", state.view === "match");
-    updateFloatingButtonPosition();
     if (state.view === "player") renderPlayerDetail();
     if (state.view === "match") {
         const requestedMatchId = state.matchId;
@@ -4091,30 +4089,11 @@ function toggleRouteView(id, visible) {
     document.getElementById(id)?.classList.toggle("hidden", !visible);
 }
 
-function updateFloatingButtonPosition() {
-    const compact = usesHomePresentation() && window.scrollY > 90;
-    document.body.classList.toggle("home-scrolled", compact);
-    if (!usesHomePresentation()) document.body.classList.remove("home-scrolled");
-}
-
 function usesHomePresentation() {
     return state.view === "home" && (document.body?.dataset.publicRoute || "home") === "home";
 }
 
-function renderTopNav() {
-    const floatingButton = document.querySelector(".tracker-float");
-    if (floatingButton) {
-        const onHome = state.view === "home";
-        floatingButton.textContent = onHome ? "Tracker" : "Hub";
-        if (floatingButton instanceof HTMLAnchorElement) {
-            floatingButton.href = onHome ? "/stats/" : "/";
-            delete floatingButton.dataset.route;
-        } else {
-            floatingButton.dataset.route = onHome ? "leaderboard" : "home";
-        }
-        floatingButton.setAttribute("aria-label", onHome ? "Open stats tracker" : "Return to server hub");
-        floatingButton.title = onHome ? "Open stats tracker" : "Return to server hub";
-    }
+function renderHeaderActions() {
     renderStatsRefreshControl();
     const canSeeStore = isPlaytestAdmin();
     document.querySelectorAll("[data-admin-store-link]").forEach((link) => {

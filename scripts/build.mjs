@@ -119,7 +119,12 @@ function renderPublicPage(html, { id, page, canonicalUrl, socialImageUrl, public
             /<script type="module" src="\.\/src\/entries\/home\.js\?v=[^"]*"><\/script>/i,
             `<script type="module" src="./src/entries/${entry}.js?v=page-runtime-1"></script>`
         );
-    return pruneRouteViews(pruneSharedPageShell(renderPageHero(rendered, id, page), id), id);
+    return markCurrentNavigation(pruneRouteViews(pruneSharedPageShell(renderPageHero(rendered, id, page), id), id), id);
+}
+
+function markCurrentNavigation(html, routeId) {
+    const pattern = new RegExp(`(<a(?=[^>]*\\bdata-site-route="${escapeRegExp(routeId)}")[^>]*)(>)`, "gi");
+    return html.replace(pattern, '$1 aria-current="page"$2');
 }
 
 function renderPageHero(html, routeId, page) {
