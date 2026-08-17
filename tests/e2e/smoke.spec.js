@@ -461,6 +461,24 @@ test("homepage and primary navigation load without fatal errors", async ({ page 
     expect(pageErrors).toEqual([]);
 });
 
+test("public pages do not expose editorial placeholder copy", async ({ page }) => {
+    await installPageStubs(page, supabaseStub);
+    const routes = ["/", "/stats/", "/playtests/", "/feedback/", "/help/", "/about/"];
+    const editorialPlaceholder =
+        /specific featured video|once one is published|placeholder (?:copy|content|text)|(?:add|replace) (?:this|it) here|\bTBD\b/i;
+
+    for (const route of routes) {
+        await page.goto(route);
+        await page.waitForLoadState("domcontentloaded");
+        await expect(page.locator("body")).not.toContainText(editorialPlaceholder);
+    }
+
+    await page.goto("/");
+    await expect(page.locator(".video-section")).toContainText(
+        "Follow TheWrongLuke on YouTube for Call of Block match highlights, trailers, development updates, and event recaps."
+    );
+});
+
 test("public pages keep the compact mobile shell at supported widths", async ({ page }) => {
     await installPageStubs(page, supabaseStub);
     const routes = ["/", "/stats/", "/playtests/", "/feedback/", "/help/", "/about/"];

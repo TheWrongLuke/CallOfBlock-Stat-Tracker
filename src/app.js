@@ -12502,7 +12502,7 @@ function formatMonthLabel(value) {
 }
 
 function formatLocalDate(value, options) {
-    if (!value) return "TBD";
+    if (!value) return "Date unavailable";
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
     const parts = new Intl.DateTimeFormat(undefined, options).formatToParts(date);
