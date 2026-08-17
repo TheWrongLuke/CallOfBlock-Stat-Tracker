@@ -588,6 +588,17 @@ test("the homepage initializes only the public resources it needs", async ({ pag
     expect(counts.badge_catalog_overrides || 0).toBe(0);
 });
 
+test("the homepage reuses its public statistics cache after a reload", async ({ page }) => {
+    await installPageStubs(page, supabaseStub);
+    await page.goto("/");
+    await expect(page.locator("#featured-battle-royale .featured-player").first()).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.__cobPublicDataDiagnostics?.requests?.length || 0)).toBe(2);
+
+    await page.reload();
+    await expect(page.locator("#featured-battle-royale .featured-player").first()).toBeVisible();
+    expect(await page.evaluate(() => window.__cobPublicDataDiagnostics?.requests?.length || 0)).toBe(0);
+});
+
 test("the signed-in homepage account pill opens the profile drawer and reveals admin Store access", async ({
     page
 }) => {

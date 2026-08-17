@@ -116,23 +116,6 @@ The game itself is still actively being balanced and expanded, so availability a
 
 ## Working On
 
-### Mobile UI Rework
-
-The mobile version is being redesigned to be significantly more compact.
-
-Current work includes:
-
-- Smaller mobile header
-- Smaller page titles and typography
-- Reduced hero height
-- Denser cards and statistics
-- Less unnecessary vertical scrolling
-- More compact profile and notification drawers
-- Improved Stats layouts
-- Improved Playtests layouts
-- Improved replay controls
-- Better mobile Admin Documentation
-
 ### Tactical Replay Improvements
 
 - Zombie Survival horde visualization
@@ -197,21 +180,13 @@ This would require significant performance and rendering work and is not current
 
 ## Known Issues
 
-### Mobile Layout
-
-Some mobile pages currently use typography, headers and spacing that are much larger than necessary, resulting in excessive scrolling.
-
-A full compact mobile UI pass is in progress.
-
 ### Replay Telemetry
 
-Some matches may temporarily show that tactical replay telemetry is unavailable while telemetry publishing and server integration are being tested.
+Some matches may show that tactical replay telemetry is unavailable while telemetry publishing and server integration are being tested. Oversized replay files are kept local instead of repeatedly blocking normal statistics publishing.
 
-### Device-Specific Performance
+### First Statistics Load
 
-The website performs smoothly on tested phones and other computers, but one test machine has shown lower UI/frame performance while the game server is running.
-
-This currently appears to be device/browser-specific rather than a confirmed general website or API performance issue and is still being investigated.
+The first visit on a device still requires a live Supabase statistics read. Later visits can render the last public statistics from a bounded local cache while newer data is requested or manually refreshed.
 
 ### Active Development
 

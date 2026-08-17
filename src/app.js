@@ -36,6 +36,8 @@ import {
 } from "./config/feedback.js";
 import { headshotRatePercent, meetsSharpshooterRequirement } from "./utils/cosmetic-progress.js";
 import { createPerformanceDiagnostics } from "./utils/performance-diagnostics.js";
+import { readPublicStatsCache, writePublicStatsCache } from "./utils/public-data-cache.js";
+import { createRequestSignal } from "./utils/request-timeout.js";
 import { loadAdminTicketPreferences, saveAdminTicketPreferences } from "./services/admin-ticket-preferences.js";
 import {
     loadCosmeticPickerPreferences,
@@ -45,6 +47,8 @@ import { claimCanonicalProgressionCosmetics } from "./services/progression-claim
 import { renderGiftNotificationPopup, renderNotificationInbox } from "./views/notifications.js";
 const performanceDiagnostics = createPerformanceDiagnostics();
 globalThis.__cobPerformanceDiagnostics = performanceDiagnostics;
+const STATS_REQUEST_TIMEOUT_MS = 4_500;
+const STATUS_REQUEST_TIMEOUT_MS = 2_500;
 
 let feedbackFeatureLoadPromise = null;
 let feedbackDraftSession = createEmptyFeedbackDraftSession();
@@ -2708,6 +2712,16 @@ async function ensureStatsDataForRoute() {
         applyData(cached.data, cached.preview, cached.dataMode, { fullRender: true, sliceId });
         return true;
     }
+    const persisted = readPublicStatsCache(sliceId, { maxAgeMs: 300_000, allowStale: true });
+    if (persisted && isStatsExport(persisted.payload)) {
+        state.statsRefresh.lastUpdatedAt = new Date(persisted.storedAt);
+        state.statsRefresh.status = "success";
+        state.statsRefresh.message = persisted.stale
+            ? "Showing saved statistics. Use Refresh to request the latest export."
+            : "";
+        applyData(persisted.payload, false, "Cached Supabase data", { fullRender: true, sliceId });
+        return true;
+    }
     if (state.statsRefresh.request) {
         if (state.statsRefresh.requestSliceId === sliceId) return state.statsRefresh.request;
         state.statsRefresh.controller?.abort();
@@ -2769,13 +2783,15 @@ function statsApiSliceUrl(apiUrl, sliceId) {
 
 async function refreshData({ initial, signal = null, sliceId = desiredStatsSliceId() }) {
     let loadedSliceId = sliceId;
-    const [initialSupabaseData, statusData] = await Promise.all([
+    const [initialSupabaseResult, statusResult] = await Promise.all([
         fetchSupabaseExport({ signal, rowId: sliceId }),
         fetchSupabaseExport({ signal, rowId: "status" })
     ]);
-    let supabaseData = initialSupabaseData;
-    if (!isStatsExport(supabaseData) && sliceId !== state.supabaseRowId) {
-        supabaseData = await fetchSupabaseExport({ signal, rowId: state.supabaseRowId });
+    let supabaseData = initialSupabaseResult.payload;
+    const statusData = statusResult.payload;
+    if (!isStatsExport(supabaseData) && !initialSupabaseResult.timedOut && sliceId !== state.supabaseRowId) {
+        const fallbackResult = await fetchSupabaseExport({ signal, rowId: state.supabaseRowId });
+        supabaseData = fallbackResult.payload;
         loadedSliceId = state.supabaseRowId;
     }
     if (isStatsExport(supabaseData)) {
@@ -2920,31 +2936,40 @@ function elapsedRefreshTime(date, long = false) {
 }
 
 async function fetchSupabaseExport({ signal = null, rowId = state.supabaseRowId } = {}) {
-    if (!state.supabaseUrl || !state.supabaseKey) return null;
+    if (!state.supabaseUrl || !state.supabaseKey) return { payload: null, timedOut: false };
 
     const baseUrl = state.supabaseUrl.replace(/\/+$/, "");
     const table = encodeURIComponent(state.supabaseTable || "cob_stats_exports");
     const encodedRowId = encodeURIComponent(rowId || "live");
     const url = `${baseUrl}/rest/v1/${table}?id=eq.${encodedRowId}&select=payload&limit=1`;
+    const timeoutMs = rowId === "status" ? STATUS_REQUEST_TIMEOUT_MS : STATS_REQUEST_TIMEOUT_MS;
+    const request = createRequestSignal(signal, timeoutMs);
 
     try {
         const response = await performanceDiagnostics.fetch(url, {
             ...(rowId === "status" ? { cache: "no-store" } : {}),
-            signal,
+            signal: request.signal,
             headers: {
                 apikey: state.supabaseKey,
                 Authorization: `Bearer ${state.supabaseKey}`,
                 Accept: "application/json"
             }
         });
-        if (!response.ok) return null;
+        if (!response.ok) return { payload: null, timedOut: false };
 
         const rows = await response.json();
-        return rows?.[0]?.payload || null;
+        return { payload: rows?.[0]?.payload || null, timedOut: false };
     } catch (error) {
-        if (error?.name === "AbortError" || signal?.aborted) throw error;
+        if (signal?.aborted) throw error;
+        if (request.timedOut) {
+            console.warn(`Timed out loading the ${rowId} statistics slice after ${timeoutMs} ms.`);
+            return { payload: null, timedOut: true };
+        }
+        if (error?.name === "AbortError") throw error;
         console.error("Failed to load Supabase stats", error);
-        return null;
+        return { payload: null, timedOut: false };
+    } finally {
+        request.cleanup();
     }
 }
 
@@ -3694,6 +3719,9 @@ function initialsForName(value) {
 function applyData(data, preview, dataMode, { fullRender = true, sliceId = state.supabaseRowId } = {}) {
     const resolvedSliceId = data?.slice?.id || sliceId;
     statsDataCache.set(resolvedSliceId, { data, preview, dataMode });
+    if (!preview && ["Supabase database", "Live API"].includes(dataMode)) {
+        writePublicStatsCache(resolvedSliceId, data);
+    }
     const signature = exportSignature(data, sliceId);
     if (signature === state.dataSignature && state.preview === preview && state.dataMode === dataMode) return;
 

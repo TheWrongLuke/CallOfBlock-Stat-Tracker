@@ -1,4 +1,6 @@
 import { getDrawerController } from "./drawer-controller.js";
+import { readPublicStatsCache, writePublicStatsCache } from "../utils/public-data-cache.js";
+import { createRequestSignal } from "../utils/request-timeout.js";
 
 const CONTACT_EMAIL_CODES = [
     108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64,
@@ -7,6 +9,9 @@ const CONTACT_EMAIL_CODES = [
 
 const statsSliceCache = new Map();
 const statsSliceRequests = new Map();
+const STATS_SLICE_UPDATED_EVENT = "cob:stats-slice-updated";
+const STATS_FETCH_TIMEOUT_MS = 4_500;
+const STATUS_FETCH_TIMEOUT_MS = 2_500;
 let siteShellPromise = null;
 
 export async function initializeSiteShell({ loadStatus = true } = {}) {
@@ -147,18 +152,40 @@ async function loadStatsSlice(id, { force = false, fallback = id !== "status" } 
     const baseUrl = String(window.COB_SUPABASE_URL || "").replace(/\/+$/, "");
     const key = String(window.COB_SUPABASE_KEY || "").trim();
     if (!baseUrl || !key) return null;
-    const cached = statsSliceCache.get(id);
     const maxAge = id === "status" ? 15_000 : 300_000;
-    if (!force && cached && Date.now() - cached.storedAt < maxAge) return cached.payload;
-    if (!force && statsSliceRequests.has(id)) return statsSliceRequests.get(id);
+    let cached = statsSliceCache.get(id);
+    if (!cached) {
+        const persisted = readPublicStatsCache(id, { maxAgeMs: maxAge, allowStale: true });
+        if (persisted) {
+            cached = persisted;
+            statsSliceCache.set(id, persisted);
+        }
+    }
 
-    const request = fetchStatsSlice(id, { baseUrl, key, fallback }).finally(() => {
-        if (statsSliceRequests.get(id) === request) statsSliceRequests.delete(id);
-    });
+    if (!force && cached) {
+        if (Date.now() - cached.storedAt >= maxAge) void requestStatsSlice(id, { baseUrl, key, fallback });
+        return cached.payload;
+    }
+    return requestStatsSlice(id, { baseUrl, key, fallback });
+}
+
+function requestStatsSlice(id, { baseUrl, key, fallback }) {
+    if (statsSliceRequests.has(id)) return statsSliceRequests.get(id);
+
+    const request = fetchStatsSlice(id, { baseUrl, key, fallback })
+        .then((payload) => {
+            if (!payload) return null;
+            const storedAt = Date.now();
+            statsSliceCache.set(id, { payload, storedAt });
+            writePublicStatsCache(id, payload);
+            window.dispatchEvent(new CustomEvent(STATS_SLICE_UPDATED_EVENT, { detail: { id, payload, storedAt } }));
+            return payload;
+        })
+        .finally(() => {
+            if (statsSliceRequests.get(id) === request) statsSliceRequests.delete(id);
+        });
     statsSliceRequests.set(id, request);
-    const payload = await request;
-    if (payload) statsSliceCache.set(id, { payload, storedAt: Date.now() });
-    return payload;
+    return request;
 }
 
 async function fetchStatsSlice(id, { baseUrl, key, fallback }) {
@@ -168,9 +195,14 @@ async function fetchStatsSlice(id, { baseUrl, key, fallback }) {
     for (const rowId of rowIds) {
         const url = `${baseUrl}/rest/v1/${encodeURIComponent(table)}?id=eq.${encodeURIComponent(rowId)}&select=payload&limit=1`;
         const startedAt = performance.now();
+        const request = createRequestSignal(
+            null,
+            rowId === "status" ? STATUS_FETCH_TIMEOUT_MS : STATS_FETCH_TIMEOUT_MS
+        );
         try {
             const response = await fetch(url, {
                 ...(rowId === "status" ? { cache: "no-store" } : {}),
+                signal: request.signal,
                 headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" }
             });
             const text = await response.text();
@@ -180,7 +212,15 @@ async function fetchStatsSlice(id, { baseUrl, key, fallback }) {
             if (rows?.[0]?.payload) return rows[0].payload;
         } catch (error) {
             recordPublicDataRequest(rowId, startedAt, 0, 0, error);
+            if (request.timedOut) {
+                console.warn(
+                    `Timed out loading the ${rowId} statistics slice after ${rowId === "status" ? STATUS_FETCH_TIMEOUT_MS : STATS_FETCH_TIMEOUT_MS} ms.`
+                );
+                break;
+            }
             console.warn(`Could not load the ${rowId} statistics slice`, error);
+        } finally {
+            request.cleanup();
         }
     }
     return null;

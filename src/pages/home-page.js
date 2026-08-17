@@ -9,6 +9,7 @@ import {
 import { syncDiscordProfile } from "../api/profile.js";
 
 const CHAMPION_ROTATE_MS = 5000;
+const STATS_SLICE_UPDATED_EVENT = "cob:stats-slice-updated";
 
 export async function initializeHomePage() {
     if (redirectLegacyRoute()) return;
@@ -16,18 +17,43 @@ export async function initializeHomePage() {
     await whenReady();
 
     const shell = await initializeSiteShell({ loadStatus: false });
-    const [home, status] = await Promise.all([
+    let currentHome = null;
+    let currentStatus = null;
+    let currentProfiles = [];
+    let currentCatalog = new Map();
+    let homeRendered = false;
+    const renderCurrentData = () => {
+        const currentData = mergeHomeStatus(currentHome, currentStatus);
+        renderHeroStatus(currentData);
+        if (homeRendered) renderHome(currentData, currentProfiles, currentCatalog);
+        return currentData;
+    };
+    const handleStatsUpdate = (event) => {
+        if (event.detail?.id === "home") currentHome = event.detail.payload;
+        else if (event.detail?.id === "status") currentStatus = event.detail.payload;
+        else return;
+        renderCurrentData();
+    };
+    window.addEventListener(STATS_SLICE_UPDATED_EVENT, handleStatsUpdate);
+    window.addEventListener(
+        "pagehide",
+        () => window.removeEventListener(STATS_SLICE_UPDATED_EVENT, handleStatsUpdate),
+        { once: true }
+    );
+
+    [currentHome, currentStatus] = await Promise.all([
         shell.loadStatsSlice("home"),
         shell.loadStatsSlice("status", { fallback: false })
     ]);
-    const data = mergeHomeStatus(home, status);
-    renderHeroStatus(data);
+    const data = renderCurrentData();
 
     const [profiles, catalog, ownProfileResult] = await Promise.all([
         loadPublicProfiles(shell.client, data),
         loadCosmeticCatalog(shell.client),
         shell.session?.user ? syncDiscordProfile(shell.client) : Promise.resolve({ data: null, error: null })
     ]);
+    currentProfiles = profiles;
+    currentCatalog = catalog;
     const publicViewerProfile = profiles.find((profile) => profile.id === shell.session?.user?.id) || null;
     const viewerProfile = ownProfileResult.error ? publicViewerProfile : ownProfileResult.data || publicViewerProfile;
     shell.setProfile(resolveShellProfile(viewerProfile, catalog));
@@ -35,7 +61,8 @@ export async function initializeHomePage() {
         const { initializeHomeWeeklyMissions } = await import("../features/home-weekly-missions.js");
         initializeHomeWeeklyMissions(shell);
     }
-    renderHome(data, profiles, catalog);
+    homeRendered = true;
+    renderHome(mergeHomeStatus(currentHome, currentStatus), profiles, catalog);
     if (shell.session?.user) {
         const { initializeHomeNotifications } = await import("../features/home-notifications.js");
         await initializeHomeNotifications(shell.client, shell.drawer);
@@ -87,7 +114,7 @@ function renderFeaturedList(mode, data, profiles, catalog) {
             );
             const tab = mode === "deathmatch" ? "deathmatch" : "battleRoyale";
             return `<a class="featured-player podium-rank-${index + 1}" href="/stats/#player=${encodeURIComponent(player.playerId)}&amp;tab=${tab}">
-                <span class="player-avatar featured-avatar">${renderAvatarImage(avatar, name)}</span>
+                <span class="player-avatar featured-avatar">${renderAvatarImage(avatar, name, mode === "battleRoyale" && index < 2 ? "eager" : "lazy")}</span>
                 <div class="featured-player-main">
                     <div><span class="rank-badge rank-${Math.min(index + 1, 3)}">${index + 1}</span><strong>${escapeHtml(name)}</strong></div>
                     ${title ? `<span class="profile-title rarity-${escapeHtml(title.rarity)}">${escapeHtml(title.text)}</span>` : ""}
@@ -230,11 +257,11 @@ function renderCreatorProfile(profiles, catalog) {
     image.alt = `${profile.display_name || profile.username || "TheWrongLuke"} profile icon`;
 }
 
-function renderAvatarImage(url, name) {
+function renderAvatarImage(url, name, loading = "lazy") {
     const initials = String(name || "COB")
         .slice(0, 2)
         .toUpperCase();
-    return `<span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials)}</span><img class="avatar-image" src="${escapeHtml(url)}" alt="" loading="eager" decoding="async" referrerpolicy="no-referrer">`;
+    return `<span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials)}</span><img class="avatar-image" src="${escapeHtml(url)}" alt="" loading="${loading}" decoding="async" referrerpolicy="no-referrer">`;
 }
 
 function startChampionCarousel() {

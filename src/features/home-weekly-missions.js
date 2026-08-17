@@ -19,6 +19,7 @@ export function initializeHomeWeeklyMissions(shell) {
     document.addEventListener("cob:account-panel-open", () => void loadWeeklyMissions(shell, state));
     document.addEventListener("click", (event) => void handleMissionClick(event, shell, state));
     document.addEventListener("submit", (event) => void handleMissionSubmit(event, shell, state));
+    if (shell.accountPanelOpen) void loadWeeklyMissions(shell, state);
 }
 
 async function loadWeeklyMissions(shell, state, force = false) {
