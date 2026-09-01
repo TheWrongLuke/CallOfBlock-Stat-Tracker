@@ -1147,8 +1147,16 @@ test("player profile sections filter TDM and FFA independently and paginate weap
 
     await expect(page.locator(".player-tabs [data-player-tab]")).toHaveCount(4);
     await expect(page.locator(".player-profile-overview-summary")).toBeVisible();
-    await expect(page.locator(".player-profile-overview-summary")).toContainText("Top Weapons");
+    await expect(page.locator(".player-profile-overview-summary")).not.toContainText("Top Weapons");
     await expect(page.locator(".player-profile-overview-summary .activity-calendar.compact")).toBeVisible();
+    const overviewCalendarBox = await page
+        .locator(".player-profile-overview-summary .activity-calendar.compact")
+        .boundingBox();
+    expect(overviewCalendarBox).not.toBeNull();
+    expect(Math.abs(overviewCalendarBox.width - overviewCalendarBox.height)).toBeLessThanOrEqual(2);
+    const primaryTabs = page.locator(".player-tabs");
+    await expect(primaryTabs).toHaveCSS("display", "grid");
+    await expect(primaryTabs).toHaveCSS("grid-template-columns", /.+ .+ .+ .+/);
     await page.evaluate(() => window.scrollTo(0, 240));
     const scrollBeforeModeChange = await page.evaluate(() => window.scrollY);
     await page.locator('[data-profile-mode="teamDeathmatch"]').evaluate((button) => button.click());
@@ -1169,7 +1177,7 @@ test("player profile sections filter TDM and FFA independently and paginate weap
     await expect(page.locator("#player-view")).not.toContainText("TDM Weapon 1");
 
     await page.locator('[data-player-tab="history"]').click();
-    await expect(page.locator(".activity-calendar")).toContainText("Last 60 days");
+    await expect(page.locator(".profile-history-sidebar > .activity-calendar")).toContainText("Last 60 days");
     await page.locator('[data-profile-mode="teamDeathmatch"]').click();
     await expect(page.locator(".profile-history-main")).toContainText("Team Deathmatch");
     await expect(page.locator(".profile-history-main")).not.toContainText("Free For All");
@@ -1183,6 +1191,24 @@ test("player profile sections filter TDM and FFA independently and paginate weap
     }));
     expect(weaponButtonStyle.borderStyle).toBe("solid");
     expect(weaponButtonStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('[data-player-tab="overview"]').click();
+    const mobileLayout = await page.evaluate(() => {
+        const calendar = document.querySelector(".player-profile-overview-summary .activity-calendar.compact");
+        const tabs = document.querySelector(".player-tabs");
+        const calendarBounds = calendar?.getBoundingClientRect();
+        return {
+            documentWidth: document.documentElement.scrollWidth,
+            viewportWidth: window.innerWidth,
+            calendarWidth: calendarBounds?.width || 0,
+            calendarHeight: calendarBounds?.height || 0,
+            tabWidth: tabs?.getBoundingClientRect().width || 0
+        };
+    });
+    expect(mobileLayout.documentWidth).toBeLessThanOrEqual(mobileLayout.viewportWidth + 1);
+    expect(Math.abs(mobileLayout.calendarWidth - mobileLayout.calendarHeight)).toBeLessThanOrEqual(2);
+    expect(mobileLayout.tabWidth).toBeLessThanOrEqual(mobileLayout.viewportWidth);
 });
 
 test("legacy duplicate profile IDs resolve to the canonical merged profile", async ({ page }) => {

@@ -14829,13 +14829,8 @@ function renderPlayerProfileHero(profile) {
 function renderPlayerOverviewSummary(profile) {
     const mode = profileModeFilter("overview");
     const matches = filteredHistory(profile, mode);
-    const topWeapons = profileModeWeapons(profile, mode).slice(0, 3);
     return `
         <aside class="player-profile-overview-summary" aria-label="${escapeHtml(`${PROFILE_MODE_LABELS[mode]} overview summary`)}">
-            <div class="profile-history-sidebar overview-weapons-summary">
-                ${renderHistorySidebarList("Top Weapons", topWeapons, "weapons")}
-                <button class="profile-summary-action" type="button" data-profile-tab-target="weapons" data-profile-mode-target="${escapeHtml(mode)}">View all weapons</button>
-            </div>
             ${renderActivityCalendar(matches, { compact: true })}
         </aside>
     `;
@@ -14995,9 +14990,9 @@ function renderHistoryTab(profile, mode) {
                 <h3>${escapeHtml(HISTORY_MODE_LABELS[mode])} Match History</h3>
                 <span>Local time: ${escapeHtml(viewerTimeZoneLabel())}</span>
             </div>
-            ${renderActivityCalendar(matches)}
             <div class="profile-history-workspace">
-                <aside class="profile-history-sidebar" aria-label="Mode summary">
+                <aside class="profile-history-sidebar has-activity" aria-label="Mode summary">
+                    ${renderActivityCalendar(matches, { compact: true })}
                     ${renderHistorySidebarList("Top Weapons", topWeapons, "weapons")}
                     <button class="profile-summary-action" type="button" data-profile-tab-target="weapons" data-profile-mode-target="${escapeHtml(mode === "overall" ? "battleRoyale" : mode)}">View all weapons</button>
                     ${renderHistorySidebarList("Top Maps", topMaps, "maps")}
