@@ -374,9 +374,15 @@ async function installPageStubs(page, supabaseBody, statsPayload = statsExportFi
     );
     await page.route("https://test.supabase.co/rest/v1/**", (route) => {
         const requestedRow = new URL(route.request().url()).searchParams.get("id");
+        const requestedPayload =
+            requestedRow === "eq.live"
+                ? liveStatsExportFixture
+                : typeof statsPayload === "function"
+                  ? statsPayload(requestedRow)
+                  : statsPayload;
         return route.fulfill({
             contentType: "application/json",
-            body: JSON.stringify([{ payload: requestedRow === "eq.live" ? liveStatsExportFixture : statsPayload }])
+            body: JSON.stringify([{ payload: requestedPayload }])
         });
     });
     await page.route("https://mc-heads.net/**", (route) =>
@@ -1082,6 +1088,39 @@ test("mobile percentile help uses viewport width instead of the narrow rank badg
     expect(styles.tooltipPosition).toBe("fixed");
     expect(styles.tooltipWidth).toBeGreaterThanOrEqual(280);
     expect(styles.wordBreak).toBe("normal");
+});
+
+test("player overview loads its history slice on the first visit", async ({ page }) => {
+    const historyPayload = structuredClone(statsExportFixture);
+    const profile = historyPayload.profiles.find((entry) => entry.battleRoyale);
+    profile.recentMatches = [
+        {
+            matchId: "initial-overview-history",
+            mode: "battleRoyale",
+            modeLabel: "Battle Royale",
+            endedAt: "2026-08-31T12:00:00Z",
+            won: true,
+            kills: 4,
+            deaths: 1,
+            mapId: "initial-history-map",
+            mapLabel: "Initial History Map"
+        }
+    ];
+    const corePayload = structuredClone(historyPayload);
+    corePayload.profiles.find((entry) => entry.playerId === profile.playerId).recentMatches = [];
+    const requestedRows = [];
+    const expectedHistoryRow = `eq.profile:${profile.playerId}:history`;
+
+    await installPageStubs(page, supabaseStub, (requestedRow) => {
+        requestedRows.push(requestedRow);
+        return requestedRow === expectedHistoryRow ? historyPayload : corePayload;
+    });
+    await page.goto(`/stats/#player=${encodeURIComponent(profile.playerId)}&tab=overview`);
+
+    await expect(page.locator(".profile-overview-history .history-card")).toHaveCount(1);
+    await expect(page.locator(".profile-overview-history")).toContainText("4 / 1");
+    expect(requestedRows).toContain(expectedHistoryRow);
+    expect(requestedRows).not.toContain(`eq.profile:${profile.playerId}`);
 });
 
 test("player profile sections filter TDM and FFA independently and paginate weapons", async ({ page }) => {

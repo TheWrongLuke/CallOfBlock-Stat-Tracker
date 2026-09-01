@@ -2843,7 +2843,8 @@ function desiredStatsSliceId() {
         return `mode:${state.mode}`;
     }
     if (state.view === "player" && state.selectedId) {
-        const heavyTab = ["weapons", "maps", "history"].includes(state.playerTab) ? `:${state.playerTab}` : "";
+        const requestedTab = state.playerTab === "overview" ? "history" : state.playerTab;
+        const heavyTab = ["weapons", "maps", "history"].includes(requestedTab) ? `:${requestedTab}` : "";
         return `profile:${state.selectedId}${heavyTab}`;
     }
     if (state.view === "match") return state.supabaseRowId;
