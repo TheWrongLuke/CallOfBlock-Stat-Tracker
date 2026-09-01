@@ -88,13 +88,19 @@ function resolveShellProfile(profile, catalog) {
 
 function renderHome(data, profiles, catalog) {
     renderFeaturedList("battleRoyale", data, profiles, catalog);
-    renderFeaturedList("deathmatch", data, profiles, catalog);
+    renderFeaturedList("teamDeathmatch", data, profiles, catalog);
+    renderFeaturedList("freeForAll", data, profiles, catalog);
     renderLatestMatch(data?.latestMatch || null);
     renderCreatorProfile(profiles, catalog);
 }
 
 function renderFeaturedList(mode, data, profiles, catalog) {
-    const container = document.getElementById(`featured-${mode === "battleRoyale" ? "battle-royale" : "deathmatch"}`);
+    const containers = {
+        battleRoyale: "featured-battle-royale",
+        teamDeathmatch: "featured-team-deathmatch",
+        freeForAll: "featured-free-for-all"
+    };
+    const container = document.getElementById(containers[mode]);
     if (!container) return;
     const players = Array.isArray(data?.modes?.[mode]?.players) ? data.modes[mode].players.slice(0, 5) : [];
     if (!players.length) {
@@ -112,8 +118,7 @@ function renderFeaturedList(mode, data, profiles, catalog) {
             const winRate = Number(
                 player.derived?.winRate ?? (number(stats.games) ? number(stats.wins) / number(stats.games) : 0)
             );
-            const tab = mode === "deathmatch" ? "deathmatch" : "battleRoyale";
-            return `<a class="featured-player podium-rank-${index + 1}" href="/stats/#player=${encodeURIComponent(player.playerId)}&amp;tab=${tab}">
+            return `<a class="featured-player podium-rank-${index + 1}" href="/stats/#player=${encodeURIComponent(player.playerId)}&amp;tab=overview&amp;profileMode=${encodeURIComponent(mode)}">
                 <span class="player-avatar featured-avatar">${renderAvatarImage(avatar, name, mode === "battleRoyale" && index < 2 ? "eager" : "lazy")}</span>
                 <div class="featured-player-main">
                     <div><span class="rank-badge rank-${Math.min(index + 1, 3)}">${index + 1}</span><strong>${escapeHtml(name)}</strong></div>
@@ -178,7 +183,7 @@ async function loadPublicProfiles(client, data) {
     const names = [
         ...new Set([
             "RTXLuke",
-            ...["battleRoyale", "deathmatch"].flatMap((mode) =>
+            ...["battleRoyale", "teamDeathmatch", "freeForAll"].flatMap((mode) =>
                 (Array.isArray(data?.modes?.[mode]?.players) ? data.modes[mode].players : []).map(
                     (player) => player?.name
                 )
@@ -267,15 +272,16 @@ function renderAvatarImage(url, name, loading = "lazy") {
 function startChampionCarousel() {
     const carousel = document.getElementById("champion-carousel");
     if (!carousel) return;
-    let mode = "battleRoyale";
+    const modes = ["battleRoyale", "teamDeathmatch", "freeForAll"];
+    let modeIndex = 0;
     let timer = 0;
     let visible = true;
     const restart = () => {
         window.clearInterval(timer);
         timer = window.setInterval(() => {
             if (document.hidden || !visible) return;
-            mode = mode === "battleRoyale" ? "deathmatch" : "battleRoyale";
-            const panel = carousel.querySelector(`[data-champion-panel="${mode}"]`);
+            modeIndex = (modeIndex + 1) % modes.length;
+            const panel = carousel.querySelector(`[data-champion-panel="${modes[modeIndex]}"]`);
             if (panel) carousel.scrollTo({ left: panel.offsetLeft - carousel.offsetLeft, behavior: "smooth" });
         }, CHAMPION_ROTATE_MS);
     };
@@ -283,7 +289,16 @@ function startChampionCarousel() {
     carousel.addEventListener("scroll", () => {
         window.clearTimeout(scrollTimer);
         scrollTimer = window.setTimeout(() => {
-            mode = carousel.scrollLeft > carousel.clientWidth * 0.5 ? "deathmatch" : "battleRoyale";
+            const panels = [...carousel.querySelectorAll("[data-champion-panel]")];
+            const viewportCenter = carousel.scrollLeft + carousel.clientWidth / 2;
+            modeIndex = panels.reduce((closestIndex, panel, index) => {
+                const panelCenter = panel.offsetLeft - carousel.offsetLeft + panel.clientWidth / 2;
+                const closest = panels[closestIndex];
+                const closestCenter = closest.offsetLeft - carousel.offsetLeft + closest.clientWidth / 2;
+                return Math.abs(panelCenter - viewportCenter) < Math.abs(closestCenter - viewportCenter)
+                    ? index
+                    : closestIndex;
+            }, 0);
             restart();
         }, 120);
     });

@@ -258,6 +258,13 @@ const adminSupabaseStub = `
                     signOut: async () => ({ error: null })
                 },
                 from: (table) => builder(table),
+                functions: {
+                    invoke: async (name, options) => {
+                        window.__edgeFunctionCalls = window.__edgeFunctionCalls || [];
+                        window.__edgeFunctionCalls.push({ name, options });
+                        return { data: { deleted: name === "delete-account" }, error: null };
+                    }
+                },
                 rpc: async (name, args = {}) => {
                     if (name === "sync_discord_profile_v2" && window.__profileSyncDelayMs) {
                         await new Promise((resolve) => setTimeout(resolve, window.__profileSyncDelayMs));
@@ -855,7 +862,7 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             canonical: "https://callofblock.com/about/",
             heading: "About Call of Block",
             intro: "independent Minecraft 1.20.1 Forge multiplayer project",
-            view: "#about-the-creator"
+            view: "#about-project"
         }
     ];
 
@@ -892,7 +899,8 @@ test("canonical public pages load directly with unique indexable metadata", asyn
     expect(descriptions.size).toBe(pages.length);
 
     await page.goto("/about/");
-    await expect(page.locator("#about-the-creator")).toContainText("official website");
+    await expect(page.locator("#about-project")).toContainText("official website");
+    await expect(page.locator("#about-the-creator")).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Official modpack on CurseForge" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Official modpack on Modrinth" })).toBeVisible();
 
@@ -952,7 +960,7 @@ test("stats page accepts crawlable query filters", async ({ page }) => {
     await page.goto("/stats/?mode=deathmatch&view=weapons&sort=kills");
     await expect(page.locator("#leaderboard-view")).toBeVisible();
     await expect(page.locator("#main-view-tabs button.active")).toContainText("Weapons");
-    await expect(page.locator("#mode-tabs button.active")).toContainText("Deathmatch");
+    await expect(page.locator("#mode-tabs button.active")).toContainText("Team Deathmatch");
 });
 
 test("Duel and Zombie Survival have separate public leaderboard routes", async ({ page }) => {
@@ -983,6 +991,12 @@ test("creator trust section and footer trust links are visible to public visitor
     await expect(footer).toContainText("About & Trust");
     await expect(footer.locator("[data-admin-store-link]")).toBeHidden();
     await expect(footer.getByRole("link", { name: "Website Safety" })).toBeVisible();
+
+    for (const path of ["/stats/", "/playtests/", "/feedback/", "/help/", "/about/"]) {
+        await page.goto(path);
+        await expect(page.locator("#about-the-creator")).toHaveCount(0);
+        await expect(page.getByRole("link", { name: "Who is behind Call of Block?" })).toHaveCount(0);
+    }
 });
 
 test("website safety footer link opens the targeted FAQ entry", async ({ page }) => {
@@ -1007,6 +1021,10 @@ test("a player profile can be opened from existing test data", async ({ page }) 
     await expect(firstProfileLink).toBeVisible();
     await firstProfileLink.click();
     await expect(page.locator("#player-view")).toBeVisible();
+    await expect(page.locator('[data-player-tab="overview"]')).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#player-view")).toContainText("Collateral Hits");
+    await expect(page.locator("#player-view")).toContainText("Collateral Kills");
+    await expect(page.locator("#player-view")).toContainText("Collateral Headshot Kills");
 });
 
 test("profile percentile context is real, rank-first for small populations, and keyboard accessible", async ({
@@ -1035,6 +1053,138 @@ test("profile percentile context is real, rank-first for small populations, and 
     await expect(page.locator(".percentile-context", { hasText: "Top 0.0%" })).toHaveCount(0);
 });
 
+test("mobile percentile help uses viewport width instead of the narrow rank badge", async ({ page }) => {
+    const payload = structuredClone(statsExportFixture);
+    const profile = payload.profiles.find((entry) => entry.battleRoyale);
+    profile.battleRoyale.percentiles = {
+        wins: {
+            mode: "battleRoyale",
+            metric: "wins",
+            value: profile.battleRoyale.stats.wins,
+            rank: 2,
+            qualifiedPlayers: 4,
+            topPercent: 50,
+            minimumGames: 3
+        }
+    };
+    await page.setViewportSize({ width: 390, height: 844 });
+    await installPageStubs(page, supabaseStub, payload);
+    await page.goto(`/stats/#player=${encodeURIComponent(profile.playerId)}&tab=overview`);
+    const percentile = page.locator(".percentile-context").first();
+    await percentile.focus();
+    const styles = await percentile.evaluate((element) => ({
+        badgeTransform: getComputedStyle(element).transform,
+        tooltipPosition: getComputedStyle(element, "::after").position,
+        tooltipWidth: Number.parseFloat(getComputedStyle(element, "::after").width),
+        wordBreak: getComputedStyle(element, "::after").wordBreak
+    }));
+    expect(styles.badgeTransform).toBe("none");
+    expect(styles.tooltipPosition).toBe("fixed");
+    expect(styles.tooltipWidth).toBeGreaterThanOrEqual(280);
+    expect(styles.wordBreak).toBe("normal");
+});
+
+test("player profile sections filter TDM and FFA independently and paginate weapons", async ({ page }) => {
+    const payload = structuredClone(statsExportFixture);
+    const profile = payload.profiles.find((entry) => entry.battleRoyale);
+    const weapon = (index) => ({
+        id: `tacz:tdm_weapon_${index}`,
+        label: `TDM Weapon ${index}`,
+        stats: { games: 2, kills: 30 - index, deaths: 1, hits: 50, headshots: 10 }
+    });
+    profile.teamDeathmatch = {
+        stats: { games: 2, wins: 1, kills: 24, deaths: 8, hits: 70, headshots: 20 },
+        details: {
+            weapons: Array.from({ length: 14 }, (_, index) => weapon(index + 1)),
+            maps: [{ id: "hijacked", label: "Hijacked", stats: { games: 2, wins: 1, kills: 24 } }]
+        }
+    };
+    profile.freeForAll = {
+        stats: { games: 1, wins: 1, kills: 8, deaths: 2, hits: 20, headshots: 4 },
+        details: {
+            weapons: [{ id: "tacz:ffa_weapon", label: "FFA Weapon", stats: { games: 1, kills: 8, hits: 20 } }],
+            maps: [{ id: "raid", label: "Raid", stats: { games: 1, wins: 1, kills: 8 } }]
+        }
+    };
+    profile.recentMatches = [
+        {
+            matchId: "tdm-history",
+            mode: "deathmatch",
+            modeVariant: "teamDeathmatch",
+            modeLabel: "Team Deathmatch",
+            endedAt: "2026-08-30T12:00:00Z",
+            won: true,
+            kills: 12,
+            deaths: 4,
+            mapId: "hijacked",
+            mapLabel: "Hijacked"
+        },
+        {
+            matchId: "ffa-history",
+            mode: "deathmatch",
+            modeVariant: "freeForAll",
+            modeLabel: "Free For All",
+            endedAt: "2026-08-29T12:00:00Z",
+            won: false,
+            kills: 8,
+            deaths: 2,
+            mapId: "raid",
+            mapLabel: "Raid"
+        },
+        {
+            matchId: "legacy-history",
+            mode: "deathmatch",
+            modeLabel: "Deathmatch",
+            endedAt: "2026-08-28T12:00:00Z",
+            won: true,
+            kills: 99,
+            deaths: 0,
+            mapLabel: "Legacy Map"
+        }
+    ];
+    await installPageStubs(page, supabaseStub, payload);
+    await page.goto(`/stats/#player=${encodeURIComponent(profile.playerId)}&tab=overview`);
+
+    await expect(page.locator(".player-tabs [data-player-tab]")).toHaveCount(4);
+    await expect(page.locator(".player-profile-overview-summary")).toBeVisible();
+    await expect(page.locator(".player-profile-overview-summary")).toContainText("Top Weapons");
+    await expect(page.locator(".player-profile-overview-summary .activity-calendar.compact")).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 240));
+    const scrollBeforeModeChange = await page.evaluate(() => window.scrollY);
+    await page.locator('[data-profile-mode="teamDeathmatch"]').evaluate((button) => button.click());
+    await expect(page.locator(".profile-overview-history")).toContainText("Team Deathmatch");
+    await expect(page.locator(".profile-overview-history")).not.toContainText("Free For All");
+    await expect(page.locator(".profile-overview-history")).not.toContainText("Legacy Map");
+    await expect
+        .poll(() => page.evaluate(() => window.scrollY))
+        .toBeGreaterThanOrEqual(Math.max(0, scrollBeforeModeChange - 2));
+
+    await page.locator('[data-player-tab="weapons"]').click();
+    await page.locator('[data-profile-mode="teamDeathmatch"]').click();
+    await expect(page.locator(".weapon-row:not(.heading)")).toHaveCount(12);
+    await expect(page.locator(".profile-weapon-pagination")).toContainText("Page 1 of 2");
+    await page.locator('[data-profile-mode="freeForAll"]').click();
+    await expect(page.locator(".weapon-row:not(.heading)")).toHaveCount(1);
+    await expect(page.locator("#player-view")).toContainText("FFA Weapon");
+    await expect(page.locator("#player-view")).not.toContainText("TDM Weapon 1");
+
+    await page.locator('[data-player-tab="history"]').click();
+    await expect(page.locator(".activity-calendar")).toContainText("Last 60 days");
+    await page.locator('[data-profile-mode="teamDeathmatch"]').click();
+    await expect(page.locator(".profile-history-main")).toContainText("Team Deathmatch");
+    await expect(page.locator(".profile-history-main")).not.toContainText("Free For All");
+    await expect(page.locator(".profile-history-sidebar")).toContainText("Top Weapons");
+    await expect(page.locator(".profile-history-sidebar")).toContainText("Top Maps");
+    const weaponButton = page.locator(".profile-history-sidebar .profile-summary-action");
+    await expect(weaponButton).toBeVisible();
+    const weaponButtonStyle = await weaponButton.evaluate((element) => ({
+        borderStyle: getComputedStyle(element).borderStyle,
+        backgroundColor: getComputedStyle(element).backgroundColor
+    }));
+    expect(weaponButtonStyle.borderStyle).toBe("solid");
+    expect(weaponButtonStyle.backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+});
+
 test("legacy duplicate profile IDs resolve to the canonical merged profile", async ({ page }) => {
     const legacyId = "p_1978b4b211a8";
     const canonicalId = "sample-rtxluke";
@@ -1045,7 +1195,9 @@ test("legacy duplicate profile IDs resolve to the canonical merged profile", asy
     await page.goto(`/stats/#player=${legacyId}&tab=overview`);
     await expect(page.locator("#player-view")).toBeVisible();
     await expect(page.locator("#player-view")).toContainText("RTXLuke");
-    await expect.poll(() => page.evaluate(() => window.location.hash)).toBe(`#player=${canonicalId}&tab=overview`);
+    await expect
+        .poll(() => page.evaluate(() => window.location.hash))
+        .toBe(`#player=${canonicalId}&tab=overview&profileMode=battleRoyale`);
 });
 
 test("feedback asks logged-out visitors to sign in", async ({ page }) => {
@@ -1436,6 +1588,25 @@ test("the Minecraft avatar survives a failed primary skin service", async ({ pag
         /https:\/\/api\.mcheads\.org\/head\/AdminMC\//
     );
     await expect(page.locator(".account-hero .avatar-image-fallback")).toBeHidden();
+});
+
+test("account privacy controls require DELETE and invoke the server-side deletion function", async ({ page }) => {
+    await openAdminApp(page, "#account");
+    await expect(page.locator("[data-notification-preferences-form]")).toContainText("Email Notifications");
+    const deletion = page.locator("[data-account-delete-form]");
+    await page.locator(".account-danger-zone summary").click();
+    await deletion.locator("input[name='confirmation']").fill("DELETE");
+    await deletion.getByRole("button", { name: "Permanently delete account" }).click();
+    await expect
+        .poll(() => page.evaluate(() => window.__edgeFunctionCalls || []))
+        .toEqual([
+            {
+                name: "delete-account",
+                options: { body: { confirmation: "DELETE" } }
+            }
+        ]);
+    await expect(page).toHaveURL(/\/stats\/$/);
+    await expect(page.locator("[data-account-delete-form]")).toHaveCount(0);
 });
 
 test("personal cosmetics remember the Show unowned preference after reload", async ({ page }) => {

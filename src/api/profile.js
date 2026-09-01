@@ -20,3 +20,29 @@ export async function saveProfileCustomization(client, profile) {
     });
     return { ...result, data: rpcObject(result.data) };
 }
+
+export async function loadNotificationPreferences(client) {
+    if (!client?.rpc) return { data: null, error: new Error("A Supabase client is required.") };
+    const result = await client.rpc("get_my_notification_preferences");
+    return { ...result, data: rpcObject(result.data) };
+}
+
+export async function saveNotificationPreferences(client, preferences) {
+    if (!client?.rpc) return { data: null, error: new Error("A Supabase client is required.") };
+    const result = await client.rpc("save_my_notification_preferences", {
+        p_playtest_email: Boolean(preferences.playtestEmail),
+        p_admin_ticket_email: Boolean(preferences.adminTicketEmail),
+        p_admin_account_created_email: Boolean(preferences.adminAccountCreatedEmail)
+    });
+    return { ...result, data: rpcObject(result.data) };
+}
+
+export async function deleteOwnAccount(client, confirmation) {
+    if (!client?.functions?.invoke) return { data: null, error: new Error("A Supabase client is required.") };
+    const result = await client.functions.invoke("delete-account", {
+        body: {
+            confirmation: String(confirmation || "")
+        }
+    });
+    return { ...result, data: rpcObject(result.data) };
+}

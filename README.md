@@ -54,6 +54,7 @@ Zombie Survival replay support is being expanded to include live horde positions
 - Missions
 - XP and progression
 - Recent matches and statistics
+- Self-service website account and private-data deletion
 
 ### Playtests
 
@@ -62,6 +63,7 @@ Zombie Survival replay support is being expanded to include live horde positions
 - Date and time preferences
 - Participation confirmation
 - Playtest notifications
+- Optional playtest email notifications
 
 ### Feedback & Support
 
@@ -70,6 +72,7 @@ Zombie Survival replay support is being expanded to include live horde positions
 - Attachments
 - Status tracking
 - Administrator ticket management
+- Optional administrator email alerts for new tickets and website accounts
 
 ### Live Server Information
 
@@ -159,6 +162,10 @@ The game itself is still actively being balanced and expanded, so availability a
 ## Planned / Future
 
 These are longer-term ideas and are **not currently guaranteed features**.
+
+### Website Kit Builder
+
+A future account tool may build and validate game kits on the website, then save them to the same account-backed kit library used in game. This requires an authoritative server-side item/attachment schema and validation API; it is not part of the current public site.
 
 ### 3D Tactical Replay
 

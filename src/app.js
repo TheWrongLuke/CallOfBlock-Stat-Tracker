@@ -1,6 +1,12 @@
 import { createFeedbackApi } from "./api/feedback.js";
 import { createNotificationApi } from "./api/notifications.js";
-import { saveProfileCustomization, syncDiscordProfile } from "./api/profile.js";
+import {
+    deleteOwnAccount,
+    loadNotificationPreferences,
+    saveNotificationPreferences,
+    saveProfileCustomization,
+    syncDiscordProfile
+} from "./api/profile.js";
 import { createProgressionAdminApi } from "./api/progression.js?v=weekly-missions-3";
 import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "./api/weekly-missions.js";
 import { canOpenAdminRoute, isAdminProfile } from "./auth/permissions.js";
@@ -35,6 +41,7 @@ import {
     ticketStatusLabel
 } from "./config/feedback.js";
 import { headshotRatePercent, meetsSharpshooterRequirement } from "./utils/cosmetic-progress.js";
+import { findTacticalMap } from "./config/tactical-maps.js";
 import { createPerformanceDiagnostics } from "./utils/performance-diagnostics.js";
 import { readPublicStatsCache, writePublicStatsCache } from "./utils/public-data-cache.js";
 import { createRequestSignal } from "./utils/request-timeout.js";
@@ -71,20 +78,31 @@ const MODE_LABELS = {
     overall: "Overall",
     battleRoyale: "Battle Royale",
     deathmatch: "Deathmatch",
+    teamDeathmatch: "Team Deathmatch",
+    freeForAll: "Free For All",
     duel: "Duel",
     zombieSurvival: "Zombie Survival"
 };
 
 const PUBLIC_MODE_LABELS = {
     battleRoyale: "Battle Royale",
-    deathmatch: "Deathmatch",
+    teamDeathmatch: "Team Deathmatch",
+    freeForAll: "Free For All",
     duel: "Duel",
     zombieSurvival: "Zombie Survival"
 };
 
-const STANDARD_MODE_LABELS = {
-    battleRoyale: PUBLIC_MODE_LABELS.battleRoyale,
-    deathmatch: PUBLIC_MODE_LABELS.deathmatch
+const PROFILE_MODE_LABELS = {
+    battleRoyale: "Battle Royale",
+    zombieSurvival: "Zombie Survival",
+    teamDeathmatch: "Team Deathmatch",
+    freeForAll: "Free For All",
+    duel: "Duels"
+};
+
+const HISTORY_MODE_LABELS = {
+    overall: "All",
+    ...PROFILE_MODE_LABELS
 };
 
 const SPECIAL_MODE_DEFAULT_SORTS = {
@@ -104,6 +122,9 @@ const SORT_LABELS = {
     kdRatio: "KD",
     hits: "Hits",
     headshotKills: "Headshot Kills",
+    collateralHits: "Collateral Hits",
+    collateralKills: "Collateral Kills",
+    collateralHeadshotKills: "Collateral Headshot Kills",
     utilityKills: "Utility Kills",
     vehicleKills: "Vehicle Kills",
     losses: "Losses",
@@ -123,6 +144,9 @@ const PROFILE_WEAPON_SORTS = {
     hits: "Hits",
     headshotRate: "HS%",
     headshotKills: "HS Kills",
+    collateralHits: "Collat. Hits",
+    collateralKills: "Collat. Kills",
+    collateralHeadshotKills: "Collat. HS Kills",
     utilityKills: "Utility",
     vehicleKills: "Vehicle"
 };
@@ -138,12 +162,8 @@ const PROFILE_BREAKDOWN_SORTS = {
 
 const PLAYER_TABS = {
     overview: "Overview",
-    battleRoyale: "Battle Royale",
-    deathmatch: "Deathmatch",
-    duel: "Duel",
-    zombieSurvival: "Zombie Survival",
-    maps: "Maps",
     weapons: "Weapons",
+    maps: "Maps",
     history: "History"
 };
 
@@ -524,6 +544,16 @@ const state = {
     cosmeticOwnershipCache: new Map(),
     accountMessage: "",
     accountSaving: false,
+    accountDeleting: false,
+    notificationPreferences: {
+        loaded: false,
+        ready: true,
+        saving: false,
+        playtestEmail: false,
+        adminTicketEmail: false,
+        adminAccountCreatedEmail: false,
+        message: ""
+    },
     accountPanelOpen: false,
     accountPanelView: "profile",
     notifications: {
@@ -699,7 +729,13 @@ const state = {
     view: "home",
     profilePreviewOpen: false,
     playerTab: "overview",
-    historyFilter: "battleRoyale",
+    profileModeFilters: {
+        overview: "battleRoyale",
+        weapons: "battleRoyale",
+        maps: "battleRoyale",
+        history: "overall"
+    },
+    profileWeaponPage: 1,
     profileWeaponSort: "kills",
     profileWeaponSortDirection: "desc",
     profileBreakdownSorts: {
@@ -715,6 +751,7 @@ const state = {
     pendingScrollTarget: "",
     pendingDetailsTarget: "",
     routeScrollPending: false,
+    preserveNextHashScroll: false,
     playtests: emptyPlaytestState(),
     cache: emptyCache()
 };
@@ -999,6 +1036,7 @@ async function applyAuthSession(session, shouldRender = false) {
     await claimProgressionCosmetics();
     await refreshAccountProfilesAfterAuth();
     await loadOwnNotifications();
+    await loadOwnNotificationPreferences();
     if (pageNeedsPlaytestData()) await loadRemotePlaytests({ silent: true });
     await syncWeeklyMissions();
     resetFeedbackSessionState();
@@ -1070,6 +1108,7 @@ async function signOutDiscord() {
     state.authProfile = null;
     state.accountPanelOpen = false;
     state.accountMessage = "";
+    resetNotificationPreferences();
     state.authMessage = "";
     resetNotificationState();
     resetWeeklyMissionState();
@@ -1717,6 +1756,18 @@ function bindStaticEvents() {
             return;
         }
 
+        if (event.target.matches("[data-notification-preferences-form]")) {
+            event.preventDefault();
+            void submitNotificationPreferences(event.target);
+            return;
+        }
+
+        if (event.target.matches("[data-account-delete-form]")) {
+            event.preventDefault();
+            void submitAccountDeletion(event.target);
+            return;
+        }
+
         if (event.target.matches("[data-weekly-swap-form]")) {
             event.preventDefault();
             void submitWeeklyMissionSwap();
@@ -2112,16 +2163,45 @@ function bindStaticEvents() {
         const tabButton = event.target.closest("[data-player-tab]");
         if (tabButton) {
             state.playerTab = tabButton.dataset.playerTab;
-            updatePlayerHash();
+            state.profileWeaponPage = 1;
+            updatePlayerHash({ preserveScroll: true });
             render();
             return;
         }
 
-        const historyFilter = event.target.closest("[data-history-filter]");
-        if (historyFilter) {
-            state.historyFilter = historyFilter.dataset.historyFilter;
+        const profileMode = event.target.closest("[data-profile-mode]");
+        if (profileMode) {
+            const mode = String(profileMode.dataset.profileMode || "");
+            const availableModes = state.playerTab === "history" ? HISTORY_MODE_LABELS : PROFILE_MODE_LABELS;
+            if (!availableModes[mode]) return;
+            state.profileModeFilters[state.playerTab] = mode;
+            state.profileWeaponPage = 1;
             state.expandedMatchIds.clear();
+            updatePlayerHash({ preserveScroll: true });
             render();
+            return;
+        }
+
+        const profileTabTarget = event.target.closest("[data-profile-tab-target]");
+        if (profileTabTarget) {
+            const tab = String(profileTabTarget.dataset.profileTabTarget || "");
+            if (!PLAYER_TABS[tab]) return;
+            const requestedMode = String(profileTabTarget.dataset.profileModeTarget || "");
+            state.playerTab = tab;
+            if (PROFILE_MODE_LABELS[requestedMode]) state.profileModeFilters[tab] = requestedMode;
+            state.profileWeaponPage = 1;
+            updatePlayerHash({ preserveScroll: true });
+            render();
+            return;
+        }
+
+        const weaponPage = event.target.closest("[data-profile-weapon-page]");
+        if (weaponPage) {
+            const page = Number(weaponPage.dataset.profileWeaponPage);
+            if (Number.isInteger(page) && page > 0) {
+                state.profileWeaponPage = page;
+                render();
+            }
             return;
         }
 
@@ -2194,7 +2274,8 @@ function bindStaticEvents() {
     });
 
     window.addEventListener("hashchange", () => {
-        state.routeScrollPending = true;
+        state.routeScrollPending = !state.preserveNextHashScroll;
+        state.preserveNextHashScroll = false;
         applyRoute();
         render();
     });
@@ -2322,13 +2403,13 @@ function applyRoute() {
         state.profilePreviewOpen = false;
         const board = params.get("board") || (route === "weapons" || route === "maps" ? route : state.mainView);
         if (MAIN_VIEWS[board]) state.mainView = board;
-        const mode = params.get("mode");
+        const requestedMode = params.get("mode");
+        const mode = requestedMode === "deathmatch" ? "teamDeathmatch" : requestedMode;
         if (PUBLIC_MODE_LABELS[mode]) state.mode = mode;
         if (!PUBLIC_MODE_LABELS[state.mode]) state.mode = "battleRoyale";
-        if (isSpecialMode(state.mode)) state.mainView = "players";
         const sort = params.get("sort");
         if (SORT_LABELS[sort]) state.sort = sort;
-        else state.sort = defaultSortForMode(state.mode);
+        else state.sort = state.mainView === "weapons" ? "kills" : state.mainView === "maps" ? "games" : defaultSortForMode(state.mode);
         state.sort = normalizedLeaderboardSort(state.sort);
         state.page = 1;
         return;
@@ -2369,7 +2450,24 @@ function applyRoute() {
     state.view = "player";
     state.matchPlayerId = "";
     state.selectedId = playerId;
+    applyPlayerRouteState(tab, params.get("profileMode"));
+}
+
+function applyPlayerRouteState(tab, requestedMode) {
+    const legacyTabModes = {
+        battleRoyale: "battleRoyale",
+        deathmatch: "teamDeathmatch",
+        duel: "duel",
+        zombieSurvival: "zombieSurvival"
+    };
+    if (legacyTabModes[tab]) {
+        state.playerTab = "overview";
+        state.profileModeFilters.overview = legacyTabModes[tab];
+        return;
+    }
     state.playerTab = PLAYER_TABS[tab] ? tab : "overview";
+    const availableModes = state.playerTab === "history" ? HISTORY_MODE_LABELS : PROFILE_MODE_LABELS;
+    if (availableModes[requestedMode]) state.profileModeFilters[state.playerTab] = requestedMode;
 }
 
 function applyPublicPageRoute() {
@@ -2386,11 +2484,12 @@ function applyPublicPageRoute() {
         state.view = "leaderboard";
         const board = params.get("view") || params.get("board") || "players";
         if (MAIN_VIEWS[board]) state.mainView = board;
-        const mode = params.get("mode") || "battleRoyale";
+        const requestedMode = params.get("mode") || "battleRoyale";
+        const mode = requestedMode === "deathmatch" ? "teamDeathmatch" : requestedMode;
         state.mode = PUBLIC_MODE_LABELS[mode] ? mode : "battleRoyale";
-        if (isSpecialMode(state.mode)) state.mainView = "players";
-        const sort = params.get("sort") || defaultSortForMode(state.mode);
-        state.sort = normalizedLeaderboardSort(SORT_LABELS[sort] ? sort : defaultSortForMode(state.mode));
+        const fallbackSort = state.mainView === "weapons" ? "kills" : state.mainView === "maps" ? "games" : defaultSortForMode(state.mode);
+        const sort = params.get("sort") || fallbackSort;
+        state.sort = normalizedLeaderboardSort(SORT_LABELS[sort] ? sort : fallbackSort);
         state.page = 1;
         return;
     }
@@ -2435,23 +2534,25 @@ function routeToPlayer(playerId, tab = state.playerTab || "overview") {
     state.selectedId = playerId;
     state.view = "player";
     state.profilePreviewOpen = false;
-    state.playerTab = PLAYER_TABS[tab] ? tab : "overview";
+    applyPlayerRouteState(tab, "");
     updatePlayerHash();
 }
 
-function updatePlayerHash() {
+function updatePlayerHash({ preserveScroll = false } = {}) {
     if (!state.selectedId) return;
-    const hash = `player=${encodeURIComponent(state.selectedId)}&tab=${encodeURIComponent(state.playerTab)}`;
-    setRouteHash(hash);
+    const mode = profileModeFilter(state.playerTab);
+    const hash = `player=${encodeURIComponent(state.selectedId)}&tab=${encodeURIComponent(state.playerTab)}&profileMode=${encodeURIComponent(mode)}`;
+    setRouteHash(hash, { preserveScroll });
 }
 
-function setRouteHash(hash) {
+function setRouteHash(hash, { preserveScroll = false } = {}) {
     if (!isStatsPage() && isStatsHash(hash)) {
         window.location.assign(`/stats/#${hash}`);
         return true;
     }
     if (window.location.hash.replace(/^#/, "") === hash) return false;
-    state.routeScrollPending = true;
+    state.preserveNextHashScroll = preserveScroll;
+    state.routeScrollPending = !preserveScroll;
     window.location.hash = hash;
     return true;
 }
@@ -2664,9 +2765,10 @@ function routeToLeaderboardWithOptions(options) {
     if (MAIN_VIEWS[options.mainView]) state.mainView = options.mainView;
     if (PUBLIC_MODE_LABELS[options.mode]) state.mode = options.mode;
     if (!PUBLIC_MODE_LABELS[state.mode]) state.mode = "battleRoyale";
-    if (isSpecialMode(state.mode)) state.mainView = "players";
+    if (state.mainView !== "players" && state.mode === "deathmatch") state.mode = "teamDeathmatch";
     if (SORT_LABELS[options.sort]) state.sort = options.sort;
-    else if (options.mode) state.sort = defaultSortForMode(state.mode);
+    else if (options.mode)
+        state.sort = state.mainView === "weapons" ? "kills" : state.mainView === "maps" ? "games" : defaultSortForMode(state.mode);
     state.sort = normalizedLeaderboardSort(state.sort);
     state.page = 1;
     const hash = `view=leaderboards&board=${encodeURIComponent(state.mainView)}&mode=${encodeURIComponent(state.mode)}&sort=${encodeURIComponent(state.sort)}`;
@@ -2737,13 +2839,11 @@ async function ensureStatsDataForRoute() {
 function desiredStatsSliceId() {
     if (state.view === "leaderboard") {
         if (state.mainView === "weapons") return `weapons:${state.mode}`;
-        if (state.mainView === "maps") return "maps:deathmatch";
+        if (state.mainView === "maps") return `maps:${state.mode}`;
         return `mode:${state.mode}`;
     }
     if (state.view === "player" && state.selectedId) {
-        const heavyTab = ["battleRoyale", "deathmatch", "weapons", "maps", "history"].includes(state.playerTab)
-            ? `:${state.playerTab}`
-            : "";
+        const heavyTab = ["weapons", "maps", "history"].includes(state.playerTab) ? `:${state.playerTab}` : "";
         return `profile:${state.selectedId}${heavyTab}`;
     }
     if (state.view === "match") return state.supabaseRowId;
@@ -2751,7 +2851,7 @@ function desiredStatsSliceId() {
 }
 
 function statsSliceSatisfied(sliceId) {
-    const profileTabSuffixes = [":battleRoyale", ":deathmatch", ":weapons", ":maps", ":history"];
+    const profileTabSuffixes = [":weapons", ":maps", ":history"];
     const profileCore =
         sliceId.startsWith("profile:") && !profileTabSuffixes.some((suffix) => sliceId.endsWith(suffix));
     return Boolean(
@@ -2769,7 +2869,6 @@ function statsApiSliceUrl(apiUrl, sliceId) {
     url.hash = "";
     url.pathname = url.pathname.replace(/\/(?:stats(?:\.json)?)\/?$/i, "").replace(/\/+$/, "");
     if (sliceId === "home") url.pathname += "/summary";
-    else if (sliceId === "maps:deathmatch") url.pathname += "/maps/deathmatch";
     else {
         const separator = sliceId.indexOf(":");
         const type = sliceId.slice(0, separator);
@@ -3133,6 +3232,51 @@ function resetNotificationState() {
     notifications.busyId = "";
     notifications.message = "";
     notifications.error = "";
+}
+
+function resetNotificationPreferences() {
+    state.notificationPreferences = {
+        loaded: false,
+        ready: true,
+        saving: false,
+        playtestEmail: false,
+        adminTicketEmail: false,
+        adminAccountCreatedEmail: false,
+        message: ""
+    };
+}
+
+async function loadOwnNotificationPreferences({ force = false } = {}) {
+    const preferences = state.notificationPreferences;
+    if (!state.authClient || !state.authSession?.user || preferences.saving || (preferences.loaded && !force)) return;
+
+    try {
+        const result = await loadNotificationPreferences(state.authClient);
+        if (result.error) throw result.error;
+        const row = result.data || {};
+        preferences.playtestEmail = Boolean(row.playtest_email);
+        preferences.adminTicketEmail = Boolean(row.admin_ticket_email);
+        preferences.adminAccountCreatedEmail = Boolean(row.admin_account_created_email);
+        preferences.ready = true;
+    } catch (error) {
+        if (notificationPreferenceSchemaMissing(error)) {
+            preferences.ready = false;
+        } else {
+            console.warn("Could not load email notification preferences", error);
+            preferences.message = "Email preferences could not be loaded right now.";
+        }
+    } finally {
+        preferences.loaded = true;
+    }
+}
+
+function notificationPreferenceSchemaMissing(error) {
+    const code = String(error?.code || "");
+    const message = String(error?.message || error || "");
+    return (
+        ["42P01", "42883", "PGRST202", "PGRST205"].includes(code) ||
+        /notification_preferences|get_my_notification_preferences|schema cache/i.test(message)
+    );
 }
 
 async function loadOwnNotifications({ force = false, showPopup = true } = {}) {
@@ -3752,7 +3896,7 @@ function applyData(data, preview, dataMode, { fullRender = true, sliceId = state
 
     if (state.view === "leaderboard") {
         const rowCount = filteredLeaderboardRows().length;
-        const totalPages = Math.max(1, Math.ceil(rowCount / state.pageSize));
+        const totalPages = Math.max(1, Math.ceil(rowCount / leaderboardPageSize()));
         state.page = Math.min(state.page, totalPages);
     }
     if (fullRender) {
@@ -3814,12 +3958,13 @@ function exportSignature(data, sliceId = state.supabaseRowId) {
     const profileParts = (data.profiles || [])
         .map((profile) => {
             const br = normalizeStats(profile.battleRoyale?.stats);
-            const dm = normalizeStats(profile.deathmatch?.stats);
-            const weaponParts = ["battleRoyale", "deathmatch"]
+            const tdm = normalizeStats(profile.teamDeathmatch?.stats);
+            const ffa = normalizeStats(profile.freeForAll?.stats);
+            const weaponParts = ["battleRoyale", "teamDeathmatch", "freeForAll", "duel", "zombieSurvival"]
                 .flatMap((mode) =>
                     (profile[mode]?.details?.weapons || []).map((weapon) => {
                         const stats = normalizeStats(weapon.stats);
-                        return `${mode}:${weapon.id || weapon.label}:${stats.kills}:${stats.hits}:${stats.headshots}:${stats.headshotKills}:${stats.utilityKills}:${stats.vehicleKills}`;
+                        return `${mode}:${weapon.id || weapon.label}:${stats.kills}:${stats.hits}:${stats.headshots}:${stats.headshotKills}:${stats.collateralHits}:${stats.collateralKills}:${stats.collateralHeadshotKills}:${stats.utilityKills}:${stats.vehicleKills}`;
                     })
                 )
                 .join(";");
@@ -3827,7 +3972,7 @@ function exportSignature(data, sliceId = state.supabaseRowId) {
             const specialLast = (profile.specialRecentMatches || [])[0]?.completedAt || "";
             const duel = normalizeDuelProfile(profile.duel);
             const zombie = normalizeZombieSurvivalProfile(profile.zombieSurvival);
-            const badgeStats = [br, dm]
+            const badgeStats = [br, tdm, ffa]
                 .map((stats) =>
                     [
                         stats.aces,
@@ -3847,7 +3992,7 @@ function exportSignature(data, sliceId = state.supabaseRowId) {
                 )
                 .join(":");
             const achievements = [...profileAwardedBadgeIds(profile)].sort().join(".");
-            return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.hits}:${br.headshots}:${br.headshotKills}:${br.mvp}:${br.playtimeSeconds}:${br.utilityKills}:${br.vehicleKills}:${dm.games}:${dm.kills}:${dm.wins}:${dm.hits}:${dm.headshots}:${dm.headshotKills}:${dm.mvp}:${dm.playtimeSeconds}:${dm.utilityKills}:${dm.vehicleKills}:${duel.games}:${duel.wins}:${duel.roundWins}:${duel.kills}:${duel.deaths}:${zombie.games}:${zombie.longestSurvivalMs}:${zombie.zombieKills}:${zombie.lastSurvivorCount}:${badgeStats}:${achievements}:${profile.recentMatches?.length || 0}:${last}:${profile.specialRecentMatches?.length || 0}:${specialLast}:${weaponParts}`;
+            return `${profile.playerId}:${br.games}:${br.kills}:${br.wins}:${br.hits}:${br.headshots}:${br.headshotKills}:${br.collateralHits}:${br.collateralKills}:${br.collateralHeadshotKills}:${br.mvp}:${br.playtimeSeconds}:${br.utilityKills}:${br.vehicleKills}:${tdm.games}:${tdm.kills}:${tdm.wins}:${tdm.hits}:${tdm.headshots}:${tdm.headshotKills}:${tdm.collateralHits}:${tdm.collateralKills}:${tdm.collateralHeadshotKills}:${tdm.mvp}:${tdm.playtimeSeconds}:${tdm.utilityKills}:${tdm.vehicleKills}:${ffa.games}:${ffa.kills}:${ffa.wins}:${ffa.hits}:${ffa.headshots}:${ffa.headshotKills}:${ffa.collateralHits}:${ffa.collateralKills}:${ffa.collateralHeadshotKills}:${ffa.mvp}:${ffa.playtimeSeconds}:${ffa.utilityKills}:${ffa.vehicleKills}:${duel.games}:${duel.wins}:${duel.roundWins}:${duel.kills}:${duel.deaths}:${zombie.games}:${zombie.longestSurvivalMs}:${zombie.zombieKills}:${zombie.lastSurvivorCount}:${badgeStats}:${achievements}:${profile.recentMatches?.length || 0}:${last}:${profile.specialRecentMatches?.length || 0}:${specialLast}:${weaponParts}`;
         })
         .join(",");
     const live = data.liveStatus || {};
@@ -3869,6 +4014,20 @@ function emptyExport() {
             battleRoyale: {
                 id: "battleRoyale",
                 label: "Battle Royale",
+                totalPlayers: 0,
+                leaderboards: {},
+                players: []
+            },
+            teamDeathmatch: {
+                id: "teamDeathmatch",
+                label: "Team Deathmatch",
+                totalPlayers: 0,
+                leaderboards: {},
+                players: []
+            },
+            freeForAll: {
+                id: "freeForAll",
+                label: "Free For All",
                 totalPlayers: 0,
                 leaderboards: {},
                 players: []
@@ -3895,7 +4054,7 @@ function emptyCache() {
         overallMode: null,
         overallById: null,
         weaponsByMode: {},
-        maps: null,
+        mapsByMode: {},
         lastMatch: null
     };
 }
@@ -3945,7 +4104,7 @@ function rebuildCache() {
         overallMode: null,
         overallById: null,
         weaponsByMode: {},
-        maps: null,
+        mapsByMode: {},
         lastMatch: state.data?.latestMatch || findLastMatch(profiles)
     };
 }
@@ -4349,6 +4508,8 @@ function renderAccountPage() {
         ${renderAccountLinkPanel(account, linkedProfile)}
         ${linkedProfile ? renderAccountStatsPanel(linkedProfile) : ""}
         ${renderAccountCustomizeForm(account, badgeState)}
+        ${renderAccountEmailPreferences(account)}
+        ${renderAccountDeletionPanel()}
     `;
 }
 
@@ -7821,7 +7982,9 @@ function renderAccountLinkPanel(account, linkedProfile) {
 
 function renderAccountStatsPanel(profile) {
     const br = normalizePlayer(profile.battleRoyale);
-    const dm = normalizePlayer(profile.deathmatch);
+    const tdmResolved = profileStandardMode(profile, "teamDeathmatch");
+    const tdm = normalizePlayer(tdmResolved.value);
+    const ffa = normalizePlayer(profile.freeForAll);
     const name = playerDisplayName(profile, profile);
     return `
         <section class="account-panel">
@@ -7832,8 +7995,10 @@ function renderAccountStatsPanel(profile) {
             <div class="account-stat-grid">
                 ${renderStatCard("BR Wins", br.stats.wins)}
                 ${renderStatCard("BR Kills", br.stats.kills)}
-                ${renderStatCard("DM Wins", dm.stats.wins)}
-                ${renderStatCard("DM Kills", dm.stats.kills)}
+                ${renderStatCard(tdmResolved.legacy ? "Legacy DM Wins" : "TDM Wins", tdm.stats.wins)}
+                ${renderStatCard(tdmResolved.legacy ? "Legacy DM Kills" : "TDM Kills", tdm.stats.kills)}
+                ${ffa.exists ? renderStatCard("FFA Wins", ffa.stats.wins) : ""}
+                ${ffa.exists ? renderStatCard("FFA Kills", ffa.stats.kills) : ""}
             </div>
         </section>
     `;
@@ -7905,6 +8070,69 @@ function renderAccountCustomizeForm(account, badgeState) {
             </div>
             <button type="submit" ${state.accountSaving || !state.authProfileExtended ? "disabled" : ""}>${state.accountSaving ? "Saving..." : "Save profile"}</button>
         </form>
+    `;
+}
+
+function renderAccountEmailPreferences(account) {
+    const preferences = state.notificationPreferences;
+    const admin = Boolean(account?.is_admin || account?.is_owner);
+    const unavailable = preferences.loaded && !preferences.ready;
+    return `
+        <form class="account-panel account-form notification-preferences-form" data-notification-preferences-form>
+            <div>
+                <p class="panel-kicker">Email Notifications</p>
+                <h3>Choose what reaches your inbox</h3>
+                <p>Emails are sent only for the categories enabled here. In-site notifications remain separate.</p>
+            </div>
+            ${
+                unavailable
+                    ? `<p class="account-warning">Email delivery is not configured on Supabase yet.</p>`
+                    : `
+                <label class="account-toggle-row">
+                    <input type="checkbox" name="playtestEmail" ${preferences.playtestEmail ? "checked" : ""}>
+                    <span><strong>Playtests</strong><small>New schedules and confirmed playtest times.</small></span>
+                </label>
+                ${
+                    admin
+                        ? `
+                    <label class="account-toggle-row">
+                        <input type="checkbox" name="adminTicketEmail" ${preferences.adminTicketEmail ? "checked" : ""}>
+                        <span><strong>Support tickets</strong><small>New feedback and support requests that need admin attention.</small></span>
+                    </label>
+                    <label class="account-toggle-row">
+                        <input type="checkbox" name="adminAccountCreatedEmail" ${preferences.adminAccountCreatedEmail ? "checked" : ""}>
+                        <span><strong>New accounts</strong><small>Notify me when a Call of Block website account is created.</small></span>
+                    </label>
+                `
+                        : ""
+                }
+                <button type="submit" ${preferences.saving ? "disabled" : ""}>${preferences.saving ? "Saving..." : "Save email preferences"}</button>
+            `
+            }
+            ${preferences.message ? `<p class="identity-status account-message">${escapeHtml(preferences.message)}</p>` : ""}
+        </form>
+    `;
+}
+
+function renderAccountDeletionPanel() {
+    return `
+        <section class="account-panel account-danger-zone">
+            <div>
+                <p class="panel-kicker">Privacy</p>
+                <h3>Delete website account</h3>
+                <p>This permanently removes your Discord-linked website profile, customization, private notifications, playtest responses, and support-ticket content. Public server match records are separate gameplay records and are not edited by this action.</p>
+            </div>
+            <details>
+                <summary>Delete account</summary>
+                <form data-account-delete-form>
+                    <label>
+                        <span>Type DELETE to confirm</span>
+                        <input name="confirmation" type="text" autocomplete="off" spellcheck="false" required pattern="DELETE" placeholder="DELETE">
+                    </label>
+                    <button class="danger-button" type="submit" ${state.accountDeleting ? "disabled" : ""}>${state.accountDeleting ? "Deleting..." : "Permanently delete account"}</button>
+                </form>
+            </details>
+        </section>
     `;
 }
 
@@ -9444,7 +9672,7 @@ function weeklyWeaponEntries(profile, mode) {
 }
 
 function weeklyMapEntries(profile) {
-    const entries = [...weeklyPlayerMapEntries(profile), ...cachedMaps()];
+    const entries = [...weeklyPlayerMapEntries(profile), ...cachedMaps("teamDeathmatch")];
     const maps = new Map();
     for (const entry of entries) {
         const id = String(entry?.id || "").trim();
@@ -12594,7 +12822,11 @@ function renderHeroStatus() {
     const totalPlayers = Number.isFinite(exportedTotal)
         ? exportedTotal
         : state.cache.profiles.filter(
-              (profile) => number(profile.battleRoyale?.stats?.games) + number(profile.deathmatch?.stats?.games) > 0
+              (profile) =>
+                  number(profile.battleRoyale?.stats?.games) +
+                      number(profile.teamDeathmatch?.stats?.games) +
+                      number(profile.freeForAll?.stats?.games) >
+                  0
           ).length;
     document.getElementById("hero-player-count").textContent = String(totalPlayers);
     renderLiveStatus();
@@ -12684,10 +12916,6 @@ function isExportStale() {
     return Date.now() - generated > 90000;
 }
 
-function isSpecialMode(mode = state.mode) {
-    return Object.hasOwn(SPECIAL_MODE_DEFAULT_SORTS, mode);
-}
-
 function defaultSortForMode(mode = state.mode) {
     return SPECIAL_MODE_DEFAULT_SORTS[mode] || "wins";
 }
@@ -12716,9 +12944,7 @@ function normalizedLeaderboardSort(sort) {
 function renderMainViewTabs() {
     const container = document.getElementById("main-view-tabs");
     container.innerHTML = "";
-    if (isSpecialMode()) state.mainView = "players";
-    const views = isSpecialMode() ? { players: MAIN_VIEWS.players } : MAIN_VIEWS;
-    for (const [viewId, label] of Object.entries(views)) {
+    for (const [viewId, label] of Object.entries(MAIN_VIEWS)) {
         const button = createPill(label, state.mainView === viewId, () => {
             state.mainView = viewId;
             state.selectedId = null;
@@ -12741,14 +12967,13 @@ function renderMainViewTabs() {
 function renderModeTabs() {
     const container = document.getElementById("mode-tabs");
     container.innerHTML = "";
-    container.classList.toggle("hidden", state.mainView === "maps");
-    const availableModes = state.mainView === "players" ? PUBLIC_MODE_LABELS : STANDARD_MODE_LABELS;
+    container.classList.remove("hidden");
+    const availableModes = state.mainView === "players" ? PUBLIC_MODE_LABELS : PROFILE_MODE_LABELS;
     if (!availableModes[state.mode]) state.mode = "battleRoyale";
     for (const modeId of Object.keys(availableModes)) {
         const button = createPill(PUBLIC_MODE_LABELS[modeId], state.mode === modeId, () => {
             state.mode = modeId;
-            if (isSpecialMode(modeId)) state.mainView = "players";
-            state.sort = defaultSortForMode(modeId);
+            state.sort = state.mainView === "weapons" ? "kills" : state.mainView === "maps" ? "games" : defaultSortForMode(modeId);
             state.sortDirection = "desc";
             state.page = 1;
             render();
@@ -12767,7 +12992,7 @@ function renderModeTabs() {
                 : `${PUBLIC_MODE_LABELS[state.mode]} ranking`
             : state.mainView === "weapons"
               ? `${PUBLIC_MODE_LABELS[state.mode]} weapon stats`
-              : "Deathmatch map stats";
+              : `${PUBLIC_MODE_LABELS[state.mode]} map stats`;
     document.getElementById("leaderboard-title").textContent = title;
 }
 
@@ -12813,7 +13038,8 @@ function renderSummary() {
 
     if (state.mainView === "maps") {
         const noun = rows.length === 1 ? "map" : "maps";
-        count.textContent = `${rows.length} tracked Deathmatch ${noun}`;
+        const modeLabel = `in ${PUBLIC_MODE_LABELS[state.mode] || MODE_LABELS[state.mode] || "this mode"}`;
+        count.textContent = `${rows.length} tracked ${noun} ${modeLabel}`;
         return;
     }
 
@@ -12851,27 +13077,28 @@ function renderTable() {
         wrap.classList.toggle("table-scrollable", wrap.scrollWidth > wrap.clientWidth + 4);
     });
 
-    const start = (state.page - 1) * state.pageSize;
-    const pageRows = rows.slice(start, start + state.pageSize);
+    const pageSize = leaderboardPageSize();
+    const start = (state.page - 1) * pageSize;
+    const pageRows = rows.slice(start, start + pageSize);
     const fragment = document.createDocumentFragment();
     if (state.mainView === "weapons") {
         pageRows.forEach((entry, index) => fragment.appendChild(renderWeaponLeaderboardRow(entry, start + index + 1)));
         body.appendChild(fragment);
-        renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+        renderPagination(rows.length, Math.ceil(rows.length / pageSize));
         return;
     }
 
     if (state.mainView === "maps") {
         pageRows.forEach((entry, index) => fragment.appendChild(renderMapLeaderboardRow(entry, start + index + 1)));
         body.appendChild(fragment);
-        renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+        renderPagination(rows.length, Math.ceil(rows.length / pageSize));
         return;
     }
 
     if (state.mode === "duel") {
         pageRows.forEach((entry, index) => fragment.appendChild(renderDuelLeaderboardRow(entry, start + index + 1)));
         body.appendChild(fragment);
-        renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+        renderPagination(rows.length, Math.ceil(rows.length / pageSize));
         return;
     }
 
@@ -12880,7 +13107,7 @@ function renderTable() {
             fragment.appendChild(renderZombieSurvivalLeaderboardRow(entry, start + index + 1))
         );
         body.appendChild(fragment);
-        renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+        renderPagination(rows.length, Math.ceil(rows.length / pageSize));
         return;
     }
 
@@ -12922,7 +13149,7 @@ function renderTable() {
     });
     body.appendChild(fragment);
 
-    renderPagination(rows.length, Math.ceil(rows.length / state.pageSize));
+    renderPagination(rows.length, Math.ceil(rows.length / pageSize));
 }
 
 function renderTableHead() {
@@ -12936,6 +13163,9 @@ function renderTableHead() {
                 ${sortColumn("hits")}
                 ${sortColumn("headshotRate")}
                 ${sortColumn("headshotKills")}
+                ${sortColumn("collateralHits", "Collat. Hits")}
+                ${sortColumn("collateralKills", "Collat. Kills")}
+                ${sortColumn("collateralHeadshotKills", "Collat. HS")}
                 ${sortColumn("utilityKills", "Utility")}
                 ${sortColumn("vehicleKills", "Vehicle")}
             </tr>
@@ -13026,6 +13256,9 @@ function renderWeaponLeaderboardRow(entry, rank) {
         <td>${stats.hits}</td>
         <td>${formatPercent(derived.headshotRate)}</td>
         <td>${stats.headshotKills}</td>
+        <td>${stats.collateralHits}</td>
+        <td>${stats.collateralKills}</td>
+        <td>${stats.collateralHeadshotKills}</td>
         <td>${stats.utilityKills}</td>
         <td>${stats.vehicleKills}</td>
     `;
@@ -13110,10 +13343,14 @@ function renderSpecialLeaderboardPlayer(player, tab) {
 
 function emptyStateText() {
     if (state.mainView === "weapons") return "No weapon stats have been tracked yet";
-    if (state.mainView === "maps") return "No Deathmatch map stats have been tracked yet";
+    if (state.mainView === "maps") return "No map stats have been tracked for this mode yet";
     if (state.mode === "duel") return "No Duel matches have been played yet";
     if (state.mode === "zombieSurvival") return "No Zombie Survival matches have been played yet";
     return "No games have been played yet";
+}
+
+function leaderboardPageSize() {
+    return state.mainView === "weapons" ? 12 : state.pageSize;
 }
 
 function renderPagination(totalRows, totalPages) {
@@ -13123,8 +13360,9 @@ function renderPagination(totalRows, totalPages) {
 
     const left = document.createElement("div");
     left.className = "page-status";
-    const start = (state.page - 1) * state.pageSize + 1;
-    const end = Math.min(totalRows, state.page * state.pageSize);
+    const pageSize = leaderboardPageSize();
+    const start = (state.page - 1) * pageSize + 1;
+    const end = Math.min(totalRows, state.page * pageSize);
     left.textContent = `Showing ${start}-${end} of ${totalRows}`;
 
     const right = document.createElement("div");
@@ -13231,6 +13469,71 @@ async function submitAccountForm(form) {
     } finally {
         state.accountSaving = false;
         render();
+    }
+}
+
+async function submitNotificationPreferences(form) {
+    const preferences = state.notificationPreferences;
+    if (!state.authClient || !state.authSession?.user || !preferences.ready || preferences.saving) return;
+
+    preferences.saving = true;
+    preferences.message = "";
+    renderAccountPage();
+    try {
+        const result = await saveNotificationPreferences(state.authClient, {
+            playtestEmail: Boolean(form.elements.playtestEmail?.checked),
+            adminTicketEmail: Boolean(form.elements.adminTicketEmail?.checked),
+            adminAccountCreatedEmail: Boolean(form.elements.adminAccountCreatedEmail?.checked)
+        });
+        if (result.error) throw result.error;
+        const row = result.data || {};
+        preferences.playtestEmail = Boolean(row.playtest_email);
+        preferences.adminTicketEmail = Boolean(row.admin_ticket_email);
+        preferences.adminAccountCreatedEmail = Boolean(row.admin_account_created_email);
+        preferences.message = "Email preferences saved.";
+    } catch (error) {
+        console.error("Could not save email notification preferences", error);
+        preferences.message = error?.message || "Could not save email preferences right now.";
+    } finally {
+        preferences.saving = false;
+        renderAccountPage();
+    }
+}
+
+async function submitAccountDeletion(form) {
+    if (!state.authClient || !state.authSession?.user || state.accountDeleting) return;
+    const confirmation = String(new FormData(form).get("confirmation") || "");
+    if (confirmation !== "DELETE") {
+        state.accountMessage = "Type DELETE exactly to confirm account deletion.";
+        renderAccountPage();
+        return;
+    }
+
+    state.accountDeleting = true;
+    state.accountMessage = "";
+    renderAccountPage();
+    try {
+        const result = await deleteOwnAccount(state.authClient, confirmation);
+        if (result.error) throw result.error;
+        await state.authClient.auth.signOut({ scope: "local" }).catch(() => {});
+        state.authSession = null;
+        state.authProfile = null;
+        state.accountPanelOpen = false;
+        state.accountDeleting = false;
+        state.authMessage = "Your website account and private account data were deleted.";
+        resetNotificationState();
+        resetNotificationPreferences();
+        resetWeeklyMissionState();
+        resetStoreSessionState({ resetCatalog: true });
+        resetFeedbackSessionState();
+        resetProgressionAdminState();
+        resetPlaytestViewer();
+        routeTo("home");
+    } catch (error) {
+        console.error("Could not delete website account", error);
+        state.accountDeleting = false;
+        state.accountMessage = error?.message || "Could not delete this account right now.";
+        renderAccountPage();
     }
 }
 
@@ -14440,7 +14743,8 @@ function renderProfilePreview() {
         </section>
         <button class="primary-action" type="button" id="open-full-profile">Open Full Profile</button>
         ${renderModeBlock("Battle Royale", profile.battleRoyale, { compact: true })}
-        ${renderModeBlock("Deathmatch", profile.deathmatch, { compact: true })}
+        ${profile.teamDeathmatch ? renderModeBlock("Team Deathmatch", profile.teamDeathmatch, { compact: true }) : ""}
+        ${profile.freeForAll ? renderModeBlock("Free For All", profile.freeForAll, { compact: true }) : ""}
         ${renderDuelModeBlock(profile.duel, { compact: true })}
         ${renderZombieSurvivalModeBlock(profile.zombieSurvival, { compact: true })}
     `;
@@ -14472,36 +14776,59 @@ function renderPlayerProfileHero(profile) {
     const account = accountProfileForPlayer(profile, profile);
     const name = playerDisplayName(profile, profile);
     const br = normalizePlayer(profile.battleRoyale);
-    const dm = normalizePlayer(profile.deathmatch);
+    const tdmResolved = profileStandardMode(profile, "teamDeathmatch");
+    const tdm = normalizePlayer(tdmResolved.value);
+    const ffa = normalizePlayer(profile.freeForAll);
     const duel = normalizeDuelProfile(profile.duel);
     const zombie = normalizeZombieSurvivalProfile(profile.zombieSurvival);
     const badgeState = accountBadgeState(account, profile);
     const badges = selectedAccountBadges(account, badgeState);
+    const showOverviewSummary = state.playerTab === "overview";
     return `
-        <section class="player-profile-hero ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} ${backgroundCosmeticOwnershipDataAttributes(account)}>
-            <div class="player-profile-identity">
-                ${renderPlayerAvatar(profile, profile, 128, "player-profile-avatar")}
-                <div>
-                    <p class="panel-kicker">${account ? "Linked Account" : "Tracked Player"}</p>
-                    <h3>${escapeHtml(name)}</h3>
-                    ${renderProfileTitle(account)}
-                    <span>${account ? escapeHtml(profile.name || "Linked Minecraft player") : "No website account linked yet"}</span>
-                    ${account ? renderAccountSignedDate(account) : ""}
-                    ${account ? renderAccountLevelPill(account) : ""}
-                    <div class="account-badge-row">
-                        ${badges.length ? badges.map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
+        <section class="player-profile-hero ${showOverviewSummary ? "has-overview-summary" : ""} ${profileBackgroundClass(account)}"${profileBackgroundStyle(account)} ${backgroundCosmeticOwnershipDataAttributes(account)}>
+            <div class="player-profile-primary">
+                <div class="player-profile-identity">
+                    ${renderPlayerAvatar(profile, profile, 128, "player-profile-avatar")}
+                    <div>
+                        <p class="panel-kicker">${account ? "Linked Account" : "Tracked Player"}</p>
+                        <h3>${escapeHtml(name)}</h3>
+                        ${renderProfileTitle(account)}
+                        <span>${account ? escapeHtml(profile.name || "Linked Minecraft player") : "No website account linked yet"}</span>
+                        ${account ? renderAccountSignedDate(account) : ""}
+                        ${account ? renderAccountLevelPill(account) : ""}
+                        <div class="account-badge-row">
+                            ${badges.length ? badges.map((badge) => renderProfileBadge(badge)).join("") : `<span class="profile-badge empty">No badges equipped</span>`}
+                        </div>
                     </div>
                 </div>
+                <div class="player-profile-quickstats">
+                    ${renderStatCard("BR Wins", br.stats.wins, br.percentiles?.wins)}
+                    ${renderStatCard("BR Kills", br.stats.kills, br.percentiles?.kills)}
+                    ${tdm.exists ? renderStatCard("TDM Wins", tdm.stats.wins, tdm.percentiles?.wins) : ""}
+                    ${tdm.exists ? renderStatCard("TDM Kills", tdm.stats.kills, tdm.percentiles?.kills) : ""}
+                    ${ffa.exists ? renderStatCard("FFA Wins", ffa.stats.wins, ffa.percentiles?.wins) : ""}
+                    ${ffa.exists ? renderStatCard("FFA Kills", ffa.stats.kills, ffa.percentiles?.kills) : ""}
+                    ${duel.exists ? renderStatCard("Duel Wins", duel.wins, duel.percentiles?.wins) : ""}
+                    ${zombie.exists ? renderStatCard("Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000), zombie.percentiles?.longestSurvivalMs) : ""}
+                </div>
             </div>
-            <div class="player-profile-quickstats">
-                ${renderStatCard("BR Wins", br.stats.wins, br.percentiles?.wins)}
-                ${renderStatCard("BR Kills", br.stats.kills, br.percentiles?.kills)}
-                ${renderStatCard("DM Wins", dm.stats.wins, dm.percentiles?.wins)}
-                ${renderStatCard("DM Kills", dm.stats.kills, dm.percentiles?.kills)}
-                ${duel.exists ? renderStatCard("Duel Wins", duel.wins, duel.percentiles?.wins) : ""}
-                ${zombie.exists ? renderStatCard("Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000), zombie.percentiles?.longestSurvivalMs) : ""}
-            </div>
+            ${showOverviewSummary ? renderPlayerOverviewSummary(profile) : ""}
         </section>
+    `;
+}
+
+function renderPlayerOverviewSummary(profile) {
+    const mode = profileModeFilter("overview");
+    const matches = filteredHistory(profile, mode);
+    const topWeapons = profileModeWeapons(profile, mode).slice(0, 3);
+    return `
+        <aside class="player-profile-overview-summary" aria-label="${escapeHtml(`${PROFILE_MODE_LABELS[mode]} overview summary`)}">
+            <div class="profile-history-sidebar overview-weapons-summary">
+                ${renderHistorySidebarList("Top Weapons", topWeapons, "weapons")}
+                <button class="profile-summary-action" type="button" data-profile-tab-target="weapons" data-profile-mode-target="${escapeHtml(mode)}">View all weapons</button>
+            </div>
+            ${renderActivityCalendar(matches, { compact: true })}
+        </aside>
     `;
 }
 
@@ -14521,176 +14848,380 @@ function renderPlayerTabs() {
 }
 
 function renderPlayerTabContent(profile) {
-    switch (state.playerTab) {
-        case "battleRoyale":
-            return renderBattleRoyaleTab(profile);
-        case "deathmatch":
-            return renderDeathmatchTab(profile);
-        case "duel":
-            return renderDuelTab(profile);
-        case "zombieSurvival":
-            return renderZombieSurvivalTab(profile);
-        case "maps":
-            return renderMapsTab(profile);
-        case "weapons":
-            return renderWeaponsTab(profile);
-        case "history":
-            return renderHistoryTab(profile);
-        case "overview":
-        default:
-            return renderOverviewTab(profile);
+    const mode = profileModeFilter();
+    const content = (() => {
+        switch (state.playerTab) {
+            case "weapons":
+                return renderWeaponsTab(profile, mode);
+            case "maps":
+                return renderMapsTab(profile, mode);
+            case "history":
+                return renderHistoryTab(profile, mode);
+            case "overview":
+            default:
+                return renderOverviewTab(profile, mode);
+        }
+    })();
+    return `${renderProfileModeFilters(state.playerTab, mode)}${content}`;
+}
+
+function profileModeFilter(tab = state.playerTab) {
+    const labels = tab === "history" ? HISTORY_MODE_LABELS : PROFILE_MODE_LABELS;
+    const fallback = tab === "history" ? "overall" : "battleRoyale";
+    const selected = state.profileModeFilters?.[tab];
+    return labels[selected] ? selected : fallback;
+}
+
+function renderProfileModeFilters(tab, selectedMode) {
+    const labels = tab === "history" ? HISTORY_MODE_LABELS : PROFILE_MODE_LABELS;
+    return `
+        <nav class="profile-mode-tabs" aria-label="${escapeHtml(`${PLAYER_TABS[tab] || "Profile"} mode filter`)}">
+            ${Object.entries(labels)
+                .map(([id, label]) => {
+                    const active = id === selectedMode;
+                    return `<button class="tab-pill ${active ? "active" : ""}" type="button" data-profile-mode="${escapeHtml(id)}" aria-pressed="${active ? "true" : "false"}">${escapeHtml(label)}</button>`;
+                })
+                .join("")}
+        </nav>
+    `;
+}
+
+function renderOverviewTab(profile, mode) {
+    if (mode === "duel") {
+        const duel = normalizeDuelProfile(profile.duel);
+        if (!duel.exists) return `${renderEmptyDetail("No Duel matches have been recorded for this player yet.")}${renderOverviewModeHistory(profile, mode)}`;
+        return `${renderDuelModeBlock(duel)}${renderNumberMapSection("Weapons Used", duel.weaponsUsed || duel.kitsUsed, "No Duel weapon usage has been recorded yet.")}${renderOverviewModeHistory(profile, mode)}`;
     }
-}
+    if (mode === "zombieSurvival") {
+        const zombie = normalizeZombieSurvivalProfile(profile.zombieSurvival);
+        if (!zombie.exists) return `${renderEmptyDetail("No Zombie Survival matches have been recorded for this player yet.")}${renderOverviewModeHistory(profile, mode)}`;
+        return `${renderZombieSurvivalModeBlock(zombie)}${renderNumberMapSection("Variant Kills", zombie.variantKills, "No special zombie kills have been recorded yet.")}${renderNumberMapSection("Survival End Reasons", zombie.deathReasons, "No survival end reasons have been recorded yet.")}${renderOverviewModeHistory(profile, mode)}`;
+    }
 
-function renderOverviewTab(profile) {
-    const br = normalizePlayer(profile.battleRoyale);
-    const dm = normalizePlayer(profile.deathmatch);
-    const duel = normalizeDuelProfile(profile.duel);
-    const zombie = normalizeZombieSurvivalProfile(profile.zombieSurvival);
-    const brWeapon = cleanWeaponEntries(br.details?.weapons || [])[0] || null;
-    const dmWeapon = cleanWeaponEntries(dm.details?.weapons || [])[0] || null;
-
-    return `
-        <section class="detail-grid">
-            ${renderStatCard("BR Wins", br.stats.wins, br.percentiles?.wins)}
-            ${renderStatCard("BR Kills", br.stats.kills, br.percentiles?.kills)}
-            ${renderStatCard("BR Games", br.stats.games)}
-            ${renderStatCard("BR Playtime", formatDuration(br.stats.playtimeSeconds), br.percentiles?.playtimeSeconds)}
-            ${renderStatCard("DM Wins", dm.stats.wins, dm.percentiles?.wins)}
-            ${renderStatCard("DM Kills", dm.stats.kills, dm.percentiles?.kills)}
-            ${renderStatCard("DM Games", dm.stats.games)}
-            ${renderStatCard("DM Playtime", formatDuration(dm.stats.playtimeSeconds), dm.percentiles?.playtimeSeconds)}
-            ${renderStatCard("DM Win Rate", formatPercent(dm.derived.winRate), dm.percentiles?.winRate)}
-            ${renderStatCard("DM HS%", formatPercent(dm.derived.headshotRate), dm.percentiles?.headshotRate)}
-            ${renderStatCard("DM Highest Streak", dm.stats.bestKillStreak)}
-            ${renderStatCard("Top DM Kills", dm.stats.topMatchKills)}
-            ${duel.exists ? renderStatCard("Duel Wins", duel.wins, duel.percentiles?.wins) : ""}
-            ${duel.exists ? renderStatCard("Duel Round Wins", duel.roundWins, duel.percentiles?.roundWins) : ""}
-            ${zombie.exists ? renderStatCard("Longest Survival", formatDuration(zombie.longestSurvivalMs / 1000), zombie.percentiles?.longestSurvivalMs) : ""}
-            ${zombie.exists ? renderStatCard("Zombie Kills", zombie.zombieKills, zombie.percentiles?.zombieKills) : ""}
-        </section>
-        <section class="detail-section">
-            <h3>Profile Snapshot</h3>
-            <div class="snapshot-grid">
-                ${renderSnapshotItem("BR Best Placement", br.details?.battleRoyalePlacement?.best ? `#${br.details.battleRoyalePlacement.best}` : "-")}
-                ${renderSnapshotItem("BR Top Weapon", brWeapon ? brWeapon.label : "-")}
-                ${renderSnapshotItem("BR Vehicle Kills", br.stats.vehicleKills)}
-                ${renderSnapshotItem("Favorite DM Kit", dm.details?.favoriteKit?.label || "-")}
-                ${renderSnapshotItem("Favorite DM Map", dm.details?.favoriteMap?.label || "-")}
-                ${renderSnapshotItem("DM Top Weapon", dmWeapon ? dmWeapon.label : "-")}
-                ${renderSnapshotItem("DM Headshot Kills", dm.stats.headshotKills)}
-            </div>
-        </section>
-    `;
-}
-
-function renderBattleRoyaleTab(profile) {
-    const player = normalizePlayer(profile.battleRoyale);
-    if (!player.exists) return renderEmptyDetail("No Battle Royale games have been played yet.");
+    const resolved = profileStandardMode(profile, mode);
+    const player = normalizePlayer(resolved.value);
+    if (!player.exists) {
+        return `${renderEmptyDetail(`No ${PROFILE_MODE_LABELS[mode]} statistics have been recorded for this player yet.`)}${renderOverviewModeHistory(profile, mode)}`;
+    }
     const placement = player.details?.battleRoyalePlacement || {};
+    return `
+        ${renderModeBlock(PROFILE_MODE_LABELS[mode], player)}
+        <section class="detail-section">
+            <h3>${mode === "battleRoyale" ? "Placement and loadout" : "Mode records"}</h3>
+            <div class="snapshot-grid">
+                ${mode === "battleRoyale" ? renderSnapshotItem("Best Placement", placement.best ? `#${placement.best}` : "-") : ""}
+                ${mode === "battleRoyale" ? renderSnapshotItem("Top 3", placement.top3 || 0) : ""}
+                ${renderSnapshotItem("Favorite Weapon", player.details?.favoriteWeapon?.label || profileModeWeapons(profile, mode)[0]?.label || "-")}
+                ${renderSnapshotItem("Favorite Map", player.details?.favoriteMap?.label || profileModeMaps(profile, mode)[0]?.label || "-")}
+            </div>
+        </section>
+        ${renderOverviewModeHistory(profile, mode)}
+    `;
+}
+
+function renderOverviewModeHistory(profile, mode) {
+    const matches = filteredHistory(profile, mode);
+    return `
+        <section class="detail-section profile-overview-history">
+            <div class="history-heading">
+                <h3>${escapeHtml(PROFILE_MODE_LABELS[mode])} Match History</h3>
+                <span>Local time: ${escapeHtml(viewerTimeZoneLabel())}</span>
+            </div>
+            ${renderHistoryList(matches, { expandable: true, playerId: profile.playerId })}
+        </section>
+    `;
+}
+
+function renderWeaponsTab(profile, mode) {
+    const allWeapons = profileModeWeapons(profile, mode);
+    if (!allWeapons.length) {
+        return renderEmptyDetail(`No ${PROFILE_MODE_LABELS[mode]} weapon statistics are available yet.`);
+    }
     const sort = PROFILE_WEAPON_SORTS[state.profileWeaponSort] ? state.profileWeaponSort : "kills";
     const direction = state.profileWeaponSortDirection === "asc" ? "asc" : "desc";
+    const sorted = [...allWeapons].sort((first, second) => {
+        const difference = weaponSortValue(first, sort) - weaponSortValue(second, sort);
+        return direction === "asc" ? difference : -difference;
+    });
+    const pageSize = 12;
+    const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+    state.profileWeaponPage = Math.min(Math.max(1, state.profileWeaponPage), totalPages);
+    const offset = (state.profileWeaponPage - 1) * pageSize;
     return `
-        ${renderModeBlock("Battle Royale", player)}
-        <section class="detail-section">
-            <h3>Placement</h3>
-            <div class="snapshot-grid">
-                ${renderSnapshotItem("Best", placement.best ? `#${placement.best}` : "-")}
-                ${renderSnapshotItem("Average", placement.average ? `#${formatNumber(placement.average)}` : "-")}
-                ${renderSnapshotItem("Top 3", placement.top3 || 0)}
-                ${renderSnapshotItem("Top 5", placement.top5 || 0)}
-                ${renderSnapshotItem("Top 10", placement.top10 || 0)}
-            </div>
-        </section>
-        ${renderWeaponTable("BR Weapons", player.details?.weapons || [], sort, direction)}
+        ${renderWeaponTable(`${PROFILE_MODE_LABELS[mode]} Weapons`, sorted.slice(offset, offset + pageSize), sort, direction)}
+        ${renderProfileWeaponPagination(totalPages)}
     `;
 }
 
-function renderDeathmatchTab(profile) {
-    const player = normalizePlayer(profile.deathmatch);
-    if (!player.exists) return renderEmptyDetail("No Deathmatch games have been played yet.");
+function renderProfileWeaponPagination(totalPages) {
+    if (totalPages <= 1) return "";
     return `
-        ${renderModeBlock("Deathmatch", player)}
-        <section class="detail-section">
-            <h3>Deathmatch Details</h3>
-            <div class="snapshot-grid">
-                ${renderSnapshotItem("Top Match Kills", player.stats.topMatchKills)}
-                ${renderSnapshotItem("Highest Streak", player.stats.bestKillStreak)}
-                ${renderSnapshotItem("Favorite Kit", player.details?.favoriteKit?.label || "-")}
-                ${renderSnapshotItem("Favorite Map", player.details?.favoriteMap?.label || "-")}
-            </div>
-        </section>
-        ${renderBreakdownTable("Maps", player.details?.deathmatchMaps || [], { wide: true, tableId: "maps", itemLabel: "Map" })}
-        ${renderBreakdownTable("Kits", player.details?.deathmatchKits || [], { wide: true, tableId: "kits", itemLabel: "Kit" })}
+        <nav class="profile-weapon-pagination" aria-label="Weapon pages">
+            <button type="button" data-profile-weapon-page="${state.profileWeaponPage - 1}" ${state.profileWeaponPage <= 1 ? "disabled" : ""}>Previous</button>
+            <span>Page ${state.profileWeaponPage} of ${totalPages}</span>
+            <button type="button" data-profile-weapon-page="${state.profileWeaponPage + 1}" ${state.profileWeaponPage >= totalPages ? "disabled" : ""}>Next</button>
+        </nav>
     `;
 }
 
-function renderDuelTab(profile) {
-    const duel = normalizeDuelProfile(profile.duel);
-    if (!duel.exists) return renderEmptyDetail("No Duel matches have been played yet.");
-    return `
-        ${renderDuelModeBlock(duel)}
-        ${renderNumberMapSection("Kits Used", duel.kitsUsed, "No Duel kit usage has been recorded yet.")}
-    `;
-}
-
-function renderZombieSurvivalTab(profile) {
-    const zombie = normalizeZombieSurvivalProfile(profile.zombieSurvival);
-    if (!zombie.exists) return renderEmptyDetail("No Zombie Survival matches have been played yet.");
-    return `
-        ${renderZombieSurvivalModeBlock(zombie)}
-        ${renderNumberMapSection("Variant Kills", zombie.variantKills, "No special zombie kills have been recorded yet.")}
-        ${renderNumberMapSection("Survival End Reasons", zombie.deathReasons, "No survival end reasons have been recorded yet.")}
-    `;
-}
-
-function renderMapsTab(profile) {
-    const dm = normalizePlayer(profile.deathmatch);
-    const maps = dm.details?.deathmatchMaps || [];
+function renderMapsTab(profile, mode) {
+    const maps = profileModeMaps(profile, mode);
     return maps.length
-        ? renderBreakdownTable("Deathmatch Maps", maps, { wide: true, tableId: "maps", itemLabel: "Map" })
-        : renderEmptyDetail("No map stats yet. New Deathmatch games will start filling this in.");
+        ? renderBreakdownTable(`${PROFILE_MODE_LABELS[mode]} Maps`, maps, {
+              wide: true,
+              tableId: `maps-${mode}`,
+              itemLabel: "Map"
+          })
+        : renderEmptyDetail(`No ${PROFILE_MODE_LABELS[mode]} map statistics are available yet.`);
 }
 
-function renderWeaponsTab(profile) {
-    const br = normalizePlayer(profile.battleRoyale).details?.weapons || [];
-    const dm = normalizePlayer(profile.deathmatch).details?.weapons || [];
-    if (!br.length && !dm.length)
-        return renderEmptyDetail(
-            "No weapon stats yet. Weapon tables start filling in after the updated server jar records new hits and kills."
-        );
-    const sort = PROFILE_WEAPON_SORTS[state.profileWeaponSort] ? state.profileWeaponSort : "kills";
-    const direction = state.profileWeaponSortDirection === "asc" ? "asc" : "desc";
-    return `
-        ${br.length ? renderWeaponTable("Battle Royale Weapons", br, sort, direction) : ""}
-        ${dm.length ? renderWeaponTable("Deathmatch Weapons", dm, sort, direction) : ""}
-    `;
-}
-
-function renderHistoryTab(profile) {
-    if (!PUBLIC_MODE_LABELS[state.historyFilter]) state.historyFilter = "battleRoyale";
+function renderHistoryTab(profile, mode) {
+    const matches = filteredHistory(profile, mode);
+    const sidebarMode = mode === "overall" ? "overall" : mode;
+    const topWeapons = profileModeWeapons(profile, sidebarMode).slice(0, 3);
+    const topMaps = profileModeMaps(profile, sidebarMode).slice(0, 3);
     return `
         <section class="detail-section">
             <div class="history-heading">
-                <h3>Match History</h3>
+                <h3>${escapeHtml(HISTORY_MODE_LABELS[mode])} Match History</h3>
                 <span>Local time: ${escapeHtml(viewerTimeZoneLabel())}</span>
             </div>
-            <div class="history-filters">
-                ${Object.entries(PUBLIC_MODE_LABELS)
-                    .map(([id, label]) => {
-                        const active = state.historyFilter === id;
-                        return `
-                        <button class="tab-pill ${active ? "active" : ""}" type="button" data-history-filter="${escapeHtml(id)}" aria-pressed="${active ? "true" : "false"}" aria-label="${escapeHtml(`${label} match history${active ? ", selected" : ""}`)}">${escapeHtml(label)}</button>
-                    `;
-                    })
-                    .join("")}
+            ${renderActivityCalendar(matches)}
+            <div class="profile-history-workspace">
+                <aside class="profile-history-sidebar" aria-label="Mode summary">
+                    ${renderHistorySidebarList("Top Weapons", topWeapons, "weapons")}
+                    <button class="profile-summary-action" type="button" data-profile-tab-target="weapons" data-profile-mode-target="${escapeHtml(mode === "overall" ? "battleRoyale" : mode)}">View all weapons</button>
+                    ${renderHistorySidebarList("Top Maps", topMaps, "maps")}
+                </aside>
+                <div class="profile-history-main">
+                    ${renderHistoryList(matches, {
+                        expandable: true,
+                        playerId: profile.playerId
+                    })}
+                </div>
             </div>
-            ${renderHistoryList(filteredHistory(profile, state.historyFilter), {
-                expandable: true,
-                playerId: profile.playerId
-            })}
         </section>
     `;
+}
+
+function renderHistorySidebarList(title, entries, type) {
+    return `
+        <section class="profile-history-summary ${escapeHtml(type)}">
+            <h4>${escapeHtml(title)}</h4>
+            ${entries.length ? `<ol>${entries.map((entry) => renderHistorySidebarEntry(entry, type)).join("")}</ol>` : '<p class="mode-empty">No data yet.</p>'}
+        </section>
+    `;
+}
+
+function renderHistorySidebarEntry(entry, type) {
+    const stats = normalizeStats(entry?.stats);
+    const derived = normalizeDerived(entry?.derived, stats);
+    if (type === "maps") {
+        const map = findTacticalMap({ mapId: entry?.id, label: entry?.label });
+        const background = map?.imageUrl ? ` style="--summary-map-image: url('${escapeHtml(map.imageUrl)}')"` : "";
+        return `
+            <li class="profile-map-summary"${background}>
+                <span>${escapeHtml(entry?.label || entry?.id || "Unknown map")}</span>
+                <strong>${escapeHtml(formatPercent(derived.winRate))}</strong>
+                <small>${stats.wins}W - ${Math.max(0, stats.games - stats.wins)}L</small>
+            </li>
+        `;
+    }
+    return `
+        <li class="profile-weapon-summary">
+            <span>${escapeHtml(entry?.label || entry?.id || "Unknown weapon")}</span>
+            <strong>${stats.kills}</strong>
+            <small>${escapeHtml(formatPercent(derived.headshotRate))} HS - ${stats.hits} hits</small>
+        </li>
+    `;
+}
+
+function renderActivityCalendar(matches, { compact = false } = {}) {
+    const periodDays = 60;
+    const counts = new Map();
+    for (const match of matches || []) {
+        const date = new Date(match.endedAt || match.completedAt || "");
+        if (!Number.isFinite(date.getTime())) continue;
+        const key = localCalendarDateKey(date);
+        counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const periodStart = new Date(today);
+    periodStart.setDate(periodStart.getDate() - (periodDays - 1));
+    const gridStart = new Date(periodStart);
+    gridStart.setDate(gridStart.getDate() - gridStart.getDay());
+    const gridEnd = new Date(today);
+    gridEnd.setDate(gridEnd.getDate() + (6 - gridEnd.getDay()));
+    const totalGridDays = Math.round((gridEnd.getTime() - gridStart.getTime()) / 86400000) + 1;
+    const weekCount = Math.ceil(totalGridDays / 7);
+    const maximum = Math.max(1, ...counts.values());
+    const cells = [];
+    let activeDays = 0;
+    let totalMatches = 0;
+    for (let index = 0; index < totalGridDays; index += 1) {
+        const date = new Date(gridStart);
+        date.setDate(gridStart.getDate() + index);
+        const inPeriod = date >= periodStart && date <= today;
+        const key = localCalendarDateKey(date);
+        const count = inPeriod ? counts.get(key) || 0 : 0;
+        if (count) activeDays += 1;
+        totalMatches += count;
+        const level = count ? Math.max(1, Math.ceil((count / maximum) * 4)) : 0;
+        const label = `${count} match${count === 1 ? "" : "es"} on ${formatFullLocalDate(date.toISOString())}`;
+        cells.push(
+            inPeriod
+                ? `<span class="activity-day level-${level}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"></span>`
+                : '<span class="activity-day outside-period" aria-hidden="true"></span>'
+        );
+    }
+    const months = [];
+    for (let week = 0; week < weekCount; week += 1) {
+        const date = new Date(gridStart);
+        date.setDate(gridStart.getDate() + week * 7);
+        const previous = new Date(date);
+        previous.setDate(previous.getDate() - 7);
+        const show = week === 0 || date.getMonth() !== previous.getMonth();
+        months.push(`<span>${show ? escapeHtml(date.toLocaleDateString(undefined, { month: "short" })) : ""}</span>`);
+    }
+    return `
+        <section class="activity-calendar ${compact ? "compact" : ""}" aria-label="Player activity over the last 60 days">
+            <div class="activity-calendar-heading"><div><p class="panel-kicker">Activity</p><h4>Last 60 days</h4></div><span>${totalMatches} matches across ${activeDays} days</span></div>
+            <div class="activity-calendar-scroll">
+                <div class="activity-calendar-layout">
+                    <div class="activity-weekdays" aria-hidden="true">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => `<span>${day}</span>`).join("")}</div>
+                    <div class="activity-calendar-plot">
+                        <div class="activity-months" style="--activity-weeks: ${weekCount}">${months.join("")}</div>
+                        <div class="activity-calendar-grid" style="--activity-weeks: ${weekCount}">${cells.join("")}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="activity-calendar-legend" aria-hidden="true"><span>Less</span>${[0, 1, 2, 3, 4].map((level) => `<i class="activity-day level-${level}"></i>`).join("")}<span>More</span></div>
+        </section>
+    `;
+}
+
+function localCalendarDateKey(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+function profileStandardMode(profile, mode) {
+    if (mode === "battleRoyale") return { value: profile?.battleRoyale || null, legacy: false };
+    if (mode === "teamDeathmatch" && profile?.teamDeathmatch) {
+        return { value: profile.teamDeathmatch, legacy: false };
+    }
+    if (mode === "freeForAll" && profile?.freeForAll) return { value: profile.freeForAll, legacy: false };
+    return { value: null, legacy: false };
+}
+
+function profileModeWeapons(profile, mode) {
+    const modeIds =
+        mode === "overall"
+            ? ["battleRoyale", "zombieSurvival", "teamDeathmatch", "freeForAll", "duel"]
+            : [mode];
+    const sources = [];
+    for (const modeId of modeIds) {
+        if (["battleRoyale", "teamDeathmatch", "freeForAll"].includes(modeId)) {
+            const resolved = profileStandardMode(profile, modeId);
+            if (resolved.value) sources.push(resolved.value?.details?.weapons || []);
+            continue;
+        }
+        const value = modeId === "duel" ? profile?.duel : profile?.zombieSurvival;
+        sources.push(value?.details?.weapons || value?.weapons || value?.weaponStats || []);
+    }
+    const merged = new Map();
+    for (const entry of sources.flat()) {
+        const normalized = normalizeWeaponEntry(entry);
+        if (!normalized) continue;
+        const current = merged.get(normalized.id) || {
+            id: normalized.id,
+            label: normalized.label,
+            stats: normalizeStats(null)
+        };
+        current.stats = combineStats(current.stats, normalized.stats);
+        current.derived = derivedFromStats(current.stats);
+        merged.set(normalized.id, current);
+    }
+    return [...merged.values()].sort(
+        (first, second) =>
+            number(second.stats?.kills) - number(first.stats?.kills) ||
+            number(second.stats?.hits) - number(first.stats?.hits) ||
+            String(first.label).localeCompare(String(second.label))
+    );
+}
+
+function profileModeMaps(profile, mode) {
+    const direct = [];
+    const addMaps = (value) => {
+        const details = value?.details || {};
+        const preferred = [details.maps, details.deathmatchMaps, details.battleRoyaleMaps, value?.maps].find(
+            (entries) => Array.isArray(entries) && entries.length
+        );
+        for (const entry of preferred || []) {
+            direct.push(entry);
+        }
+    };
+    const modeIds =
+        mode === "overall"
+            ? ["battleRoyale", "zombieSurvival", "teamDeathmatch", "freeForAll", "duel"]
+            : [mode];
+    for (const modeId of modeIds) {
+        if (["battleRoyale", "teamDeathmatch", "freeForAll"].includes(modeId)) {
+            addMaps(profileStandardMode(profile, modeId).value);
+        } else {
+            addMaps(modeId === "duel" ? profile?.duel : profile?.zombieSurvival);
+        }
+    }
+    const historyMaps = aggregateProfileHistoryMaps(filteredHistory(profile, mode));
+    const entries = direct.length ? direct : historyMaps;
+    const merged = new Map();
+    for (const entry of entries) {
+        const id = String(entry?.id || entry?.label || "").trim();
+        if (!id) continue;
+        const current = merged.get(id) || {
+            id,
+            label: String(entry?.label || id),
+            stats: normalizeStats(null)
+        };
+        current.stats = combineStats(current.stats, entry?.stats);
+        current.derived = derivedFromStats(current.stats);
+        merged.set(id, current);
+    }
+    return [...merged.values()].sort(
+        (first, second) =>
+            number(second.stats?.games) - number(first.stats?.games) ||
+            number(second.stats?.kills) - number(first.stats?.kills) ||
+            String(first.label).localeCompare(String(second.label))
+    );
+}
+
+function aggregateProfileHistoryMaps(matches) {
+    const maps = new Map();
+    for (const match of matches || []) {
+        const id = String(match.mapId || match.mapName || match.mapLabel || "").trim();
+        if (!id) continue;
+        const current = maps.get(id) || {
+            id,
+            label: String(match.mapName || match.mapLabel || labelFromIdentifier(id)),
+            stats: normalizeStats(null)
+        };
+        current.stats = combineStats(current.stats, {
+            games: 1,
+            wins: match.won ? 1 : 0,
+            kills: number(match.kills ?? match.zombieKills),
+            deaths: number(match.deaths),
+            playtimeSeconds: number(match.playtimeSeconds) || number(match.survivalDurationMs) / 1000,
+            hits: number(match.hits),
+            headshots: number(match.headshots),
+            headshotKills: number(match.headshotKills)
+        });
+        current.derived = derivedFromStats(current.stats);
+        maps.set(id, current);
+    }
+    return [...maps.values()];
 }
 
 function renderHistoryList(matches, { expandable, playerId = "" }) {
@@ -14703,19 +15234,23 @@ function renderHistoryList(matches, { expandable, playerId = "" }) {
 }
 
 function renderMatchHistoryRow(match, { expandable, playerId = "" }) {
-    if (match.mode === "duel") return renderDuelHistoryRow(match, { expandable, playerId });
-    if (match.mode === "zombieSurvival") return renderZombieSurvivalHistoryRow(match, { expandable, playerId });
+    const canonicalMode = canonicalHistoryMode(match);
+    if (canonicalMode === "duel") return renderDuelHistoryRow(match, { expandable, playerId });
+    if (canonicalMode === "zombieSurvival") return renderZombieSurvivalHistoryRow(match, { expandable, playerId });
     const result = match.won ? "Win" : "Loss";
     const resultClass = match.won ? "win" : "loss";
-    const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
+    const mode =
+        canonicalMode === "deathmatch"
+            ? "Deathmatch (legacy)"
+            : PROFILE_MODE_LABELS[canonicalMode] || match.modeLabel || MODE_LABELS[match.mode] || "Match";
     const expanded = state.expandedMatchIds.has(match.matchId);
     const matchHref = matchRouteHash(match.matchId, playerId);
     const placement =
-        match.mode === "battleRoyale" && match.placement
+        canonicalMode === "battleRoyale" && match.placement
             ? `<span>${escapeHtml(formatPlacement(match.placement))} place</span>`
             : "";
     const finalScore =
-        match.mode === "deathmatch" && hasMatchScore(match)
+        canonicalMode === "teamDeathmatch" && hasMatchScore(match)
             ? `<span>Final score Red ${escapeHtml(String(match.redScore))} - ${escapeHtml(String(match.blueScore))} Blue</span>`
             : "";
     const buttonAttrs = expandable
@@ -14900,6 +15435,9 @@ function renderDuelModeBlock(payload, options = {}) {
             ["Round Losses", duel.roundLosses],
             ["Kills", duel.kills, duel.percentiles?.kills],
             ["Deaths", duel.deaths],
+            ["Win Rate", formatPercent(rate(duel.wins, duel.games)), duel.percentiles?.winRate],
+            ["Avg Kills", formatNumber(rate(duel.kills, duel.games)), duel.percentiles?.avgKills],
+            ["KD Ratio", formatNumber(duel.deaths ? duel.kills / duel.deaths : duel.kills), duel.percentiles?.kdRatio],
             ["Damage", formatNumber(duel.damage), duel.percentiles?.damage],
             ["Flawless Rounds", duel.flawlessRounds]
         ],
@@ -14923,9 +15461,17 @@ function renderZombieSurvivalModeBlock(payload, options = {}) {
             ["Average Survival", formatDuration(zombie.averageSurvivalMs / 1000)],
             ["Games", zombie.games],
             ["Zombie Kills", zombie.zombieKills, zombie.percentiles?.zombieKills],
+            [
+                "Avg Zombie Kills",
+                formatNumber(rate(zombie.zombieKills, zombie.games)),
+                zombie.percentiles?.avgZombieKills
+            ],
             ["Highest Match Kills", zombie.highestMatchKills, zombie.percentiles?.highestMatchKills],
             ["Special Zombie Kills", specialZombieKillCount(zombie.variantKills)],
-            ["Times Last Survivor", zombie.lastSurvivorCount],
+            ["Times Last Survivor", zombie.lastSurvivorCount, zombie.percentiles?.lastSurvivorCount],
+            ["Last Survivor Rate", formatPercent(rate(zombie.lastSurvivorCount, zombie.games))],
+            ["Damage to Zombies", formatNumber(zombie.damageDealtToZombies), zombie.percentiles?.damageDealtToZombies],
+            ["Damage Taken", formatNumber(zombie.damageTaken)],
             ["Chests Opened", zombie.chestsOpened],
             ["Vehicles Used", zombie.vehiclesUsed]
         ],
@@ -14991,6 +15537,9 @@ function renderModeBlock(label, payload, options = {}) {
     if (!compact) {
         statItems.push(["Highest Streak", stats.bestKillStreak]);
         statItems.push(["Top Match Kills", stats.topMatchKills]);
+        statItems.push(["Collateral Hits", stats.collateralHits]);
+        statItems.push(["Collateral Kills", stats.collateralKills]);
+        statItems.push(["Collateral Headshot Kills", stats.collateralHeadshotKills]);
     }
 
     return `
@@ -15066,6 +15615,9 @@ function renderWeaponTable(title, weapons, sort = "kills", direction = "desc") {
                     <span>${renderProfileWeaponSortButton("hits")}</span>
                     <span>${renderProfileWeaponSortButton("headshotRate")}</span>
                     <span>${renderProfileWeaponSortButton("headshotKills")}</span>
+                    <span>${renderProfileWeaponSortButton("collateralHits")}</span>
+                    <span>${renderProfileWeaponSortButton("collateralKills")}</span>
+                    <span>${renderProfileWeaponSortButton("collateralHeadshotKills")}</span>
                     <span>${renderProfileWeaponSortButton("utilityKills")}</span>
                     <span>${renderProfileWeaponSortButton("vehicleKills")}</span>
                 </div>
@@ -15189,6 +15741,12 @@ function weaponSortValue(entry, sort) {
             return derived.headshotRate;
         case "headshotKills":
             return stats.headshotKills;
+        case "collateralHits":
+            return stats.collateralHits;
+        case "collateralKills":
+            return stats.collateralKills;
+        case "collateralHeadshotKills":
+            return stats.collateralHeadshotKills;
         case "utilityKills":
             return stats.utilityKills;
         case "vehicleKills":
@@ -15209,6 +15767,9 @@ function renderWeaponRow(entry) {
             <span>${stats.hits}</span>
             <span>${formatPercent(derived.headshotRate)}</span>
             <span>${stats.headshotKills}</span>
+            <span>${stats.collateralHits}</span>
+            <span>${stats.collateralKills}</span>
+            <span>${stats.collateralHeadshotKills}</span>
             <span>${stats.utilityKills}</span>
             <span>${stats.vehicleKills}</span>
         </article>
@@ -15259,7 +15820,7 @@ function filteredLeaderboardRows() {
 
 function currentLeaderboardRows() {
     if (state.mainView === "weapons") return cachedWeapons(state.mode);
-    if (state.mainView === "maps") return cachedMaps();
+    if (state.mainView === "maps") return cachedMaps(state.mode);
     if (state.mode === "zombieSurvival") {
         return currentMode().leaderboards?.longestSurvival || currentMode().players || [];
     }
@@ -15292,21 +15853,32 @@ function buildOverallMode() {
 }
 
 function cachedWeapons(mode) {
-    const id = ["overall", "battleRoyale", "deathmatch"].includes(mode) ? mode : "battleRoyale";
+    const id = ["overall", "battleRoyale", "teamDeathmatch", "freeForAll", "deathmatch", "duel", "zombieSurvival"].includes(
+        mode
+    )
+        ? mode
+        : "battleRoyale";
     if (!Object.hasOwn(state.cache.weaponsByMode, id)) {
         state.cache.weaponsByMode[id] = aggregateWeapons(state.cache.profiles, id);
     }
     return state.cache.weaponsByMode[id];
 }
 
-function cachedMaps() {
-    if (!Array.isArray(state.cache.maps)) state.cache.maps = aggregateDeathmatchMaps(state.cache.profiles);
-    return state.cache.maps;
+function cachedMaps(mode) {
+    const id = PROFILE_MODE_LABELS[mode] ? mode : "battleRoyale";
+    if (!Object.hasOwn(state.cache.mapsByMode, id)) {
+        state.cache.mapsByMode[id] = aggregateMaps(state.cache.profiles, id);
+    }
+    return state.cache.mapsByMode[id];
 }
 
 function buildOverallPlayer(profile) {
     if (!profile) return null;
-    const stats = combineStats(profile.battleRoyale?.stats, profile.deathmatch?.stats);
+    const stats = combineStats(
+        profile.battleRoyale?.stats,
+        profile.teamDeathmatch?.stats,
+        profile.freeForAll?.stats
+    );
     if (stats.games <= 0) return null;
     return {
         playerId: profile.playerId,
@@ -15332,6 +15904,9 @@ function combineStats(...statsList) {
         total.hits += next.hits;
         total.headshots += next.headshots;
         total.headshotKills += next.headshotKills;
+        total.collateralHits += next.collateralHits;
+        total.collateralKills += next.collateralKills;
+        total.collateralHeadshotKills += next.collateralHeadshotKills;
         total.mvp += next.mvp;
         total.bestKillStreak = Math.max(total.bestKillStreak, next.bestKillStreak);
         total.topMatchKills = Math.max(total.topMatchKills, next.topMatchKills);
@@ -15395,6 +15970,9 @@ function normalizeDuelProfile(value) {
         damage: number(value?.damage),
         flawlessRounds: number(value?.flawlessRounds),
         kitsUsed: normalizeNumberMap(value?.kitsUsed),
+        weaponsUsed: normalizeNumberMap(value?.weaponsUsed),
+        weapons: cleanWeaponEntries(value?.details?.weapons || value?.weapons || []),
+        maps: Array.isArray(value?.details?.maps) ? value.details.maps : Array.isArray(value?.maps) ? value.maps : [],
         percentiles: value?.percentiles || {}
     };
 }
@@ -15417,6 +15995,8 @@ function normalizeZombieSurvivalProfile(value) {
         chestsOpened: number(value?.chestsOpened),
         vehiclesUsed: number(value?.vehiclesUsed),
         deathReasons: normalizeNumberMap(value?.deathReasons),
+        weapons: cleanWeaponEntries(value?.details?.weapons || value?.weapons || []),
+        maps: Array.isArray(value?.details?.maps) ? value.details.maps : Array.isArray(value?.maps) ? value.maps : [],
         percentiles: value?.percentiles || {}
     };
 }
@@ -15437,6 +16017,9 @@ function normalizeStats(stats) {
         hits: number(stats?.hits),
         headshots: number(stats?.headshots),
         headshotKills: number(stats?.headshotKills),
+        collateralHits: number(stats?.collateralHits),
+        collateralKills: number(stats?.collateralKills),
+        collateralHeadshotKills: number(stats?.collateralHeadshotKills),
         mvp: number(stats?.mvp ?? stats?.mvps ?? stats?.mvpCount ?? stats?.mvpAwards),
         bestKillStreak: number(stats?.bestKillStreak),
         topMatchKills: number(stats?.topMatchKills),
@@ -15507,7 +16090,8 @@ function combinedWeapons(profile) {
     const merged = new Map();
     for (const entry of [
         ...(profile.battleRoyale?.details?.weapons || []),
-        ...(profile.deathmatch?.details?.weapons || [])
+        ...(profile.teamDeathmatch?.details?.weapons || []),
+        ...(profile.freeForAll?.details?.weapons || [])
     ]) {
         const normalized = normalizeWeaponEntry(entry);
         if (!normalized) continue;
@@ -15530,26 +16114,15 @@ function combinedWeapons(profile) {
 function aggregateWeapons(profiles, mode) {
     const merged = new Map();
     for (const profile of profiles) {
-        const sources =
-            mode === "battleRoyale"
-                ? [profile.battleRoyale?.details?.weapons || []]
-                : mode === "deathmatch"
-                  ? [profile.deathmatch?.details?.weapons || []]
-                  : [profile.battleRoyale?.details?.weapons || [], profile.deathmatch?.details?.weapons || []];
-
-        for (const entries of sources) {
-            for (const entry of entries) {
-                const normalized = normalizeWeaponEntry(entry);
-                if (!normalized) continue;
-                const current = merged.get(normalized.id) || {
-                    id: normalized.id,
-                    label: normalized.label,
-                    stats: normalizeStats(null)
-                };
-                current.stats = combineStats(current.stats, normalized.stats);
-                current.derived = derivedFromStats(current.stats);
-                merged.set(normalized.id, current);
-            }
+        for (const normalized of profileModeWeapons(profile, mode)) {
+            const current = merged.get(normalized.id) || {
+                id: normalized.id,
+                label: normalized.label,
+                stats: normalizeStats(null)
+            };
+            current.stats = combineStats(current.stats, normalized.stats);
+            current.derived = derivedFromStats(current.stats);
+            merged.set(normalized.id, current);
         }
     }
 
@@ -15600,10 +16173,10 @@ function labelFromIdentifier(value) {
     );
 }
 
-function aggregateDeathmatchMaps(profiles) {
+function aggregateMaps(profiles, mode) {
     const merged = new Map();
     for (const profile of profiles) {
-        for (const entry of profile.deathmatch?.details?.deathmatchMaps || []) {
+        for (const entry of profileModeMaps(profile, mode)) {
             const id = entry?.id || entry?.label;
             if (!id) continue;
             const current = merged.get(id) || {
@@ -15620,9 +16193,32 @@ function aggregateDeathmatchMaps(profiles) {
 }
 
 function filteredHistory(profile, mode) {
-    const matches = profileHistoryMatches(profile);
+    const matches = profileHistoryMatches(profile).filter((match) => Boolean(canonicalHistoryMode(match)));
     if (mode === "overall") return matches;
-    return matches.filter((match) => match.mode === mode);
+    return matches.filter((match) => canonicalHistoryMode(match) === mode);
+}
+
+function canonicalHistoryMode(match) {
+    const variant = String(match?.modeVariant || match?.variant || match?.format || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+    const mode = String(match?.mode || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+    if (["teamdeathmatch", "tdm", "teams"].includes(variant) || ["teamdeathmatch", "tdm"].includes(mode)) {
+        return "teamDeathmatch";
+    }
+    if (["freeforall", "ffa", "solo"].includes(variant) || ["freeforall", "ffa"].includes(mode)) {
+        return "freeForAll";
+    }
+    if (mode === "deathmatch") {
+        return "";
+    }
+    if (mode === "battleroyale") return "battleRoyale";
+    if (mode === "zombiesurvival") return "zombieSurvival";
+    return mode === "duels" ? "duel" : mode;
 }
 
 function profileHistoryMatches(profile) {
@@ -15814,6 +16410,7 @@ function replacePlayerHash(playerId) {
     const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     params.set("player", playerId);
     params.set("tab", PLAYER_TABS[state.playerTab] ? state.playerTab : "overview");
+    params.set("profileMode", profileModeFilter(state.playerTab));
     window.history.replaceState(
         null,
         document.title,
@@ -15905,6 +16502,12 @@ function sortValue(player, sort) {
             return stats.hits;
         case "headshotKills":
             return stats.headshotKills;
+        case "collateralHits":
+            return stats.collateralHits;
+        case "collateralKills":
+            return stats.collateralKills;
+        case "collateralHeadshotKills":
+            return stats.collateralHeadshotKills;
         case "utilityKills":
             return stats.utilityKills;
         case "vehicleKills":

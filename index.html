@@ -108,14 +108,24 @@
                     <div class="featured-list podium-list" id="featured-battle-royale"></div>
                 </article>
 
-                <article class="podium-panel podium-dm" data-champion-panel="deathmatch">
+                <article class="podium-panel podium-dm" data-champion-panel="teamDeathmatch">
                     <div class="featured-header">
                         <div>
-                            <p class="panel-kicker">Deathmatch</p>
+                            <p class="panel-kicker">Team Deathmatch</p>
                             <h3>Top 5</h3>
                         </div>
                     </div>
-                    <div class="featured-list podium-list" id="featured-deathmatch"></div>
+                    <div class="featured-list podium-list" id="featured-team-deathmatch"></div>
+                </article>
+
+                <article class="podium-panel podium-dm" data-champion-panel="freeForAll">
+                    <div class="featured-header">
+                        <div>
+                            <p class="panel-kicker">Free For All</p>
+                            <h3>Top 5</h3>
+                        </div>
+                    </div>
+                    <div class="featured-list podium-list" id="featured-free-for-all"></div>
                 </article>
             </div>
         </div>
@@ -170,7 +180,7 @@
                 <span>02</span>
                 <h3>Deathmatch</h3>
                 <p>Choose Team Deathmatch or Free For All, vote for a map, select a kit, prepare for five seconds, then respawn and chase the configured score target.</p>
-                <a href="/stats/?mode=deathmatch&amp;view=players&amp;sort=wins">DM stats</a>
+                <div class="info-panel-links"><a href="/stats/?mode=teamDeathmatch&amp;view=players&amp;sort=wins">TDM stats</a><a href="/stats/?mode=freeForAll&amp;view=players&amp;sort=wins">FFA stats</a></div>
             </article>
             <article class="info-panel">
                 <span>03</span>

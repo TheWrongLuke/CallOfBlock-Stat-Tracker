@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { saveProfileCustomization, syncDiscordProfile } from "../../src/api/profile.js";
+import {
+    deleteOwnAccount,
+    loadNotificationPreferences,
+    saveNotificationPreferences,
+    saveProfileCustomization,
+    syncDiscordProfile
+} from "../../src/api/profile.js";
 
 describe("profile API", () => {
     it("synchronizes Discord identity through the protected RPC", async () => {
@@ -35,6 +41,37 @@ describe("profile API", () => {
             p_pfp_border: "none",
             p_profile_title: "none",
             p_selected_badges: ["first_win"]
+        });
+    });
+
+    it("loads and saves private email preferences through protected RPCs", async () => {
+        const rpc = vi.fn().mockResolvedValue({ data: { playtest_email: true }, error: null });
+
+        await loadNotificationPreferences({ rpc });
+        await saveNotificationPreferences(
+            { rpc },
+            {
+                playtestEmail: true,
+                adminTicketEmail: false,
+                adminAccountCreatedEmail: true
+            }
+        );
+
+        expect(rpc).toHaveBeenNthCalledWith(1, "get_my_notification_preferences");
+        expect(rpc).toHaveBeenNthCalledWith(2, "save_my_notification_preferences", {
+            p_playtest_email: true,
+            p_admin_ticket_email: false,
+            p_admin_account_created_email: true
+        });
+    });
+
+    it("requires an explicit confirmation through the account deletion RPC", async () => {
+        const invoke = vi.fn().mockResolvedValue({ data: { deleted: true }, error: null });
+
+        await deleteOwnAccount({ functions: { invoke } }, "DELETE");
+
+        expect(invoke).toHaveBeenCalledWith("delete-account", {
+            body: { confirmation: "DELETE" }
         });
     });
 });

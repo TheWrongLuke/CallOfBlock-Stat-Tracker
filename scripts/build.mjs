@@ -143,6 +143,11 @@ function pruneSharedPageShell(html, routeId) {
     let output = html;
     if (routeId !== "home") {
         output = output.replace(/\s*<div class="hero-champions">[\s\S]*?(?=\s*<div class="hero-status">)/i, "");
+        output = output.replace(
+            /\s*<section class="creator-trust"[\s\S]*?<\/section>/i,
+            routeId === "about" ? renderAboutProjectSection() : ""
+        );
+        output = output.replace(/\s*<a href="\/about\/">Who is behind Call of Block\?<\/a>/i, "");
     }
     if (!new Set(["home", "stats"]).has(routeId)) {
         output = output.replace(/\s*<div class="hero-status">[\s\S]*?<\/div>(?=\s*<\/header>)/i, "");
@@ -158,6 +163,27 @@ function pruneSharedPageShell(html, routeId) {
         );
     }
     return output.replace(/\s*<!-- HELP_CONTENT_(?:START|END) -->\s*/gi, "\n");
+}
+
+function renderAboutProjectSection() {
+    return `
+    <section class="creator-trust about-project" id="about-project" aria-labelledby="about-project-title">
+        <div class="creator-trust-shell">
+            <article class="creator-trust-panel">
+                <div class="creator-trust-copy">
+                    <p class="panel-kicker">Official Project</p>
+                    <h2 id="about-project-title">Call of Block multiplayer</h2>
+                    <p>Call of Block is a competitive Minecraft multiplayer project and callofblock.com is its official website for server information, statistics, leaderboards, match history, playtests, and community tools.</p>
+                    <p>The official Call of Block modpack required to play is distributed through CurseForge and Modrinth.</p>
+                    <div class="creator-trust-links" aria-label="Official Call of Block links">
+                        <a href="https://www.curseforge.com/minecraft/modpacks/call-of-block" target="_blank" rel="noopener noreferrer">Official modpack on CurseForge</a>
+                        <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Official modpack on Modrinth</a>
+                        <a href="https://github.com/TheWrongLuke/CallOfBlock-Stat-Tracker" target="_blank" rel="noopener noreferrer">Website source on GitHub</a>
+                    </div>
+                </div>
+            </article>
+        </div>
+    </section>`;
 }
 
 function pruneRouteViews(html, routeId) {

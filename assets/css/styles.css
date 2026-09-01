@@ -5781,6 +5781,12 @@ body.notification-gift-open {
     margin-top: 10px;
 }
 
+.info-panel-links {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
 .join-section,
 .playtest-promo,
 .video-section,
@@ -9961,6 +9967,34 @@ body.store-purchase-open {
     background-position: center;
 }
 
+.player-profile-primary {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+}
+
+.player-profile-hero.has-overview-summary {
+    display: grid;
+    grid-template-columns: minmax(420px, 0.9fr) minmax(470px, 1.1fr);
+    align-items: stretch;
+}
+
+.player-profile-overview-summary {
+    display: grid;
+    grid-template-columns: minmax(190px, 230px) max-content;
+    gap: 12px;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.player-profile-overview-summary .profile-history-sidebar {
+    position: static;
+    top: auto;
+    gap: 10px;
+    padding: 12px;
+    background: rgba(3, 8, 13, 0.62);
+}
+
 .account-hero::before,
 .player-profile-hero::before {
     content: "";
@@ -10163,6 +10197,83 @@ body.store-purchase-open {
     background: rgba(0, 0, 0, 0.25);
     color: var(--text);
     font: inherit;
+}
+
+.notification-preferences-form {
+    align-items: start;
+}
+
+.notification-preferences-form .account-toggle-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    align-items: start;
+    gap: 12px;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+}
+
+.notification-preferences-form .account-toggle-row input {
+    width: 20px;
+    height: 20px;
+    margin: 2px 0 0;
+    accent-color: var(--gold);
+}
+
+.notification-preferences-form .account-toggle-row span {
+    display: grid;
+    gap: 3px;
+    color: var(--text);
+    font-size: inherit;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.notification-preferences-form .account-toggle-row small {
+    line-height: 1.4;
+}
+
+.account-danger-zone {
+    border-color: rgba(224, 83, 83, 0.45);
+}
+
+.account-danger-zone details {
+    border-top: 1px solid rgba(224, 83, 83, 0.28);
+    padding-top: 14px;
+}
+
+.account-danger-zone summary {
+    width: fit-content;
+    min-height: 44px;
+    color: #ff9999;
+    cursor: pointer;
+    font-weight: 700;
+    line-height: 44px;
+}
+
+.account-danger-zone form,
+.account-danger-zone label {
+    display: grid;
+    gap: 10px;
+}
+
+.account-danger-zone form {
+    max-width: 520px;
+    margin-top: 12px;
+}
+
+.account-danger-zone input {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid rgba(224, 83, 83, 0.45);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--text);
+    font: inherit;
+}
+
+.account-danger-zone .danger-button {
+    border-color: rgba(224, 83, 83, 0.65);
+    color: #ffb0b0;
 }
 
 .account-customizer {
@@ -11297,6 +11408,335 @@ body.cosmetic-picker-open {
     flex-wrap: wrap;
 }
 
+.player-tabs {
+    width: min(78%, 760px);
+    margin-inline: auto;
+    justify-content: center;
+}
+
+.profile-mode-tabs {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    padding: 2px 0 4px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.profile-mode-tabs .tab-pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.profile-data-note {
+    margin: 0;
+    border-left: 3px solid var(--gold);
+    padding: 10px 12px;
+    background: rgba(255, 203, 107, 0.08);
+    color: var(--muted);
+}
+
+.profile-weapon-pagination {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+}
+
+.profile-weapon-pagination span {
+    color: var(--muted);
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.profile-history-workspace {
+    display: grid;
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.profile-history-sidebar {
+    display: grid;
+    gap: 16px;
+    position: sticky;
+    top: 82px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    background: rgba(0, 0, 0, 0.14);
+}
+
+.profile-summary-action {
+    min-height: 40px;
+    border: 1px solid rgba(255, 203, 107, 0.42);
+    border-radius: 5px;
+    padding: 8px 12px;
+    color: var(--text);
+    background: rgba(255, 203, 107, 0.1);
+    font: 700 0.76rem/1 "Chakra Petch", sans-serif;
+    cursor: pointer;
+    transition:
+        transform 120ms ease,
+        border-color 120ms ease,
+        background-color 120ms ease;
+}
+
+.profile-summary-action:hover,
+.profile-summary-action:focus-visible {
+    border-color: var(--gold);
+    background: rgba(255, 203, 107, 0.18);
+    transform: translateY(-1px);
+}
+
+.profile-history-sidebar section {
+    display: grid;
+    gap: 8px;
+}
+
+.profile-history-sidebar h4,
+.activity-calendar h4 {
+    margin: 0;
+    font-family: "Chakra Petch", sans-serif;
+}
+
+.profile-history-sidebar ol {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.profile-history-sidebar li {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 3px 10px;
+    min-height: 62px;
+    border-bottom: 1px solid var(--line);
+    padding: 10px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.profile-history-sidebar li span {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 700;
+}
+
+.profile-history-sidebar li strong {
+    position: relative;
+    z-index: 1;
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    align-self: center;
+    color: var(--gold);
+    font: 700 1.05rem/1 "Chakra Petch", sans-serif;
+}
+
+.profile-history-sidebar li small {
+    position: relative;
+    z-index: 1;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.profile-history-sidebar li:first-child {
+    border-radius: 6px 6px 0 0;
+}
+
+.profile-history-sidebar li:last-child {
+    border-bottom: 0;
+    border-radius: 0 0 6px 6px;
+}
+
+.profile-map-summary::before {
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(90deg, rgba(8, 13, 19, 0.76), rgba(8, 13, 19, 0.9)),
+        var(--summary-map-image, none) center / cover;
+    content: "";
+    opacity: 0.8;
+}
+
+.profile-history-main {
+    min-width: 0;
+}
+
+.activity-calendar {
+    display: grid;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.activity-calendar.compact {
+    align-content: start;
+    width: max-content;
+    max-width: 100%;
+    gap: 7px;
+    padding: 12px;
+    background: rgba(3, 8, 13, 0.62);
+}
+
+.activity-calendar.compact .activity-calendar-heading {
+    display: grid;
+    gap: 2px;
+    align-items: start;
+}
+
+.activity-calendar.compact .activity-calendar-heading span {
+    max-width: 210px;
+    line-height: 1.3;
+}
+
+.activity-calendar.compact .activity-calendar-layout {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 5px;
+    min-width: 0;
+}
+
+.activity-calendar.compact .activity-weekdays {
+    grid-template-rows: repeat(7, 11px);
+    gap: 2px;
+    padding-top: 17px;
+    font-size: 0.58rem;
+}
+
+.activity-calendar.compact .activity-months {
+    grid-template-columns: repeat(var(--activity-weeks), 11px);
+    gap: 2px;
+    min-height: 15px;
+    font-size: 0.58rem;
+}
+
+.activity-calendar.compact .activity-calendar-grid {
+    grid-template-rows: repeat(7, 11px);
+    grid-auto-columns: 11px;
+    gap: 2px;
+}
+
+.activity-calendar.compact .activity-day {
+    width: 11px;
+    height: 11px;
+}
+
+.activity-calendar.compact .activity-calendar-legend {
+    font-size: 0.66rem;
+}
+
+.activity-calendar.compact .activity-calendar-legend .activity-day {
+    width: 10px;
+    height: 10px;
+}
+
+.activity-calendar-heading {
+    display: flex;
+    gap: 16px;
+    align-items: end;
+    justify-content: space-between;
+}
+
+.activity-calendar-heading span,
+.activity-calendar-legend {
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.activity-calendar-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.activity-calendar-layout {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 7px;
+    width: max-content;
+    min-width: 100%;
+}
+
+.activity-weekdays {
+    display: grid;
+    grid-template-rows: repeat(7, 14px);
+    gap: 3px;
+    padding-top: 20px;
+    color: var(--muted);
+    font-size: 0.66rem;
+}
+
+.activity-calendar-plot {
+    display: grid;
+    gap: 3px;
+}
+
+.activity-months {
+    display: grid;
+    grid-template-columns: repeat(var(--activity-weeks), 14px);
+    gap: 3px;
+    min-height: 17px;
+    color: var(--muted);
+    font-size: 0.68rem;
+}
+
+.activity-calendar-grid {
+    display: grid;
+    grid-template-rows: repeat(7, 14px);
+    grid-auto-flow: column;
+    grid-auto-columns: 14px;
+    gap: 3px;
+    width: max-content;
+}
+
+.activity-day {
+    display: block;
+    width: 14px;
+    height: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.055);
+}
+
+.activity-day.outside-period {
+    border-color: transparent;
+    background: transparent;
+}
+
+.activity-day.level-1 {
+    background: rgba(77, 170, 255, 0.3);
+}
+
+.activity-day.level-2 {
+    background: rgba(77, 170, 255, 0.5);
+}
+
+.activity-day.level-3 {
+    background: rgba(255, 203, 107, 0.68);
+}
+
+.activity-day.level-4 {
+    background: var(--gold);
+}
+
+.activity-calendar-legend {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: flex-end;
+}
+
 .detail-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(150px, 1fr));
@@ -11388,20 +11828,92 @@ body.cosmetic-picker-open {
 @media (max-width: 700px) {
     .percentile-context {
         min-height: 40px;
+        transform: none;
+    }
+
+    .percentile-context:hover,
+    .percentile-context:focus-visible {
+        transform: none;
     }
 
     .percentile-context::after {
         position: fixed;
-        right: 16px;
+        right: auto;
         bottom: 16px;
-        left: 16px;
-        width: auto;
-        transform: translateY(4px);
+        left: 50%;
+        width: min(320px, calc(100vw - 24px));
+        min-width: min(280px, calc(100vw - 24px));
+        max-width: calc(100vw - 24px);
+        overflow-wrap: normal;
+        white-space: normal;
+        word-break: normal;
+        transform: translate(-50%, 4px);
     }
 
     .percentile-context:hover::after,
     .percentile-context:focus-visible::after {
-        transform: translateY(0);
+        transform: translate(-50%, 0);
+    }
+
+    .player-tabs {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .profile-mode-tabs {
+        justify-content: flex-start;
+        padding-bottom: 6px;
+    }
+
+    .profile-mode-tabs .tab-pill {
+        min-height: 40px;
+    }
+
+    .profile-history-workspace {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-history-sidebar {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        top: auto;
+    }
+
+    .profile-history-sidebar > button {
+        grid-column: 1 / -1;
+        min-height: 44px;
+    }
+
+    .player-profile-overview-summary .profile-history-sidebar {
+        grid-template-columns: 1fr;
+    }
+
+    .player-profile-overview-summary .profile-history-sidebar > button {
+        grid-column: auto;
+    }
+
+    .activity-calendar-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .activity-calendar-grid {
+        min-width: max-content;
+    }
+
+    .profile-weapon-pagination button {
+        min-height: 44px;
+    }
+}
+
+@media (max-width: 430px) {
+    .profile-history-sidebar {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-history-sidebar > button {
+        grid-column: auto;
     }
 }
 
@@ -11435,7 +11947,7 @@ body.cosmetic-picker-open {
 
 .weapon-row {
     display: grid;
-    grid-template-columns: minmax(180px, 1.3fr) repeat(6, minmax(72px, 0.5fr));
+    grid-template-columns: minmax(180px, 1.3fr) repeat(9, minmax(72px, 0.5fr));
     gap: 10px;
     align-items: center;
     padding: 11px 12px;
@@ -11626,6 +12138,15 @@ code {
     .player-profile-hero {
         display: grid;
         align-items: start;
+    }
+
+    .player-profile-hero.has-overview-summary,
+    .player-profile-overview-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .player-profile-overview-summary .activity-calendar.compact {
+        width: 100%;
     }
 
     .player-profile-quickstats {
@@ -12242,7 +12763,7 @@ code {
     }
 
     .player-profile-quickstats {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     body[data-app-view="player"] .player-view {
@@ -12397,8 +12918,8 @@ code {
     }
 
     .weapon-row {
-        min-width: 570px;
-        grid-template-columns: minmax(120px, 1.15fr) repeat(6, minmax(56px, 0.55fr));
+        min-width: 780px;
+        grid-template-columns: minmax(120px, 1.15fr) repeat(9, minmax(56px, 0.55fr));
         gap: 6px;
         margin: 0;
         border: 0;
