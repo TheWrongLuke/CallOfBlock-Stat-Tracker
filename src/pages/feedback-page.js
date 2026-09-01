@@ -1,5 +1,4 @@
 import { createFeedbackApi } from "../api/feedback.js";
-import { syncDiscordProfile } from "../api/profile.js";
 import { USER_CLOSABLE_TICKET_STATUSES, USER_REOPENABLE_TICKET_STATUSES } from "../config/feedback.js";
 import {
     createFeedbackAttachmentView,
@@ -23,14 +22,6 @@ export async function initializeFeedbackPage() {
     const state = createState(shell);
     const draft = createFeedbackDraftSession({ getUserId: () => state.shell.session?.user?.id || "" });
 
-    if (state.shell.session?.user && state.shell.client) {
-        const profile = await syncDiscordProfile(state.shell.client);
-        if (!profile.error) {
-            state.profile = profile.data || null;
-            state.shell.setProfile(state.profile);
-        }
-    }
-
     bindEvents(state, draft);
     applyRoute(state);
     render(state, draft);
@@ -40,7 +31,7 @@ function createState(shell) {
     return {
         shell,
         api: shell.client ? createFeedbackApi(shell.client) : null,
-        profile: null,
+        profile: shell.profile || null,
         view: "feedback",
         selectedTicketId: "",
         tickets: [],

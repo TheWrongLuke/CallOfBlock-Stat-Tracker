@@ -1,4 +1,5 @@
 import { getDrawerController } from "./drawer-controller.js";
+import { syncDiscordProfile } from "../api/profile.js";
 import { readPublicStatsCache, writePublicStatsCache } from "../utils/public-data-cache.js";
 import { createRequestSignal } from "../utils/request-timeout.js";
 
@@ -34,6 +35,8 @@ async function initializeSiteShellOnce() {
         session: null,
         profile: null,
         accountPanelAddon: null,
+        accountExperienceUserId: "",
+        accountExperiencePromise: null,
         heroStatusRequest: null,
         get accountPanelOpen() {
             return drawer.isActive("profile");
@@ -84,6 +87,7 @@ async function initializeSiteShellOnce() {
 
     renderAccountWidget(shell, false);
     await initializeAuth(shell);
+    await initializeAuthenticatedAccount(shell);
     return shell;
 }
 
@@ -269,13 +273,100 @@ async function initializeAuth(shell) {
                 return;
             }
             shell.session = session || null;
-            if (!shell.session?.user) shell.drawer.close();
+            if (!shell.session?.user) {
+                shell.profile = null;
+                shell.accountExperienceUserId = "";
+                shell.accountExperiencePromise = null;
+                shell.drawer.close();
+            } else {
+                void initializeAuthenticatedAccount(shell);
+            }
             renderAccountWidget(shell, true);
         });
     } catch (error) {
         console.warn("Could not initialize the shared account widget", error);
         renderAccountWidget(shell, true);
     }
+}
+
+async function initializeAuthenticatedAccount(shell) {
+    const userId = String(shell.session?.user?.id || "");
+    if (!userId || !shell.client) return;
+    if (shell.accountExperienceUserId === userId) return shell.accountExperiencePromise;
+    shell.accountExperienceUserId = userId;
+    const request = initializeAuthenticatedAccountOnce(shell, userId);
+    shell.accountExperiencePromise = request;
+    try {
+        await request;
+    } finally {
+        if (shell.accountExperiencePromise === request) shell.accountExperiencePromise = null;
+    }
+}
+
+async function initializeAuthenticatedAccountOnce(shell, userId) {
+    try {
+        const result = await syncDiscordProfile(shell.client);
+        if (result.error) throw result.error;
+        if (String(shell.session?.user?.id || "") !== userId) return;
+        shell.setProfile(await resolveShellProfile(shell.client, result.data));
+    } catch (error) {
+        console.warn("Could not load the shared account profile", error);
+    }
+
+    if (String(shell.session?.user?.id || "") !== userId) return;
+
+    const [{ initializeHomeWeeklyMissions }, { initializeHomeNotifications }] = await Promise.all([
+        import("../features/home-weekly-missions.js"),
+        import("../features/home-notifications.js")
+    ]);
+    initializeHomeWeeklyMissions(shell);
+    await initializeHomeNotifications(shell.client, shell.drawer);
+}
+
+async function resolveShellProfile(client, profile) {
+    if (!profile) return null;
+    const selected = [
+        ["border", profile.pfp_border],
+        ["title", profile.profile_title],
+        ["icon", profile.avatar_source]
+    ].filter(([, id]) => id && id !== "none" && !["minecraft", "discord", "custom", "default"].includes(id));
+    const types = [...new Set(selected.map(([type]) => type))];
+    const ids = [...new Set(selected.map(([, id]) => id))];
+    let catalog = new Map();
+    if (types.length && ids.length) {
+        const result = await client
+            .from("public_cosmetic_catalog")
+            .select("cosmetic_type, cosmetic_id, rarity, image_url, title_text, border_inset")
+            .in("cosmetic_type", types)
+            .in("cosmetic_id", ids);
+        if (!result.error) {
+            catalog = new Map((result.data || []).map((item) => [`${item.cosmetic_type}:${item.cosmetic_id}`, item]));
+        }
+    }
+
+    const avatarSource = String(profile.avatar_source || "minecraft");
+    const border = catalog.get(`border:${String(profile.pfp_border || "none")}`);
+    const titleId = String(profile.profile_title || "none");
+    const title = catalog.get(`title:${titleId}`);
+    const icon = catalog.get(`icon:${avatarSource}`);
+    const avatarUrl = resolveShellAvatarUrl(profile, avatarSource, icon);
+
+    return {
+        ...profile,
+        resolved_avatar_url: avatarUrl,
+        resolved_border_url: border?.image_url || "",
+        resolved_border_inset: border?.border_inset || 0,
+        resolved_title_text: title?.title_text || (titleId === "none" ? "" : titleId.replaceAll("_", " ")),
+        resolved_title_rarity: title?.rarity || "common"
+    };
+}
+
+function resolveShellAvatarUrl(profile, avatarSource, icon) {
+    if (avatarSource === "discord") return profile.avatar_url || "";
+    if (avatarSource === "custom") return profile.custom_avatar_url || "";
+    if (avatarSource === "default") return "/assets/branding/icon-256.webp";
+    if (avatarSource === "minecraft") return skinHeadUrl(profile.minecraft_player_name || "Steve", 96);
+    return icon?.image_url || "";
 }
 
 function renderAccountWidget(shell, ready = true) {
@@ -290,6 +381,7 @@ function renderAccountWidget(shell, ready = true) {
         return;
     }
     if (!shell.session?.user) {
+        updateAdminStoreLinks(null);
         container.innerHTML = '<button type="button" data-shell-login>Login</button>';
         container.querySelector("[data-shell-login]")?.addEventListener("click", () => signIn(shell.client));
         return;

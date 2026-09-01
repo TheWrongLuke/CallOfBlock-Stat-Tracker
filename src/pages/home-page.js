@@ -6,7 +6,6 @@ import {
     renderHeroStatus,
     skinHeadUrl
 } from "../core/site-shell.js";
-import { syncDiscordProfile } from "../api/profile.js";
 
 const CHAMPION_ROTATE_MS = 5000;
 const STATS_SLICE_UPDATED_EVENT = "cob:stats-slice-updated";
@@ -47,26 +46,16 @@ export async function initializeHomePage() {
     ]);
     const data = renderCurrentData();
 
-    const [profiles, catalog, ownProfileResult] = await Promise.all([
+    const [profiles, catalog] = await Promise.all([
         loadPublicProfiles(shell.client, data),
-        loadCosmeticCatalog(shell.client),
-        shell.session?.user ? syncDiscordProfile(shell.client) : Promise.resolve({ data: null, error: null })
+        loadCosmeticCatalog(shell.client)
     ]);
     currentProfiles = profiles;
     currentCatalog = catalog;
     const publicViewerProfile = profiles.find((profile) => profile.id === shell.session?.user?.id) || null;
-    const viewerProfile = ownProfileResult.error ? publicViewerProfile : ownProfileResult.data || publicViewerProfile;
-    shell.setProfile(resolveShellProfile(viewerProfile, catalog));
-    if (shell.session?.user && viewerProfile) {
-        const { initializeHomeWeeklyMissions } = await import("../features/home-weekly-missions.js");
-        initializeHomeWeeklyMissions(shell);
-    }
+    if (!shell.profile && publicViewerProfile) shell.setProfile(resolveShellProfile(publicViewerProfile, catalog));
     homeRendered = true;
     renderHome(mergeHomeStatus(currentHome, currentStatus), profiles, catalog);
-    if (shell.session?.user) {
-        const { initializeHomeNotifications } = await import("../features/home-notifications.js");
-        await initializeHomeNotifications(shell.client, shell.drawer);
-    }
     void renderUpcomingPlaytest(shell.client);
     startChampionCarousel();
 }

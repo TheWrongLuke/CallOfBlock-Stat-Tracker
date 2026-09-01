@@ -1,4 +1,3 @@
-import { syncDiscordProfile } from "../api/profile.js";
 import { escapeHtml, formatDate, initializeSiteShell } from "../core/site-shell.js";
 
 const PLAYTEST_COLUMNS =
@@ -25,14 +24,6 @@ export async function initializePlaytestsPage() {
     const state = createState(shell);
     restorePreferences(state);
 
-    if (shell.session?.user && shell.client) {
-        const profile = await syncDiscordProfile(shell.client);
-        if (!profile.error) {
-            state.profile = profile.data || null;
-            shell.setProfile(state.profile);
-        }
-    }
-
     bindEvents(state);
     await loadPlaytests(state);
 }
@@ -40,7 +31,7 @@ export async function initializePlaytestsPage() {
 function createState(shell) {
     return {
         shell,
-        profile: null,
+        profile: shell.profile || null,
         playtests: [],
         activeId: "",
         selectedDates: {},

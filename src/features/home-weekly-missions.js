@@ -2,8 +2,11 @@ import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } fro
 import { escapeHtml, formatDate, number } from "../core/site-shell.js";
 
 const MISSION_LIMIT = 7;
+const initializedShells = new WeakSet();
 
 export function initializeHomeWeeklyMissions(shell) {
+    if (!shell || initializedShells.has(shell)) return;
+    initializedShells.add(shell);
     const state = {
         row: null,
         statsProfile: null,

@@ -711,6 +711,30 @@ test("the signed-in homepage account pill opens the profile drawer and reveals a
     await expect(drawer).toBeHidden();
 });
 
+test("authenticated public pages share the complete account drawer", async ({ page }) => {
+    await installPageStubs(page, adminSupabaseStub);
+    await page.route("https://mc-heads.net/**", (route) =>
+        route.fulfill({ contentType: "image/png", body: transparentPng })
+    );
+
+    for (const path of ["/playtests/", "/feedback/", "/help/", "/about/"]) {
+        await page.goto(path);
+        const accountButton = page.locator("[data-shell-account-open]");
+        await expect(accountButton).toBeVisible();
+        await expect(accountButton.locator("img")).toHaveAttribute("src", /avatar\/AdminMC\/96/);
+
+        await accountButton.click();
+        await expect(page.locator(".profile-drawer")).toContainText("Test Admin");
+        await expect(page.locator(".profile-drawer-store")).toBeVisible();
+        await expect(page.locator(".weekly-missions-panel")).toContainText("On the Board");
+        await page.locator("[data-shell-account-close]").click();
+
+        await page.locator("[data-notification-panel-open]").click();
+        await expect(page.locator(".notification-drawer")).toBeVisible();
+        await page.locator("[data-home-notification-close]").click();
+    }
+});
+
 test("homepage profile and notification drawers have one deterministic owner", async ({ page }) => {
     await openAdminApp(page, "");
     const result = await page.evaluate(async () => {
