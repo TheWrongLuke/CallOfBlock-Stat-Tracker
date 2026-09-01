@@ -7995,8 +7995,8 @@ function renderAccountStatsPanel(profile) {
             <div class="account-stat-grid">
                 ${renderStatCard("BR Wins", br.stats.wins)}
                 ${renderStatCard("BR Kills", br.stats.kills)}
-                ${renderStatCard(tdmResolved.legacy ? "Legacy DM Wins" : "TDM Wins", tdm.stats.wins)}
-                ${renderStatCard(tdmResolved.legacy ? "Legacy DM Kills" : "TDM Kills", tdm.stats.kills)}
+                ${tdm.exists ? renderStatCard("TDM Wins", tdm.stats.wins) : ""}
+                ${tdm.exists ? renderStatCard("TDM Kills", tdm.stats.kills) : ""}
                 ${ffa.exists ? renderStatCard("FFA Wins", ffa.stats.wins) : ""}
                 ${ffa.exists ? renderStatCard("FFA Kills", ffa.stats.kills) : ""}
             </div>
@@ -9650,7 +9650,11 @@ function weeklyMissionMetric(profile, mission) {
 
 function weeklyModePlayer(profile, mode) {
     if (mode === "battleRoyale") return normalizePlayer(profile?.battleRoyale);
-    if (mode === "deathmatch") return normalizePlayer(profile?.deathmatch);
+    if (mode === "deathmatch") {
+        return normalizePlayer({
+            stats: combineStats(profile?.teamDeathmatch?.stats, profile?.freeForAll?.stats)
+        });
+    }
     return buildProfileOverall(profile);
 }
 
@@ -9667,12 +9671,16 @@ function weeklyAvailableCategories(profile, mode) {
 function weeklyWeaponEntries(profile, mode) {
     if (!profile) return [];
     if (mode === "battleRoyale") return cleanWeaponEntries(profile?.battleRoyale?.details?.weapons || []);
-    if (mode === "deathmatch") return cleanWeaponEntries(profile?.deathmatch?.details?.weapons || []);
+    if (mode === "deathmatch") return combinedWeapons(profile, ["teamDeathmatch", "freeForAll"]);
     return combinedWeapons(profile);
 }
 
 function weeklyMapEntries(profile) {
-    const entries = [...weeklyPlayerMapEntries(profile), ...cachedMaps("teamDeathmatch")];
+    const entries = [
+        ...weeklyPlayerMapEntries(profile),
+        ...cachedMaps("teamDeathmatch"),
+        ...cachedMaps("freeForAll")
+    ];
     const maps = new Map();
     for (const entry of entries) {
         const id = String(entry?.id || "").trim();
@@ -9687,7 +9695,7 @@ function weeklyMapEntries(profile) {
 }
 
 function weeklyPlayerMapEntries(profile) {
-    return Array.isArray(profile?.deathmatch?.details?.deathmatchMaps) ? profile.deathmatch.details.deathmatchMaps : [];
+    return [...profileModeMaps(profile, "teamDeathmatch"), ...profileModeMaps(profile, "freeForAll")];
 }
 
 function weeklyEligibleMaps(profile) {
@@ -9769,7 +9777,8 @@ function renderHome() {
     renderHomeLatestMatch();
     renderHomePlaytestPromo();
     renderFeaturedList("battleRoyale", document.getElementById("featured-battle-royale"));
-    renderFeaturedList("deathmatch", document.getElementById("featured-deathmatch"));
+    renderFeaturedList("teamDeathmatch", document.getElementById("featured-team-deathmatch"));
+    renderFeaturedList("freeForAll", document.getElementById("featured-free-for-all"));
     renderChampionControls();
     window.requestAnimationFrame(() => syncChampionScroll(false));
 }
@@ -16086,13 +16095,9 @@ function derivedFromStats(stats) {
     };
 }
 
-function combinedWeapons(profile) {
+function combinedWeapons(profile, modes = ["battleRoyale", "teamDeathmatch", "freeForAll"]) {
     const merged = new Map();
-    for (const entry of [
-        ...(profile.battleRoyale?.details?.weapons || []),
-        ...(profile.teamDeathmatch?.details?.weapons || []),
-        ...(profile.freeForAll?.details?.weapons || [])
-    ]) {
+    for (const entry of modes.flatMap((mode) => profile?.[mode]?.details?.weapons || [])) {
         const normalized = normalizeWeaponEntry(entry);
         if (!normalized) continue;
         const current = merged.get(normalized.id) || {
