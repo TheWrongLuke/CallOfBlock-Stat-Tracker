@@ -1096,7 +1096,12 @@ test("player profile sections filter TDM and FFA independently and paginate weap
         stats: { games: 2, wins: 1, kills: 24, deaths: 8, hits: 70, headshots: 20 },
         details: {
             weapons: Array.from({ length: 14 }, (_, index) => weapon(index + 1)),
-            maps: [{ id: "hijacked", label: "Hijacked", stats: { games: 2, wins: 1, kills: 24 } }]
+            maps: [
+                { id: "hijacked", label: "Hijacked", stats: { games: 2, wins: 1, kills: 24 } },
+                { id: "raid", label: "Raid", stats: { games: 3, wins: 2, kills: 18 } },
+                { id: "duel_a", label: "Arena A", stats: { games: 4, wins: 1, kills: 12 } },
+                { id: "duel_b", label: "Arena B", stats: { games: 1, wins: 1, kills: 8 } }
+            ]
         }
     };
     profile.freeForAll = {
@@ -1182,7 +1187,20 @@ test("player profile sections filter TDM and FFA independently and paginate weap
     await expect(page.locator(".profile-history-main")).toContainText("Team Deathmatch");
     await expect(page.locator(".profile-history-main")).not.toContainText("Free For All");
     await expect(page.locator(".profile-history-sidebar")).toContainText("Top Weapons");
-    await expect(page.locator(".profile-history-sidebar")).toContainText("Top Maps");
+    await expect(page.locator(".profile-history-sidebar .weapons li")).toHaveCount(3);
+    await expect(page.locator(".profile-history-sidebar .weapons .profile-summary-metric").first()).toContainText(
+        "Kills"
+    );
+    await expect(page.locator(".profile-history-sidebar .maps li")).toHaveCount(4);
+    await expect(page.locator(".profile-history-sidebar .maps .profile-summary-metric")).toHaveCount(4);
+    await expect(page.locator(".profile-history-sidebar .maps .profile-summary-metric").first()).toContainText("Win%");
+    const historyCalendarFit = await page
+        .locator(".profile-history-sidebar .activity-calendar-scroll")
+        .evaluate((element) => ({
+            clientWidth: element.clientWidth,
+            scrollWidth: element.scrollWidth
+        }));
+    expect(historyCalendarFit.scrollWidth).toBeLessThanOrEqual(historyCalendarFit.clientWidth + 1);
     const weaponButton = page.locator(".profile-history-sidebar .profile-summary-action");
     await expect(weaponButton).toBeVisible();
     const weaponButtonStyle = await weaponButton.evaluate((element) => ({

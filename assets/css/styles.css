@@ -11483,7 +11483,7 @@ body.cosmetic-picker-open {
 
 .profile-history-workspace {
     display: grid;
-    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+    grid-template-columns: minmax(280px, 310px) minmax(0, 1fr);
     gap: 16px;
     align-items: start;
 }
@@ -11503,6 +11503,11 @@ body.cosmetic-picker-open {
     width: 100%;
     aspect-ratio: 1;
     align-content: start;
+}
+
+.profile-history-sidebar.has-activity > .activity-calendar .activity-calendar-scroll {
+    overflow-x: hidden;
+    padding-bottom: 0;
 }
 
 .profile-summary-action {
@@ -11558,7 +11563,7 @@ body.cosmetic-picker-open {
     background: rgba(255, 255, 255, 0.025);
 }
 
-.profile-history-sidebar li span {
+.profile-history-sidebar li > span {
     position: relative;
     z-index: 1;
     min-width: 0;
@@ -11568,12 +11573,24 @@ body.cosmetic-picker-open {
     font-weight: 700;
 }
 
-.profile-history-sidebar li strong {
+.profile-summary-metric {
     position: relative;
     z-index: 1;
     grid-row: 1 / span 2;
     grid-column: 2;
+    display: grid;
+    gap: 4px;
     align-self: center;
+    justify-items: end;
+}
+
+.profile-summary-metric span {
+    color: var(--muted);
+    font: 700 0.58rem/1 "Chakra Petch", sans-serif;
+    text-transform: uppercase;
+}
+
+.profile-summary-metric strong {
     color: var(--gold);
     font: 700 1.05rem/1 "Chakra Petch", sans-serif;
 }

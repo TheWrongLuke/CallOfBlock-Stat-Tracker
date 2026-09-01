@@ -14983,7 +14983,7 @@ function renderHistoryTab(profile, mode) {
     const matches = filteredHistory(profile, mode);
     const sidebarMode = mode === "overall" ? "overall" : mode;
     const topWeapons = profileModeWeapons(profile, sidebarMode).slice(0, 3);
-    const topMaps = profileModeMaps(profile, sidebarMode).slice(0, 3);
+    const maps = profileModeMaps(profile, sidebarMode);
     return `
         <section class="detail-section">
             <div class="history-heading">
@@ -14992,10 +14992,10 @@ function renderHistoryTab(profile, mode) {
             </div>
             <div class="profile-history-workspace">
                 <aside class="profile-history-sidebar has-activity" aria-label="Mode summary">
-                    ${renderActivityCalendar(matches, { compact: true })}
+                    ${renderActivityCalendar(matches)}
                     ${renderHistorySidebarList("Top Weapons", topWeapons, "weapons")}
                     <button class="profile-summary-action" type="button" data-profile-tab-target="weapons" data-profile-mode-target="${escapeHtml(mode === "overall" ? "battleRoyale" : mode)}">View all weapons</button>
-                    ${renderHistorySidebarList("Top Maps", topMaps, "maps")}
+                    ${renderHistorySidebarList("Maps", maps, "maps")}
                 </aside>
                 <div class="profile-history-main">
                     ${renderHistoryList(matches, {
@@ -15026,7 +15026,7 @@ function renderHistorySidebarEntry(entry, type) {
         return `
             <li class="profile-map-summary"${background}>
                 <span>${escapeHtml(entry?.label || entry?.id || "Unknown map")}</span>
-                <strong>${escapeHtml(formatPercent(derived.winRate))}</strong>
+                <div class="profile-summary-metric"><span>Win%</span><strong>${escapeHtml(formatPercent(derived.winRate))}</strong></div>
                 <small>${stats.wins}W - ${Math.max(0, stats.games - stats.wins)}L</small>
             </li>
         `;
@@ -15034,7 +15034,7 @@ function renderHistorySidebarEntry(entry, type) {
     return `
         <li class="profile-weapon-summary">
             <span>${escapeHtml(entry?.label || entry?.id || "Unknown weapon")}</span>
-            <strong>${stats.kills}</strong>
+            <div class="profile-summary-metric"><span>Kills</span><strong>${stats.kills}</strong></div>
             <small>${escapeHtml(formatPercent(derived.headshotRate))} HS - ${stats.hits} hits</small>
         </li>
     `;
