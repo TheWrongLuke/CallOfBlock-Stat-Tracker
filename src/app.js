@@ -550,6 +550,7 @@ const state = {
         ready: true,
         saving: false,
         playtestEmail: false,
+        ticketResponseEmail: false,
         adminTicketEmail: false,
         adminAccountCreatedEmail: false,
         message: ""
@@ -3241,6 +3242,7 @@ function resetNotificationPreferences() {
         ready: true,
         saving: false,
         playtestEmail: false,
+        ticketResponseEmail: false,
         adminTicketEmail: false,
         adminAccountCreatedEmail: false,
         message: ""
@@ -3256,6 +3258,7 @@ async function loadOwnNotificationPreferences({ force = false } = {}) {
         if (result.error) throw result.error;
         const row = result.data || {};
         preferences.playtestEmail = Boolean(row.playtest_email);
+        preferences.ticketResponseEmail = Boolean(row.ticket_response_email);
         preferences.adminTicketEmail = Boolean(row.admin_ticket_email);
         preferences.adminAccountCreatedEmail = Boolean(row.admin_account_created_email);
         preferences.ready = true;
@@ -8091,7 +8094,11 @@ function renderAccountEmailPreferences(account) {
                     : `
                 <label class="account-toggle-row">
                     <input type="checkbox" name="playtestEmail" ${preferences.playtestEmail ? "checked" : ""}>
-                    <span><strong>Playtests</strong><small>New schedules and confirmed playtest times.</small></span>
+                    <span><strong>Playtests</strong><small>Confirmed playtest times.</small></span>
+                </label>
+                <label class="account-toggle-row">
+                    <input type="checkbox" name="ticketResponseEmail" ${preferences.ticketResponseEmail ? "checked" : ""}>
+                    <span><strong>Ticket replies</strong><small>Staff responses to support tickets you created.</small></span>
                 </label>
                 ${
                     admin
@@ -13492,12 +13499,14 @@ async function submitNotificationPreferences(form) {
     try {
         const result = await saveNotificationPreferences(state.authClient, {
             playtestEmail: Boolean(form.elements.playtestEmail?.checked),
+            ticketResponseEmail: Boolean(form.elements.ticketResponseEmail?.checked),
             adminTicketEmail: Boolean(form.elements.adminTicketEmail?.checked),
             adminAccountCreatedEmail: Boolean(form.elements.adminAccountCreatedEmail?.checked)
         });
         if (result.error) throw result.error;
         const row = result.data || {};
         preferences.playtestEmail = Boolean(row.playtest_email);
+        preferences.ticketResponseEmail = Boolean(row.ticket_response_email);
         preferences.adminTicketEmail = Boolean(row.admin_ticket_email);
         preferences.adminAccountCreatedEmail = Boolean(row.admin_account_created_email);
         preferences.message = "Email preferences saved.";

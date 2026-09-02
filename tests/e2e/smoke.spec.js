@@ -117,6 +117,12 @@ const adminSupabaseStub = `
         banned_by_username: null,
         created_at: "2026-07-02T12:00:00Z"
     };
+    const emailPreferences = {
+        playtest_email: false,
+        ticket_response_email: false,
+        admin_ticket_email: false,
+        admin_account_created_email: false
+    };
     function currentCycleKey() {
         const start = new Date();
         start.setHours(0, 0, 0, 0);
@@ -266,6 +272,20 @@ const adminSupabaseStub = `
                     }
                 },
                 rpc: async (name, args = {}) => {
+                    if (name === "get_my_notification_preferences") {
+                        return { data: { ...emailPreferences }, error: null };
+                    }
+                    if (name === "save_my_notification_preferences") {
+                        Object.assign(emailPreferences, {
+                            playtest_email: Boolean(args.p_playtest_email),
+                            ticket_response_email: Boolean(args.p_ticket_response_email),
+                            admin_ticket_email: Boolean((profile.is_admin || profile.is_owner) && args.p_admin_ticket_email),
+                            admin_account_created_email: Boolean(
+                                (profile.is_admin || profile.is_owner) && args.p_admin_account_created_email
+                            )
+                        });
+                        return { data: { ...emailPreferences }, error: null };
+                    }
                     if (name === "sync_discord_profile_v2" && window.__profileSyncDelayMs) {
                         await new Promise((resolve) => setTimeout(resolve, window.__profileSyncDelayMs));
                     }
@@ -315,7 +335,7 @@ const memberSupabaseStub = adminSupabaseStub
     .replace("is_owner: true", "is_owner: false");
 
 const giftSupabaseStub = adminSupabaseStub.replace(
-    'rpc: async (name, args = {}) => {\n                    if (name === "sync_discord_profile_v2"',
+    'rpc: async (name, args = {}) => {\n                    if (name === "get_my_notification_preferences"',
     `rpc: async (name, args = {}) => {
                     window.__giftNotification = window.__giftNotification || {
                         id: "323e4567-e89b-42d3-a456-426614174222",
@@ -349,7 +369,7 @@ const giftSupabaseStub = adminSupabaseStub.replace(
                         gift.deleted = true;
                         return { data: true, error: null };
                     }
-                    if (name === "sync_discord_profile_v2"`
+                    if (name === "get_my_notification_preferences"`
 );
 
 const delayedAdminSupabaseStub = `window.__profileSyncDelayMs = 1200;\n${adminSupabaseStub}`
@@ -1714,6 +1734,24 @@ test("account privacy controls require DELETE and invoke the server-side deletio
         ]);
     await expect(page).toHaveURL(/\/stats\/$/);
     await expect(page.locator("[data-account-delete-form]")).toHaveCount(0);
+});
+
+test("email preference categories expose admin alerts only to administrators", async ({ page }) => {
+    await openMemberApp(page, "#account");
+    const memberPreferences = page.locator("[data-notification-preferences-form]");
+    await expect(memberPreferences.locator('input[name="playtestEmail"]')).toHaveCount(1);
+    await expect(memberPreferences.locator('input[name="ticketResponseEmail"]')).toHaveCount(1);
+    await expect(memberPreferences.locator('input[name="adminTicketEmail"]')).toHaveCount(0);
+    await expect(memberPreferences.locator('input[name="adminAccountCreatedEmail"]')).toHaveCount(0);
+});
+
+test("administrator email preferences include private operational alerts", async ({ page }) => {
+    await openAdminApp(page, "#account");
+    const adminPreferences = page.locator("[data-notification-preferences-form]");
+    await expect(adminPreferences.locator('input[name="playtestEmail"]')).toHaveCount(1);
+    await expect(adminPreferences.locator('input[name="ticketResponseEmail"]')).toHaveCount(1);
+    await expect(adminPreferences.locator('input[name="adminTicketEmail"]')).toHaveCount(1);
+    await expect(adminPreferences.locator('input[name="adminAccountCreatedEmail"]')).toHaveCount(1);
 });
 
 test("personal cosmetics remember the Show unowned preference after reload", async ({ page }) => {

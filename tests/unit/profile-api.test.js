@@ -52,6 +52,7 @@ describe("profile API", () => {
             { rpc },
             {
                 playtestEmail: true,
+                ticketResponseEmail: true,
                 adminTicketEmail: false,
                 adminAccountCreatedEmail: true
             }
@@ -60,6 +61,7 @@ describe("profile API", () => {
         expect(rpc).toHaveBeenNthCalledWith(1, "get_my_notification_preferences");
         expect(rpc).toHaveBeenNthCalledWith(2, "save_my_notification_preferences", {
             p_playtest_email: true,
+            p_ticket_response_email: true,
             p_admin_ticket_email: false,
             p_admin_account_created_email: true
         });

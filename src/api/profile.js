@@ -31,6 +31,7 @@ export async function saveNotificationPreferences(client, preferences) {
     if (!client?.rpc) return { data: null, error: new Error("A Supabase client is required.") };
     const result = await client.rpc("save_my_notification_preferences", {
         p_playtest_email: Boolean(preferences.playtestEmail),
+        p_ticket_response_email: Boolean(preferences.ticketResponseEmail),
         p_admin_ticket_email: Boolean(preferences.adminTicketEmail),
         p_admin_account_created_email: Boolean(preferences.adminAccountCreatedEmail)
     });
