@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { transform } from "lightningcss";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDirectory, "..");
@@ -16,7 +17,7 @@ if (path.dirname(output) !== root || path.basename(output) !== "dist") {
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
-const publicFiles = ["robots.txt", "sitemap.xml", "site.webmanifest"];
+const publicFiles = ["robots.txt", "sitemap.xml", "site.webmanifest", "llms.txt"];
 const directories = ["assets", "data", "src"];
 
 for (const file of publicFiles) {
@@ -25,6 +26,14 @@ for (const file of publicFiles) {
 for (const directory of directories) {
     await cp(path.join(root, directory), path.join(output, directory), { recursive: true });
 }
+
+const stylesheetPath = path.join(root, "assets", "css", "styles.css");
+const stylesheet = transform({
+    filename: stylesheetPath,
+    code: await readFile(stylesheetPath),
+    minify: true
+});
+await writeFile(path.join(output, "assets", "css", "styles.min.css"), stylesheet.code);
 
 const sourceHtml = await readFile(path.join(root, "index.html"), "utf8");
 const socialImageUrl = new URL(config.socialImage, publicSiteUrl).toString();
@@ -113,6 +122,16 @@ function renderPublicPage(html, { id, page, canonicalUrl, socialImageUrl, public
         .replace(
             /<body class="[^"]*" data-public-route="[^"]*">/i,
             `<body class="${id === "home" ? "home-route" : ""}" data-public-route="${id}">`
+        )
+        .replace(
+            "<!-- HOME_PRELOADS -->",
+            id === "home"
+                ? '<link rel="preload" as="image" href="/assets/home-hero-bg-1280.webp" media="(min-width: 901px)" fetchpriority="high">\n    <link rel="preload" as="image" href="/assets/home-hero-bg-768.webp" media="(max-width: 900px)" fetchpriority="high">'
+                : ""
+        )
+        .replace(
+            /<link rel="stylesheet" href="\/assets\/css\/styles\.css\?v=[^"]*">/i,
+            '<link rel="stylesheet" href="/assets/css/styles.min.css?v=performance-audit-1">'
         )
         .replace("<!-- PUBLIC_PAGE_INTRO -->", "")
         .replace(
@@ -208,10 +227,29 @@ function pageStructuredData(id, page, canonicalUrl, publicSiteUrl) {
     if (id === "home") {
         return {
             "@context": "https://schema.org",
-            "@type": "WebSite",
-            name: "Call of Block",
-            alternateName: ["Call of Block 2", "CallOfBlock", "COB"],
-            url: publicSiteUrl
+            "@graph": [
+                {
+                    "@type": "WebSite",
+                    "@id": `${publicSiteUrl}#website`,
+                    name: "Call of Block",
+                    alternateName: ["Call of Block 2", "CallOfBlock", "COB"],
+                    url: publicSiteUrl,
+                    publisher: { "@id": `${publicSiteUrl}#organization` }
+                },
+                {
+                    "@type": "Organization",
+                    "@id": `${publicSiteUrl}#organization`,
+                    name: "Call of Block",
+                    url: publicSiteUrl,
+                    logo: new URL("assets/branding/icon-512.webp", publicSiteUrl).toString(),
+                    sameAs: [
+                        "https://www.curseforge.com/minecraft/modpacks/call-of-block",
+                        "https://modrinth.com/modpack/call-of-block",
+                        "https://github.com/TheWrongLuke/CallOfBlock-Stat-Tracker",
+                        "https://www.youtube.com/@thewrongluke"
+                    ]
+                }
+            ]
         };
     }
     return {

@@ -334,6 +334,11 @@ const memberSupabaseStub = adminSupabaseStub
     .replace("is_admin: true", "is_admin: false")
     .replace("is_owner: true", "is_owner: false");
 
+const accountStatsSupabaseStub = adminSupabaseStub.replace(
+    'minecraft_player_name: "AdminMC",',
+    'minecraft_player_name: "RTXLuke",\n        minecraft_player_id: "sample-rtxluke",'
+);
+
 const giftSupabaseStub = adminSupabaseStub.replace(
     'rpc: async (name, args = {}) => {\n                    if (name === "get_my_notification_preferences"',
     `rpc: async (name, args = {}) => {
@@ -828,6 +833,27 @@ test("statistics payloads follow the active route instead of loading the full ex
     await expect.poll(() => requestedRows.some((row) => row?.startsWith("eq.profile:"))).toBe(true);
 });
 
+test("private account statistics load the linked player slice", async ({ page }) => {
+    const requestedRows = [];
+    const fullPayload = structuredClone(statsExportFixture);
+    const homePayload = structuredClone(statsExportFixture);
+    const linkedHomeProfile = homePayload.profiles.find((profile) => profile.playerId === "sample-rtxluke");
+    linkedHomeProfile.battleRoyale.stats.wins = 0;
+    linkedHomeProfile.battleRoyale.stats.kills = 0;
+
+    await installPageStubs(page, accountStatsSupabaseStub, (requestedRow) => {
+        requestedRows.push(requestedRow);
+        return requestedRow === "eq.profile:sample-rtxluke" ? fullPayload : homePayload;
+    });
+    await page.goto("/stats/#account");
+
+    const wins = page.locator(".account-stat-grid .detail-stat", { hasText: "BR Wins" });
+    const kills = page.locator(".account-stat-grid .detail-stat", { hasText: "BR Kills" });
+    await expect(wins.locator("strong")).toHaveText("5");
+    await expect(kills.locator("strong")).toHaveText("33");
+    expect(requestedRows).toContain("eq.profile:sample-rtxluke");
+});
+
 test("existing public hash routes still open", async ({ page }) => {
     await openApp(page, "#playtests");
     await expect(page.locator("#playtests-view")).toBeVisible();
@@ -931,10 +957,11 @@ test("canonical public pages load directly with unique indexable metadata", asyn
         await expect(page.locator("#public-page-title")).toHaveCount(0);
         const structuredData = JSON.parse(await page.locator("#page-structured-data").textContent());
         if (entry.route === "home") {
-            expect(structuredData).toMatchObject({ "@type": "WebSite", name: "Call of Block" });
-            expect(structuredData.alternateName).toEqual(
-                expect.arrayContaining(["Call of Block 2", "CallOfBlock", "COB"])
-            );
+            const website = structuredData["@graph"].find((item) => item["@type"] === "WebSite");
+            const organization = structuredData["@graph"].find((item) => item["@type"] === "Organization");
+            expect(website).toMatchObject({ name: "Call of Block", url: "https://callofblock.com/" });
+            expect(website.alternateName).toEqual(expect.arrayContaining(["Call of Block 2", "CallOfBlock", "COB"]));
+            expect(organization).toMatchObject({ name: "Call of Block", url: "https://callofblock.com/" });
         } else {
             expect(structuredData["@graph"].some((item) => item["@type"] === "BreadcrumbList")).toBe(true);
         }
@@ -979,7 +1006,7 @@ test("public entry points share styling without loading unrelated tracker code",
         const stylesheets = await page
             .locator("link[rel='stylesheet']")
             .evaluateAll((links) => links.map((link) => new URL(link.href).pathname));
-        expect(stylesheets).toEqual(["/assets/css/styles.css"]);
+        expect(stylesheets).toEqual(["/assets/css/styles.min.css"]);
     }
 
     await page.goto("/stats/");

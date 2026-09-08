@@ -2848,8 +2848,18 @@ function desiredStatsSliceId() {
         const heavyTab = ["weapons", "maps", "history"].includes(requestedTab) ? `:${requestedTab}` : "";
         return `profile:${state.selectedId}${heavyTab}`;
     }
+    if (state.view === "account") {
+        const playerId = accountStatsPlayerId();
+        if (playerId) return `profile:${playerId}`;
+    }
     if (state.view === "match") return state.supabaseRowId;
     return "home";
+}
+
+function accountStatsPlayerId() {
+    const linkedId = String(state.authProfile?.minecraft_player_id || "").trim();
+    if (linkedId) return canonicalPlayerId(linkedId);
+    return canonicalPlayerId(linkedStatsProfile()?.playerId || "");
 }
 
 function statsSliceSatisfied(sliceId) {

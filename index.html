@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <base href="/">
     <title>Call of Block | Competitive Minecraft PvP &amp; Battle Royale</title>
-    <meta name="description" content="Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Team Deathmatch, Free For All, Duels, Zombie Survival, guns, vehicles, destruction, parkour, player statistics and tactical match replays.">
+    <meta name="description" content="Call of Block is a competitive Minecraft PvP shooter with guns, Battle Royale, Deathmatch, Duels, Zombie Survival, vehicles, parkour and tactical replays.">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="application-name" content="Call of Block">
     <meta name="theme-color" content="#090d10">
@@ -14,32 +14,42 @@
     <meta property="og:locale" content="en_US">
     <meta property="og:site_name" content="Call of Block">
     <meta property="og:title" content="Call of Block | Competitive Minecraft PvP &amp; Battle Royale">
-    <meta property="og:description" content="Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Team Deathmatch, Free For All, Duels, Zombie Survival, guns, vehicles, destruction, parkour, player statistics and tactical match replays.">
+    <meta property="og:description" content="Call of Block is a competitive Minecraft PvP shooter with guns, Battle Royale, Deathmatch, Duels, Zombie Survival, vehicles, parkour and tactical replays.">
     <meta property="og:url" content="https://callofblock.com/">
-    <meta property="og:image" content="https://callofblock.com/assets/home-hero-bg.png">
+    <meta property="og:image" content="https://callofblock.com/assets/home-social.jpg">
     <meta property="og:image:alt" content="Call of Block Minecraft Battle Royale">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Call of Block | Competitive Minecraft PvP &amp; Battle Royale">
-    <meta name="twitter:description" content="Call of Block is a competitive Minecraft PvP shooter featuring Battle Royale, Team Deathmatch, Free For All, Duels, Zombie Survival, guns, vehicles, destruction, parkour, player statistics and tactical match replays.">
+    <meta name="twitter:description" content="Call of Block is a competitive Minecraft PvP shooter with guns, Battle Royale, Deathmatch, Duels, Zombie Survival, vehicles, parkour and tactical replays.">
     <meta name="twitter:url" content="https://callofblock.com/">
-    <meta name="twitter:image" content="https://callofblock.com/assets/home-hero-bg.png">
+    <meta name="twitter:image" content="https://callofblock.com/assets/home-social.jpg">
     <meta name="twitter:image:alt" content="Call of Block Minecraft Battle Royale">
     <script id="page-structured-data" type="application/ld+json">
     {
         "@context": "https://schema.org",
-        "@type": "WebSite",
-        "name": "Call of Block",
-        "alternateName": [
-            "Call of Block 2",
-            "CallOfBlock",
-            "COB"
-        ],
-        "url": "https://callofblock.com/"
+        "@graph": [
+            {
+                "@type": "WebSite",
+                "@id": "https://callofblock.com/#website",
+                "name": "Call of Block",
+                "alternateName": ["Call of Block 2", "CallOfBlock", "COB"],
+                "url": "https://callofblock.com/",
+                "publisher": { "@id": "https://callofblock.com/#organization" }
+            },
+            {
+                "@type": "Organization",
+                "@id": "https://callofblock.com/#organization",
+                "name": "Call of Block",
+                "url": "https://callofblock.com/",
+                "logo": "https://callofblock.com/assets/branding/icon-512.webp"
+            }
+        ]
     }
     </script>
     <link rel="icon" type="image/webp" href="/assets/branding/icon-256.webp">
     <link rel="apple-touch-icon" href="/assets/branding/apple-touch-icon.png">
     <link rel="manifest" href="/site.webmanifest">
+    <!-- HOME_PRELOADS -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
@@ -229,7 +239,7 @@
             </div>
             <figure class="br-map-figure">
                 <a class="br-map-image-link" href="./assets/shmar-vehicle-spawn-map.webp" target="_blank" rel="noopener noreferrer" aria-label="Open the full-size Shmar vehicle spawn map in a new tab">
-                    <img src="./assets/shmar-vehicle-spawn-map.webp" width="1268" height="1241" loading="lazy" decoding="async" alt="Top-down map of Shmar with thirteen possible ground vehicle or tank spawn points marked G1 to G13 and seven possible helicopter spawn points marked H1 to H7.">
+                    <img src="./assets/shmar-vehicle-spawn-map-640.webp" srcset="./assets/shmar-vehicle-spawn-map-640.webp 640w, ./assets/shmar-vehicle-spawn-map-960.webp 960w, ./assets/shmar-vehicle-spawn-map.webp 1268w" sizes="(max-width: 1120px) calc(100vw - 40px), 52vw" width="1268" height="1241" loading="lazy" decoding="async" alt="Top-down map of Shmar with thirteen possible ground vehicle or tank spawn points marked G1 to G13 and seven possible helicopter spawn points marked H1 to H7.">
                 </a>
                 <figcaption><span>Possible vehicle spawns across Shmar</span><a href="./assets/shmar-vehicle-spawn-map.webp" target="_blank" rel="noopener noreferrer">Open full map</a></figcaption>
             </figure>
@@ -740,7 +750,7 @@
                 </nav>
             </div>
             <div class="footer-bottom">
-                <p>&copy; 2026 Lukas / TheWrongLuke. Call of Block 2 is an independently developed Minecraft project. It is not affiliated with Mojang Studios, Microsoft, Activision or Call of Duty.</p>
+                <p>&copy; 2026 Lukas / TheWrongLuke. Call of Block is an independently developed Minecraft project. It is not affiliated with Mojang Studios, Microsoft, Activision or Call of Duty.</p>
             </div>
         </div>
     </footer>

@@ -1,0 +1,21 @@
+# Call of Block
+
+Call of Block is an independent competitive Minecraft PvP shooter and multiplayer server project. The official website is https://callofblock.com/.
+
+## Public pages
+
+- Home and server overview: https://callofblock.com/
+- Player statistics and leaderboards: https://callofblock.com/stats/
+- Community playtests: https://callofblock.com/playtests/
+- Feedback and support: https://callofblock.com/feedback/
+- Player help: https://callofblock.com/help/
+- Project information: https://callofblock.com/about/
+
+## Official project links
+
+- CurseForge modpack: https://www.curseforge.com/minecraft/modpacks/call-of-block
+- Modrinth modpack: https://modrinth.com/modpack/call-of-block
+- Website source: https://github.com/TheWrongLuke/CallOfBlock-Stat-Tracker
+- YouTube: https://www.youtube.com/@thewrongluke
+
+Public player statistics are exported by the Call of Block Minecraft server. Account, notification and support-ticket information is private and requires authentication.

@@ -255,7 +255,7 @@ function renderAvatarImage(url, name, loading = "lazy") {
     const initials = String(name || "COB")
         .slice(0, 2)
         .toUpperCase();
-    return `<span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials)}</span><img class="avatar-image" src="${escapeHtml(url)}" alt="" loading="${loading}" decoding="async" referrerpolicy="no-referrer">`;
+    return `<span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials)}</span><img class="avatar-image" src="${escapeHtml(url)}" alt="${escapeHtml(`${name} profile avatar`)}" loading="${loading}" decoding="async" referrerpolicy="no-referrer">`;
 }
 
 function startChampionCarousel() {
