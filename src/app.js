@@ -1,4 +1,6 @@
 import { createFeedbackApi } from "./api/feedback.js";
+import { weeklyMissionProgress } from "./core/weekly-mission-progress.js";
+import { findStatsProfile, mergeStatsProfile } from "./core/mission-profile.js";
 import { createNotificationApi } from "./api/notifications.js";
 import {
     deleteOwnAccount,
@@ -8689,6 +8691,12 @@ function replaceClassPrefix(element, prefix, nextClass) {
 
 function renderWeeklyMissions(profile) {
     const missionState = state.weeklyMissions;
+    profile = missionState.statsProfile || null;
+    if (missionState.row && !profile) {
+        return `<section class="profile-drawer-missions"><p class="mode-empty">${escapeHtml(missionState.loading
+            ? "Loading mission statistics..."
+            : "Mission statistics are unavailable. Link Minecraft or reopen the panel to retry.")}</p></section>`;
+    }
     if (missionState.loading && !missionState.row) {
         return `
             <section class="profile-drawer-missions">
@@ -8732,8 +8740,8 @@ function renderWeeklyMissions(profile) {
                 <strong>${completed} / ${missions.length}</strong>
             </div>
             <div class="weekly-mission-summary">
-                <span><b>4</b> easy</span>
-                <span><b>3</b> hard</span>
+                <span><b>${missions.filter((mission) => mission.difficulty === "easy").length}</b> easy</span>
+                <span><b>${missions.filter((mission) => mission.difficulty === "hard").length}</b> hard</span>
                 <span><b>${formatNumber(missions.reduce((sum, mission) => sum + number(mission.xp), 0))}</b> XP available</span>
             </div>
             ${profile ? "" : `<p class="weekly-mission-link-note">Link Minecraft to begin tracking mission progress. Your mission baselines will be set when the account is linked.</p>`}
@@ -8811,6 +8819,7 @@ async function syncWeeklyMissions() {
     }
 
     await loadWeeklyMissionTemplates();
+    if (state.weeklyMissions !== missionState || state.authProfile?.id !== account.id) return;
     if (missionState.syncing) return;
 
     const cycle = weeklyMissionCycle();
@@ -8825,8 +8834,21 @@ async function syncWeeklyMissions() {
     renderAccountMissionViews();
 
     try {
+        const playerId = accountStatsPlayerId();
+        if (playerId && (missionState.statsPlayerId !== playerId || !missionState.statsProfile
+            || Date.now() - (missionState.statsLoadedAt || 0) >= 30_000)) {
+            const results = await Promise.all(["", ":weapons", ":maps"].map(async (suffix) => {
+                const result = await fetchSupabaseExport({ rowId: `profile:${playerId}${suffix}` });
+                return findStatsProfile(result.payload, playerId);
+            }));
+            if (state.weeklyMissions !== missionState || state.authProfile?.id !== account.id) return;
+            missionState.statsProfile = results.every(Boolean) ? mergeStatsProfile(...results) : null;
+            missionState.statsPlayerId = playerId;
+            missionState.statsLoadedAt = Date.now();
+        }
         let row = missionState.row?.cycle_key === cycle.key ? missionState.row : null;
         if (!row || (row.awaiting_link && profile)) row = await loadRemoteWeeklyMissionRow(account, profile, cycle);
+        if (state.weeklyMissions !== missionState || state.authProfile?.id !== account.id) return;
         missionState.row = normalizeWeeklyMissionRow(row);
         missionState.source = "supabase";
         missionState.message = "";
@@ -8924,7 +8946,8 @@ function renewWeeklyMissions(previousRow, freshMissions, profile, cycle) {
 
 async function claimWeeklyMission(missionId) {
     const missionState = state.weeklyMissions;
-    const profile = linkedStatsProfile();
+    const accountId = state.authProfile?.id;
+    const profile = missionState.statsProfile;
     if (
         !missionId ||
         isCurrentAccountCommunityBanned() ||
@@ -8942,6 +8965,7 @@ async function claimWeeklyMission(missionId) {
     renderAccountMissionViews();
     try {
         const { data, error } = await claimWeeklyMissionReward(state.authClient, mission.id);
+        if (state.weeklyMissions !== missionState || state.authProfile?.id !== accountId) return;
         if (error) throw error;
         missionState.row.claimed_ids = arrayField(data?.claimed_ids || [...claimedIds, mission.id]);
         applyAccountXp(number(data?.xp));
@@ -9505,67 +9529,6 @@ function weeklyStatSupported(profile, mode, metric) {
     return Object.hasOwn(stats, metric);
 }
 
-function weeklyMissionProgress(profile, mission) {
-    const requirement = normalizeWeeklyRequirements(mission?.requirements);
-    if (requirement.type === "all") {
-        const baselineValues = Array.isArray(mission?.baseline?.values) ? mission.baseline.values : [];
-        const parts = requirement.components.map((component, index) => {
-            const current = weeklyMissionMetric(profile, { ...mission, ...component, requirements: { type: "stat" } });
-            const value = Math.max(0, current - number(baselineValues[index]));
-            return {
-                ...component,
-                value,
-                complete: value >= component.target
-            };
-        });
-        const complete = parts.length > 0 && parts.every((part) => part.complete);
-        const status = parts
-            .map((part) => {
-                const formatter = part.metric === "playtimeSeconds" ? formatDuration : formatNumber;
-                return `${weeklyModeShortLabel(part.mode)} ${formatter(part.value)} / ${formatter(part.target)}`;
-            })
-            .join(" | ");
-        return {
-            value: parts.reduce((sum, part) => sum + part.value, 0),
-            target: parts.reduce((sum, part) => sum + part.target, 0),
-            complete,
-            progress: parts.length
-                ? parts.reduce((sum, part) => sum + Math.min(1, part.value / part.target), 0) / parts.length
-                : 0,
-            status
-        };
-    }
-    if (requirement.type === "distinct") {
-        const baselineValues =
-            mission?.baseline?.values && typeof mission.baseline.values === "object" ? mission.baseline.values : {};
-        const currentValues = weeklyDistinctMissionValues(profile, mission, requirement);
-        const value = Object.entries(currentValues).filter(
-            ([id, current]) => Math.max(0, number(current) - number(baselineValues[id])) >= requirement.perItemTarget
-        ).length;
-        const target = Math.max(1, number(mission.target));
-        const complete = value >= target;
-        return {
-            value,
-            target,
-            complete,
-            progress: value / target,
-            status: `${formatNumber(value)} / ${formatNumber(target)}`
-        };
-    }
-
-    const current = weeklyMissionRequirementValue(profile, mission, requirement);
-    const value = Math.max(0, current - number(mission.baseline));
-    const target = Math.max(1, number(mission.target));
-    const complete = value >= target;
-    const formatter = mission.metric === "playtimeSeconds" ? formatDuration : formatNumber;
-    return {
-        value,
-        target,
-        complete,
-        progress: value / target,
-        status: complete ? "Complete" : `${formatter(value)} / ${formatter(target)}`
-    };
-}
 
 function weeklyMissionBaseline(profile, mission) {
     const requirement = normalizeWeeklyRequirements(mission?.requirements);
@@ -9644,12 +9607,6 @@ function weeklyCounterKey(key, mission) {
         .join(mission?.weaponId || "")
         .split("{map}")
         .join(mission?.mapId || "");
-}
-
-function weeklyModeShortLabel(mode) {
-    if (mode === "battleRoyale") return "BR";
-    if (mode === "deathmatch") return "DM";
-    return "All";
 }
 
 function weeklyMissionMetric(profile, mission) {

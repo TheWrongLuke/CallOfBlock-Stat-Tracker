@@ -69,6 +69,7 @@ async function initializeSiteShellOnce() {
         },
         setProfile(profile) {
             shell.profile = profile || null;
+            window.dispatchEvent(new CustomEvent("cob:account-profile-updated"));
             renderAccountWidget(shell);
             if (!shell.session?.user) drawer.close();
             else drawer.refresh("profile");
@@ -274,7 +275,7 @@ async function initializeAuth(shell) {
             }
             shell.session = session || null;
             if (!shell.session?.user) {
-                shell.profile = null;
+                shell.setProfile(null);
                 shell.accountExperienceUserId = "";
                 shell.accountExperiencePromise = null;
                 shell.drawer.close();
@@ -308,7 +309,9 @@ async function initializeAuthenticatedAccountOnce(shell, userId) {
         const result = await syncDiscordProfile(shell.client);
         if (result.error) throw result.error;
         if (String(shell.session?.user?.id || "") !== userId) return;
-        shell.setProfile(await resolveShellProfile(shell.client, result.data));
+        const profile = await resolveShellProfile(shell.client, result.data);
+        if (String(shell.session?.user?.id || "") !== userId) return;
+        shell.setProfile(profile);
     } catch (error) {
         console.warn("Could not load the shared account profile", error);
     }

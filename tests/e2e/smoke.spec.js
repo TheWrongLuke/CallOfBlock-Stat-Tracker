@@ -854,6 +854,163 @@ test("private account statistics load the linked player slice", async ({ page })
     expect(requestedRows).toContain("eq.profile:sample-rtxluke");
 });
 
+for (const route of ["/", "/stats/", "/playtests/", "/feedback/", "/help/", "/about/"]) {
+    test(`weekly mission progress is consistent on ${route}`, async ({ page }, testInfo) => {
+        const missions = [
+            {
+                id: "br-progress",
+                label: "BR progress",
+                mode: "battleRoyale",
+                metric: "kills",
+                baseline: 10,
+                target: 100
+            },
+            {
+                id: "weapon-progress",
+                label: "Weapon progress",
+                mode: "deathmatch",
+                metric: "kills",
+                weaponId: "scar_l",
+                baseline: 1,
+                target: 10
+            },
+            {
+                id: "map-progress",
+                label: "Map progress",
+                mode: "deathmatch",
+                mapId: "raid",
+                baseline: 0,
+                target: 10,
+                requirements: { type: "map_stat", metric: "wins" }
+            }
+        ].map((mission) => ({
+            difficulty: "easy",
+            xp: 100,
+            description: "Test mission",
+            requirements: { type: "stat" },
+            ...mission
+        }));
+        const stub = accountStatsSupabaseStub.replace(
+            "const badgeOverrides = [];",
+            `missionRow.missions = ${JSON.stringify(missions)}; const badgeOverrides = [];`
+        );
+        await installPageStubs(page, stub, (row) => {
+            const payload = structuredClone(statsExportFixture);
+            const profile = payload.profiles.find((entry) => entry.playerId === "sample-rtxluke");
+            profile.battleRoyale.stats.kills = row?.startsWith("eq.profile:") ? 33 : 0;
+            for (const [mode, kills, wins] of [
+                ["teamDeathmatch", 4, 2],
+                ["freeForAll", 2, 1]
+            ]) {
+                profile[mode] = {
+                    stats: { kills: 99 },
+                    details: {
+                        weapons: row?.endsWith(":weapons") ? [{ id: "scar_l", stats: { kills } }] : [],
+                        maps: row?.endsWith(":maps") ? [{ id: "raid", stats: { wins } }] : []
+                    }
+                };
+            }
+            return payload;
+        });
+        const errors = [];
+        page.on("pageerror", (error) => errors.push(error.message));
+        await page.goto(route);
+        await page.locator(route === "/stats/" ? "[data-account-panel-open]" : "[data-shell-account-open]").click();
+        const br = page.locator(".weekly-mission-row", { hasText: "BR progress" });
+        const weapon = page.locator(".weekly-mission-row", { hasText: "Weapon progress" });
+        const map = page.locator(".weekly-mission-row", { hasText: "Map progress" });
+        await expect(br).toContainText("23 / 100");
+        await expect(br.locator(".mission-progress i")).toHaveAttribute("style", /width: 23%/);
+        await expect(weapon).toContainText("5 / 10");
+        await expect(map).toContainText("3 / 10");
+        expect(errors).toEqual([]);
+        if (route === "/stats/" || route === "/help/") {
+            await br.scrollIntoViewIfNeeded();
+            await page.screenshot({ path: testInfo.outputPath("mission-progress.png") });
+        }
+        if (route === "/help/") {
+            await page.evaluate(() => {
+                window.dispatchEvent(
+                    new CustomEvent("cob:stats-slice-updated", {
+                        detail: {
+                            id: "profile:sample-rtxluke",
+                            payload: {
+                                profiles: [
+                                    {
+                                        playerId: "sample-rtxluke",
+                                        battleRoyale: { stats: { kills: 43 } },
+                                        teamDeathmatch: { stats: {} },
+                                        freeForAll: { stats: {} }
+                                    }
+                                ]
+                            }
+                        }
+                    })
+                );
+            });
+            await expect(br).toContainText("33 / 100");
+            await expect(weapon).toContainText("5 / 10");
+        }
+    });
+}
+
+test("missing mission statistics stay unknown and retry on reopening", async ({ page }) => {
+    await installPageStubs(page, accountStatsSupabaseStub);
+    let available = false;
+    await page.route("https://test.supabase.co/rest/v1/cob_stats_exports**", (route) =>
+        route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify(available ? [{ payload: statsExportFixture }] : [])
+        })
+    );
+    await page.goto("/help/");
+    await page.locator("[data-shell-account-open]").click();
+    const mission = page.locator(".weekly-mission-row", { hasText: "On the Board" });
+    await expect(mission).toContainText("Progress unavailable");
+    await expect(mission.locator(".mission-progress")).toHaveCount(0);
+    await expect(mission.locator("[data-home-weekly-claim]")).toHaveCount(0);
+    available = true;
+    await page.locator("[data-shell-account-close]").click();
+    await page.locator("[data-shell-account-open]").click();
+    await expect(mission).toContainText("Complete");
+    await expect(mission.locator(".mission-progress i")).toHaveAttribute("style", /100%/);
+});
+
+test("signing out discards an in-flight mission load", async ({ page }) => {
+    await installPageStubs(page, accountStatsSupabaseStub);
+    let release;
+    const gate = new Promise((resolve) => {
+        release = resolve;
+    });
+    let waiting = 0;
+    await page.route("https://test.supabase.co/rest/v1/cob_stats_exports**", async (route) => {
+        if (new URL(route.request().url()).searchParams.get("id")?.startsWith("eq.profile:")) {
+            waiting++;
+            await gate;
+        }
+        await route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify([{ payload: statsExportFixture }])
+        });
+    });
+    await page.goto("/help/");
+    await page.locator("[data-shell-account-open]").click();
+    await expect.poll(() => waiting).toBe(3);
+    await page.evaluate(async () => {
+        const { initializeSiteShell } = await import("/src/core/site-shell.js");
+        const shell = await initializeSiteShell({ loadStatus: false });
+        shell.session = null;
+        shell.setProfile(null);
+        window.__missionShell = shell;
+    });
+    release();
+    await expect(page.locator("[data-shell-login]")).toBeVisible();
+    await expect
+        .poll(() => page.evaluate(() => window.__missionShell.accountPanelAddon()))
+        .not.toContain("On the Board");
+    await expect(page.locator(".weekly-mission-row")).toHaveCount(0);
+});
+
 test("existing public hash routes still open", async ({ page }) => {
     await openApp(page, "#playtests");
     await expect(page.locator("#playtests-view")).toBeVisible();
