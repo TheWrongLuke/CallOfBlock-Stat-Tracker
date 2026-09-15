@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
     deleteOwnAccount,
     loadNotificationPreferences,
+    refreshDiscordAvatar,
     saveNotificationPreferences,
     saveProfileCustomization,
     syncDiscordProfile
@@ -11,11 +12,43 @@ describe("profile API", () => {
     it("synchronizes Discord identity through the protected RPC", async () => {
         const profile = { id: "profile-1", username: "Player" };
         const rpc = vi.fn().mockResolvedValue({ data: profile, error: null });
+        const invoke = vi.fn().mockResolvedValue({
+            data: { avatar_url: "https://cdn.discordapp.com/avatars/123/a_current.gif" },
+            error: null
+        });
 
-        const result = await syncDiscordProfile({ rpc });
+        const result = await syncDiscordProfile({ rpc, functions: { invoke } });
 
         expect(rpc).toHaveBeenCalledWith("sync_discord_profile_v2");
+        expect(invoke).toHaveBeenCalledWith("refresh-discord-avatar");
+        expect(result.data).toEqual({
+            ...profile,
+            avatar_url: "https://cdn.discordapp.com/avatars/123/a_current.gif"
+        });
+    });
+
+    it("keeps the saved profile when the live Discord avatar refresh fails", async () => {
+        const profile = { id: "profile-1", avatar_url: "https://cdn.discordapp.com/avatars/123/old.png" };
+        const error = new Error("Discord unavailable");
+        const rpc = vi.fn().mockResolvedValue({ data: profile, error: null });
+        const invoke = vi.fn().mockResolvedValue({ data: null, error });
+
+        const result = await syncDiscordProfile({ rpc, functions: { invoke } });
+
         expect(result.data).toEqual(profile);
+        expect(result.error).toBeNull();
+        expect(result.avatarRefreshError).toBe(error);
+    });
+
+    it("refreshes the Discord avatar through the authenticated Edge Function", async () => {
+        const invoke = vi
+            .fn()
+            .mockResolvedValue({ data: { avatar_url: "https://cdn.discordapp.com/embed/avatars/2.png" }, error: null });
+
+        const result = await refreshDiscordAvatar({ functions: { invoke } });
+
+        expect(invoke).toHaveBeenCalledWith("refresh-discord-avatar");
+        expect(result.data.avatar_url).toContain("embed/avatars/2.png");
     });
 
     it("saves only the supported customization fields", async () => {

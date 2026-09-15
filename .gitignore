@@ -8,6 +8,12 @@ secrets/
 credentials/
 database/
 supabase/
+!supabase/
+supabase/*
+!supabase/functions/
+supabase/functions/*
+!supabase/functions/refresh-discord-avatar/
+!supabase/functions/refresh-discord-avatar/index.ts
 
 # Generated development output.
 .vs/

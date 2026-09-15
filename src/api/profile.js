@@ -2,10 +2,25 @@ function rpcObject(data) {
     return Array.isArray(data) ? data[0] || null : data || null;
 }
 
+export async function refreshDiscordAvatar(client) {
+    if (!client?.functions?.invoke) return { data: null, error: new Error("A Supabase client is required.") };
+    const result = await client.functions.invoke("refresh-discord-avatar");
+    return { ...result, data: rpcObject(result.data) };
+}
+
 export async function syncDiscordProfile(client) {
     if (!client?.rpc) return { data: null, error: new Error("A Supabase client is required.") };
     const result = await client.rpc("sync_discord_profile_v2");
-    return { ...result, data: rpcObject(result.data) };
+    const profile = rpcObject(result.data);
+    if (result.error || !profile || !client?.functions?.invoke) return { ...result, data: profile };
+
+    const avatarResult = await refreshDiscordAvatar(client);
+    const avatarUrl = String(avatarResult.data?.avatar_url || "").trim();
+    return {
+        ...result,
+        data: avatarUrl ? { ...profile, avatar_url: avatarUrl } : profile,
+        avatarRefreshError: avatarResult.error || null
+    };
 }
 
 export async function saveProfileCustomization(client, profile) {

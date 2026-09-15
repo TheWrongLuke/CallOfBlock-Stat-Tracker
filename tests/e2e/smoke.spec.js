@@ -1951,7 +1951,9 @@ test("account privacy controls require DELETE and invoke the server-side deletio
     await deletion.locator("input[name='confirmation']").fill("DELETE");
     await deletion.getByRole("button", { name: "Permanently delete account" }).click();
     await expect
-        .poll(() => page.evaluate(() => window.__edgeFunctionCalls || []))
+        .poll(() =>
+            page.evaluate(() => (window.__edgeFunctionCalls || []).filter((call) => call.name === "delete-account"))
+        )
         .toEqual([
             {
                 name: "delete-account",
