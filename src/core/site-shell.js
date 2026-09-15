@@ -2,6 +2,7 @@ import { getDrawerController } from "./drawer-controller.js";
 import { syncDiscordProfile } from "../api/profile.js";
 import { readPublicStatsCache, writePublicStatsCache } from "../utils/public-data-cache.js";
 import { createRequestSignal } from "../utils/request-timeout.js";
+import { discordAvatarCandidates, discordDefaultAvatarUrl, uniqueImageUrls } from "../utils/avatar-url.js";
 
 const CONTACT_EMAIL_CODES = [
     108, 117, 107, 97, 115, 46, 102, 111, 115, 115, 97, 116, 105, 46, 100, 101, 118, 101, 108, 111, 112, 101, 114, 64,
@@ -365,7 +366,12 @@ async function resolveShellProfile(client, profile) {
 }
 
 function resolveShellAvatarUrl(profile, avatarSource, icon) {
-    if (avatarSource === "discord") return profile.avatar_url || "";
+    if (avatarSource === "discord") {
+        return (
+            discordAvatarCandidates(profile.avatar_url, profile.discord_id)[0] ||
+            discordDefaultAvatarUrl(profile.discord_id)
+        );
+    }
     if (avatarSource === "custom") return profile.custom_avatar_url || "";
     if (avatarSource === "default") return "/assets/branding/icon-256.webp";
     if (avatarSource === "minecraft") return skinHeadUrl(profile.minecraft_player_name || "Steve", 96);
@@ -506,7 +512,14 @@ function renderShellAvatar(profile, avatar, name) {
     const frameStyle = border
         ? ` style="--avatar-frame-image: url('${escapeHtml(border)}'); --avatar-frame-inset: ${inset}%"`
         : "";
-    return `<span class="account-avatar-frame${frameClass}"${frameStyle}><span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials(name))}</span>${avatar ? `<img class="avatar-image" src="${escapeHtml(avatar)}" alt="" decoding="async" referrerpolicy="no-referrer">` : ""}</span>`;
+    const source = String(profile.avatar_source || "minecraft");
+    const fallbacks = uniqueImageUrls([
+        ...(source === "discord" ? discordAvatarCandidates(profile.avatar_url, profile.discord_id) : []),
+        skinHeadUrl(profile.minecraft_player_name || "Steve", 96),
+        "/assets/branding/icon-256.webp"
+    ]).filter((candidate) => candidate !== avatar);
+    const fallbackData = escapeHtml(JSON.stringify(fallbacks));
+    return `<span class="account-avatar-frame${frameClass}"${frameStyle}><span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials(name))}</span>${avatar ? `<img class="avatar-image" src="${escapeHtml(avatar)}" alt="" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackData}">` : ""}</span>`;
 }
 
 function updateAdminStoreLinks(profile) {
@@ -563,7 +576,23 @@ function bindAvatarFallbacks() {
         "error",
         (event) => {
             const image = event.target;
-            if (!(image instanceof HTMLImageElement) || !image.classList.contains("avatar-image")) return;
+            if (!(image instanceof HTMLImageElement)) return;
+            if (image.hasAttribute("data-avatar-fallbacks")) {
+                let candidates = [];
+                try {
+                    candidates = JSON.parse(image.dataset.avatarFallbacks || "[]");
+                } catch (_error) {
+                    // Invalid fallback metadata leaves the list empty.
+                }
+                const next = candidates.shift();
+                if (next) {
+                    image.dataset.avatarFallbacks = JSON.stringify(candidates);
+                    image.src = next;
+                    return;
+                }
+                image.removeAttribute("data-avatar-fallbacks");
+            }
+            if (!image.classList.contains("avatar-image")) return;
             image.hidden = true;
             const fallback = image.previousElementSibling;
             if (fallback?.classList.contains("avatar-image-fallback")) fallback.hidden = false;

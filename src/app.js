@@ -47,6 +47,12 @@ import { findTacticalMap } from "./config/tactical-maps.js";
 import { createPerformanceDiagnostics } from "./utils/performance-diagnostics.js";
 import { readPublicStatsCache, writePublicStatsCache } from "./utils/public-data-cache.js";
 import { createRequestSignal } from "./utils/request-timeout.js";
+import {
+    discordAvatarCandidates,
+    discordDefaultAvatarUrl,
+    normalizeDiscordAvatarUrl,
+    uniqueImageUrls
+} from "./utils/avatar-url.js";
 import { loadAdminTicketPreferences, saveAdminTicketPreferences } from "./services/admin-ticket-preferences.js";
 import {
     loadCosmeticPickerPreferences,
@@ -58,6 +64,7 @@ const performanceDiagnostics = createPerformanceDiagnostics();
 globalThis.__cobPerformanceDiagnostics = performanceDiagnostics;
 const STATS_REQUEST_TIMEOUT_MS = 4_500;
 const STATUS_REQUEST_TIMEOUT_MS = 2_500;
+const CALL_OF_BLOCK_ICON_URL = "/assets/branding/icon-256.webp";
 
 let feedbackFeatureLoadPromise = null;
 let feedbackDraftSession = createEmptyFeedbackDraftSession();
@@ -288,7 +295,7 @@ const PROFILE_ICONS = [
         label: "Call of Block",
         category: "Default",
         rarity: "common",
-        image: "./assets/branding/icon-256.webp",
+        image: CALL_OF_BLOCK_ICON_URL,
         unlock: "default"
     },
     {
@@ -3863,7 +3870,9 @@ function discordAvatarFromUser(user) {
     const identity = discordIdentityFromUser(user);
     const metadata = user?.user_metadata || {};
     const identityData = identity?.identity_data || {};
-    return String(metadata.avatar_url || metadata.picture || identityData.avatar_url || identityData.picture || "");
+    return normalizeDiscordAvatarUrl(
+        metadata.avatar_url || metadata.picture || identityData.avatar_url || identityData.picture || ""
+    );
 }
 
 function initialsForName(value) {
@@ -8514,11 +8523,18 @@ function renderCosmeticOptionMedia(type, item, account, profile) {
     }
     const url =
         type === "icon" ? profileIconOptionUrl(item, account, profile, 160) : profileBackgroundOptionUrl(item, account);
+    if (type === "icon" && ["default", "discord", "minecraft"].includes(item.id)) {
+        const optionAccount = { ...account, avatar_source: item.id };
+        return `<span class="cosmetic-option-media icon-media">${renderAvatarImage(url, optionAccount, profile, 160)}</span>`;
+    }
     return `<span class="cosmetic-option-media ${escapeHtml(type)}-media">${renderCosmeticImage(url, item.label, type)}</span>`;
 }
 
 function profileIconOptionUrl(item, account, profile, size) {
-    if (item.id === "discord") return account?.avatar_url || skinHeadUrl(accountMinecraftName(account, profile), size);
+    if (item.id === "default") return CALL_OF_BLOCK_ICON_URL;
+    if (item.id === "discord") {
+        return accountDiscordAvatarUrl(account) || discordDefaultAvatarUrl(account?.discord_id);
+    }
     if (item.id === "minecraft") return skinHeadUrl(accountMinecraftName(account, profile), size);
     if (item.id === "custom") return account?.custom_avatar_url || "";
     return item.image || "";
@@ -13683,13 +13699,19 @@ function renderAvatarImage(url, account, profile, size, loading = "lazy", extraA
 
 function avatarFallbackUrls(currentUrl, account, profile, size) {
     const name = accountMinecraftName(account, profile);
-    const urls = [
+    const discordFallbacks =
+        cleanAvatarSource(account?.avatar_source) === "discord"
+            ? discordAvatarCandidates(accountDiscordAvatarUrl(account), account?.discord_id)
+            : [];
+    const urls = uniqueImageUrls([
+        ...discordFallbacks,
         skinHeadUrl(name, size),
         alternateSkinHeadUrl(name, size),
         String(account?.avatar_url || "").trim(),
+        CALL_OF_BLOCK_ICON_URL,
         skinHeadUrl(DEFAULT_SKIN_NAME, size),
         alternateSkinHeadUrl(DEFAULT_SKIN_NAME, size)
-    ];
+    ]);
     const seen = new Set([String(currentUrl || "")]);
     return urls.filter((entry) => {
         if (!entry || seen.has(entry)) return false;
@@ -13728,11 +13750,18 @@ function accountAvatarUrl(account, profile, size = 64) {
     if (account && !account.avatar_source && !profile?.name && account.avatar_url) return account.avatar_url;
     const source = cleanAvatarSource(account?.avatar_source);
     if (source === "custom" && account?.custom_avatar_url) return account.custom_avatar_url;
-    if (source === "discord" && account?.avatar_url) return account.avatar_url;
+    if (source === "discord") return accountDiscordAvatarUrl(account) || discordDefaultAvatarUrl(account?.discord_id);
     if (source === "minecraft") return skinHeadUrl(accountMinecraftName(account, profile), size);
+    if (source === "default") return CALL_OF_BLOCK_ICON_URL;
     const option = cosmeticCatalogItem("icon", source);
     if (option?.image) return safeCssUrl(option.image);
     return skinHeadUrl(accountMinecraftName(account, profile), size);
+}
+
+function accountDiscordAvatarUrl(account) {
+    const liveAccountAvatar =
+        account?.id && account.id === state.authSession?.user?.id ? discordAvatarFromUser(state.authSession.user) : "";
+    return normalizeDiscordAvatarUrl(liveAccountAvatar || account?.avatar_url || "");
 }
 
 function accountMinecraftName(account, profile) {

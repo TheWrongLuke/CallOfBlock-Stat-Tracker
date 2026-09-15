@@ -339,6 +339,16 @@ const accountStatsSupabaseStub = adminSupabaseStub.replace(
     'minecraft_player_name: "RTXLuke",\n        minecraft_player_id: "sample-rtxluke",'
 );
 
+const discordAvatarSupabaseStub = adminSupabaseStub
+    .replace('discord_id: "discord-test-user"', 'discord_id: "138564775733886986"')
+    .replace(
+        "avatar_url: null",
+        'avatar_url: "https://cdn.discordapp.com/avatars/138564775733886986/a_deadbeef.png?size=128"'
+    )
+    .replace('avatar_source: "minecraft"', 'avatar_source: "discord"')
+    .replace('cosmetic_id: "minecraft"', 'cosmetic_id: "default"')
+    .replace('image_url: "./assets/branding/icon.png"', 'image_url: "./Icon.png"');
+
 const giftSupabaseStub = adminSupabaseStub.replace(
     'rpc: async (name, args = {}) => {\n                    if (name === "get_my_notification_preferences"',
     `rpc: async (name, args = {}) => {
@@ -1899,6 +1909,38 @@ test("the Minecraft avatar survives a failed primary skin service", async ({ pag
         /https:\/\/api\.mcheads\.org\/head\/AdminMC\//
     );
     await expect(page.locator(".account-hero .avatar-image-fallback")).toBeHidden();
+});
+
+test("Discord avatars support animation and stale URLs fall back without breaking built-in icons", async ({ page }) => {
+    const discordRequests = [];
+    page.on("request", (request) => {
+        if (request.url().startsWith("https://cdn.discordapp.com/")) discordRequests.push(request.url());
+    });
+    await installPageStubs(page, discordAvatarSupabaseStub);
+    await page.route("https://cdn.discordapp.com/avatars/**", (route) =>
+        route.fulfill({ status: 404, contentType: "text/plain", body: "missing" })
+    );
+    await page.route("https://cdn.discordapp.com/embed/avatars/**", (route) =>
+        route.fulfill({ contentType: "image/png", body: transparentPng })
+    );
+    await page.goto("/#account");
+
+    await expect(page.locator("[data-account-form]")).toBeVisible();
+    await expect(page.locator(".account-hero .account-avatar-large img")).toHaveAttribute(
+        "src",
+        /https:\/\/cdn\.discordapp\.com\/embed\/avatars\/[0-5]\.png/
+    );
+    expect(discordRequests.some((url) => /\/a_deadbeef\.gif\?size=128$/.test(url))).toBe(true);
+
+    await page.locator('[data-cosmetic-picker-open="icon"]').click();
+    await expect(page.locator('[data-cosmetic-option="default"] img')).toHaveAttribute(
+        "src",
+        "/assets/branding/icon-256.webp"
+    );
+    await expect(page.locator('[data-cosmetic-option="discord"] img')).toHaveAttribute(
+        "src",
+        /https:\/\/cdn\.discordapp\.com\/embed\/avatars\/[0-5]\.png/
+    );
 });
 
 test("account privacy controls require DELETE and invoke the server-side deletion function", async ({ page }) => {

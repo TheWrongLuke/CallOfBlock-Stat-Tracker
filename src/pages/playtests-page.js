@@ -1,4 +1,7 @@
 import { escapeHtml, formatDate, initializeSiteShell } from "../core/site-shell.js";
+import { discordAvatarCandidates, uniqueImageUrls } from "../utils/avatar-url.js";
+
+const CALL_OF_BLOCK_ICON_URL = "/assets/branding/icon-256.webp";
 
 const PLAYTEST_COLUMNS =
     "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
@@ -275,10 +278,21 @@ function renderIdentity(state) {
     if (!host) return;
     const user = state.shell.session?.user;
     const metadata = user?.user_metadata || {};
+    const discordIdentity = (user?.identities || []).find((identity) => identity?.provider === "discord");
+    const identityData = discordIdentity?.identity_data || {};
     const name =
         state.profile?.display_name || state.profile?.username || metadata.global_name || metadata.username || "You";
-    const avatar = state.profile?.avatar_url || metadata.avatar_url || "";
-    host.innerHTML = `<section class="playtest-side-block identity-block"><p class="panel-kicker">Discord Identity</p><div class="identity-row">${avatar ? `<img class="identity-avatar" src="${escapeHtml(avatar)}" alt="" referrerpolicy="no-referrer">` : `<span class="identity-avatar">${escapeHtml(initials(name))}</span>`}<div><strong>${escapeHtml(name)}</strong><small>${user ? (state.profile?.is_admin ? "Discord connected - Admin" : "Discord connected") : "Not connected"}</small></div></div><div class="identity-actions">${user ? '<button type="button" data-auth-sign-out>Sign out</button>' : '<button type="button" data-auth-login>Login with Discord</button>'}<a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Open Discord</a></div>${state.message ? `<p class="identity-status">${escapeHtml(state.message)}</p>` : ""}</section>`;
+    const discordId = state.profile?.discord_id || discordIdentity?.identity_id || identityData.id || "";
+    const avatarCandidates = uniqueImageUrls([
+        ...discordAvatarCandidates(
+            state.profile?.avatar_url || metadata.avatar_url || metadata.picture || identityData.avatar_url,
+            discordId
+        ),
+        CALL_OF_BLOCK_ICON_URL
+    ]);
+    const avatar = user ? avatarCandidates[0] : "";
+    const fallbackData = escapeHtml(JSON.stringify(avatarCandidates.slice(1)));
+    host.innerHTML = `<section class="playtest-side-block identity-block"><p class="panel-kicker">Discord Identity</p><div class="identity-row">${avatar ? `<img class="identity-avatar" src="${escapeHtml(avatar)}" alt="" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackData}">` : `<span class="identity-avatar">${escapeHtml(initials(name))}</span>`}<div><strong>${escapeHtml(name)}</strong><small>${user ? (state.profile?.is_admin ? "Discord connected - Admin" : "Discord connected") : "Not connected"}</small></div></div><div class="identity-actions">${user ? '<button type="button" data-auth-sign-out>Sign out</button>' : '<button type="button" data-auth-login>Login with Discord</button>'}<a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Open Discord</a></div>${state.message ? `<p class="identity-status">${escapeHtml(state.message)}</p>` : ""}</section>`;
 }
 
 function renderPreferences(state) {

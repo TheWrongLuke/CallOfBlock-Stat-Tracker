@@ -6,9 +6,11 @@ import {
     renderHeroStatus,
     skinHeadUrl
 } from "../core/site-shell.js";
+import { discordAvatarCandidates, uniqueImageUrls } from "../utils/avatar-url.js";
 
 const CHAMPION_ROTATE_MS = 5000;
 const STATS_SLICE_UPDATED_EVENT = "cob:stats-slice-updated";
+const CALL_OF_BLOCK_ICON_URL = "/assets/branding/icon-256.webp";
 
 export async function initializeHomePage() {
     if (redirectLegacyRoute()) return;
@@ -101,14 +103,15 @@ function renderFeaturedList(mode, data, profiles, catalog) {
         .map((player, index) => {
             const profile = findAccountProfile(profiles, player);
             const name = String(profile?.display_name || player.name || "Unknown player");
-            const avatar = profileAvatar(profile, player, catalog, 96);
+            const avatarCandidates = profileAvatarCandidates(profile, player, catalog, 96);
+            const avatar = avatarCandidates[0] || CALL_OF_BLOCK_ICON_URL;
             const title = profileTitle(profile, catalog);
             const stats = player.stats || {};
             const winRate = Number(
                 player.derived?.winRate ?? (number(stats.games) ? number(stats.wins) / number(stats.games) : 0)
             );
             return `<a class="featured-player podium-rank-${index + 1}" href="/stats/#player=${encodeURIComponent(player.playerId)}&amp;tab=overview&amp;profileMode=${encodeURIComponent(mode)}">
-                <span class="player-avatar featured-avatar">${renderAvatarImage(avatar, name, mode === "battleRoyale" && index < 2 ? "eager" : "lazy")}</span>
+                <span class="player-avatar featured-avatar">${renderAvatarImage(avatar, name, mode === "battleRoyale" && index < 2 ? "eager" : "lazy", avatarCandidates.slice(1))}</span>
                 <div class="featured-player-main">
                     <div><span class="rank-badge rank-${Math.min(index + 1, 3)}">${index + 1}</span><strong>${escapeHtml(name)}</strong></div>
                     ${title ? `<span class="profile-title rarity-${escapeHtml(title.rarity)}">${escapeHtml(title.text)}</span>` : ""}
@@ -222,15 +225,28 @@ function findAccountProfile(profiles, player) {
 }
 
 function profileAvatar(profile, player, catalog, size) {
+    return profileAvatarCandidates(profile, player, catalog, size)[0] || CALL_OF_BLOCK_ICON_URL;
+}
+
+function profileAvatarCandidates(profile, player, catalog, size) {
     const source = String(profile?.avatar_source || "minecraft");
-    if (source === "discord" && profile?.avatar_url) return profile.avatar_url;
-    if (source === "custom" && profile?.custom_avatar_url) return profile.custom_avatar_url;
+    const minecraftAvatar = skinHeadUrl(profile?.minecraft_player_name || player?.name || "Steve", size);
+    if (source === "discord") {
+        return uniqueImageUrls([
+            ...discordAvatarCandidates(profile?.avatar_url, profile?.discord_id),
+            minecraftAvatar,
+            CALL_OF_BLOCK_ICON_URL
+        ]);
+    }
+    if (source === "custom") {
+        return uniqueImageUrls([profile?.custom_avatar_url, minecraftAvatar, CALL_OF_BLOCK_ICON_URL]);
+    }
     if (source !== "minecraft" && source !== "default") {
         const item = catalog.get(`icon:${source}`);
-        if (item?.image_url) return item.image_url;
+        if (item?.image_url) return uniqueImageUrls([item.image_url, minecraftAvatar, CALL_OF_BLOCK_ICON_URL]);
     }
-    if (source === "default") return "/assets/branding/icon-256.webp";
-    return skinHeadUrl(profile?.minecraft_player_name || player?.name || "Steve", size);
+    if (source === "default") return uniqueImageUrls([CALL_OF_BLOCK_ICON_URL, minecraftAvatar]);
+    return uniqueImageUrls([minecraftAvatar, CALL_OF_BLOCK_ICON_URL]);
 }
 
 function profileTitle(profile, catalog) {
@@ -247,15 +263,20 @@ function renderCreatorProfile(profiles, catalog) {
         profiles.find((entry) => normalizeName(entry.username) === "thewrongluke");
     const image = document.querySelector("[data-creator-avatar]");
     if (!(image instanceof HTMLImageElement) || !profile) return;
-    image.src = profileAvatar(profile, { name: "RTXLuke" }, catalog, 160);
+    const avatarCandidates = profileAvatarCandidates(profile, { name: "RTXLuke" }, catalog, 160);
+    image.src = avatarCandidates[0] || CALL_OF_BLOCK_ICON_URL;
+    image.dataset.avatarFallbacks = JSON.stringify(avatarCandidates.slice(1));
     image.alt = `${profile.display_name || profile.username || "TheWrongLuke"} profile icon`;
 }
 
-function renderAvatarImage(url, name, loading = "lazy") {
+function renderAvatarImage(url, name, loading = "lazy", fallbacks = []) {
     const initials = String(name || "COB")
         .slice(0, 2)
         .toUpperCase();
-    return `<span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials)}</span><img class="avatar-image" src="${escapeHtml(url)}" alt="${escapeHtml(`${name} profile avatar`)}" loading="${loading}" decoding="async" referrerpolicy="no-referrer">`;
+    const fallbackData = escapeHtml(
+        JSON.stringify(uniqueImageUrls(fallbacks).filter((candidate) => candidate !== url))
+    );
+    return `<span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials)}</span><img class="avatar-image" src="${escapeHtml(url)}" alt="${escapeHtml(`${name} profile avatar`)}" loading="${loading}" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackData}">`;
 }
 
 function startChampionCarousel() {
