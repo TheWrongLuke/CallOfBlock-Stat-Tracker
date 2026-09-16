@@ -1943,6 +1943,41 @@ test("Discord avatars support animation and stale URLs fall back without breakin
     );
 });
 
+for (const route of ["/", "/stats/#account", "/playtests/", "/feedback/", "/help/", "/about/"]) {
+    test(`refreshed Discord avatar overrides stale login metadata on ${route}`, async ({ page }, testInfo) => {
+        const refreshedAvatar = "https://cdn.discordapp.com/avatars/138564775733886986/a_current.gif?size=256";
+        const staleLoginAvatar = "https://cdn.discordapp.com/embed/avatars/0.png";
+        const stub = discordAvatarSupabaseStub
+            .replace(
+                "sub: profile.discord_id,",
+                `sub: profile.discord_id, avatar_url: ${JSON.stringify(staleLoginAvatar)},`
+            )
+            .replace(
+                'data: { deleted: name === "delete-account" },',
+                `data: name === "refresh-discord-avatar" ? { avatar_url: ${JSON.stringify(refreshedAvatar)} }
+                    : { deleted: name === "delete-account" },`
+            );
+        await installPageStubs(page, stub);
+        await page.route("https://cdn.discordapp.com/**", (request) =>
+            request.fulfill({ contentType: "image/png", body: transparentPng })
+        );
+        await page.goto(route);
+        const avatar = page.locator("#account-widget img.avatar-image");
+        await expect(avatar).toHaveAttribute("src", refreshedAvatar);
+        await expect.poll(() => avatar.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+        if (route === "/stats/#account") {
+            await expect(page.locator(".account-hero .account-avatar-large img")).toHaveAttribute(
+                "src",
+                refreshedAvatar
+            );
+            await expect(page.locator("[data-account-preview-img]")).toHaveAttribute("src", refreshedAvatar);
+            await page.locator('[data-cosmetic-picker-open="icon"]').click();
+            await expect(page.locator('[data-cosmetic-option="discord"] img')).toHaveAttribute("src", refreshedAvatar);
+            await testInfo.attach("discord-avatar-picker", { body: await page.screenshot(), contentType: "image/png" });
+        }
+    });
+}
+
 test("account privacy controls require DELETE and invoke the server-side deletion function", async ({ page }) => {
     await openAdminApp(page, "#account");
     await expect(page.locator("[data-notification-preferences-form]")).toContainText("Email Notifications");

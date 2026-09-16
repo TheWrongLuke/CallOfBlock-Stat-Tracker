@@ -13761,7 +13761,8 @@ function accountAvatarUrl(account, profile, size = 64) {
 function accountDiscordAvatarUrl(account) {
     const liveAccountAvatar =
         account?.id && account.id === state.authSession?.user?.id ? discordAvatarFromUser(state.authSession.user) : "";
-    return normalizeDiscordAvatarUrl(liveAccountAvatar || account?.avatar_url || "");
+    // OAuth metadata is a login-time snapshot; the profile receives the current Discord avatar.
+    return normalizeDiscordAvatarUrl(account?.avatar_url) || liveAccountAvatar;
 }
 
 function accountMinecraftName(account, profile) {
