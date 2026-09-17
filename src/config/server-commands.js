@@ -11,6 +11,69 @@ function command(commandText, permission, mode, scope, activeMatch, description)
 
 export const CURRENT_SERVER_COMMAND_SECTIONS = [
     {
+        title: "Mode-specific map management",
+        summary:
+            "Map IDs are local to each backend. TDM and FFA share map geometry but have independent spawns and rules.",
+        entries: [
+            command(
+                "/cob admin tdm map addspawn <map> <1|2>",
+                "2 / player",
+                "Team Deathmatch",
+                "Persistent",
+                "No",
+                "Add a team spawn at your position; map accepts its ID or display name."
+            ),
+            command(
+                "/cob admin ffa map addspawn <map>",
+                "2 / player",
+                "Free For All",
+                "Persistent",
+                "No",
+                "Add an FFA spawn at your position and register that map's FFA policy."
+            ),
+            command(
+                "/cob admin <tdm|ffa> map <list|show|create|removenearestspawn> ...",
+                "2 / player where positioned",
+                "TDM / FFA",
+                "Persistent",
+                "No",
+                "Manage the selected mode without changing the shared match-start lifecycle."
+            ),
+            command(
+                "/cob admin <tdm|ffa> map delete <map> confirm",
+                "2",
+                "TDM / FFA",
+                "Persistent",
+                "No",
+                "Delete only the selected mode's spawns and policy; retain the other mode and world blocks."
+            ),
+            command(
+                "/cob admin <br|zombie|tdm|ffa|duels> map support <map> <on|off>",
+                "2",
+                "Configured maps",
+                "Persistent",
+                "Next match",
+                "Enable or disable a configured mode without deleting its setup. BR currently uses Shmar only; other modes require their own valid setup."
+            ),
+            command(
+                "/cob admin duels map <list|show|create|addspawn|removespawn|setspectator|setbounds|reload> ...",
+                "2 / player where positioned",
+                "Duels",
+                "Persistent",
+                "No",
+                "Author round-based Duel maps; duels is an alias for duel."
+            ),
+            command(
+                "/cob admin duels map delete <id> confirm",
+                "2",
+                "Duels",
+                "Persistent",
+                "No",
+                "Delete only Duel configuration after explicit confirmation; retain world blocks."
+            )
+        ]
+    },
+    {
         title: "Player commands",
         summary:
             "Canonical public commands registered by BRControl. Obsolete /br*, /joindm, /vote, and /hub roots are not used.",

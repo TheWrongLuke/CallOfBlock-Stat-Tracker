@@ -1575,7 +1575,6 @@ test("signed-in feedback restores ticket fields and evidence after reload and re
 test("admin routes reject a logged-out visitor", async ({ page }) => {
     const routes = [
         ["#admin-tickets", "#admin-tickets-view", /#feedback$/],
-        ["#admin-help", "#admin-help-view", /\/$/],
         ["#admin-progression", "#admin-progression-view", /\/$/],
         ["#store", "#store-view", /\/$/],
         ["#community-dates", "#community-admin-view", /#playtests$/],
@@ -1599,15 +1598,16 @@ test("admin routes reject a signed-in non-admin on direct navigation and refresh
     await page.evaluate(() => window.history.replaceState(null, document.title, "#admin-help"));
     await page.reload();
     await expect(page).not.toHaveURL(/#admin-help$/);
-    await expect(page.locator("#admin-help-view")).toBeHidden();
+    await expect(page).toHaveURL(/\/admin\/docs\/$/);
+    await expect(page.locator("#admin-documentation-body")).toContainText("Administrator access required.");
     await expect(page.getByRole("button", { name: "Admin documentation" })).toHaveCount(0);
 });
 
 test("protected admin content waits for profile verification", async ({ page }) => {
     await openDelayedAdminApp(page);
-    await expect(page.locator("#admin-help-view")).toBeHidden();
-    await expect(page).toHaveURL(/\/stats\/#admin-help$/);
-    await expect(page.locator("#leaderboard-view")).toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/docs\/$/);
+    await expect(page.locator("#admin-documentation-body")).not.toContainText("/cob destruction");
+    await expect(page.locator("#leaderboard-view")).toHaveCount(0);
     expect(await page.evaluate(() => window.__queriedSupabaseTables || [])).not.toContain(
         "admin_documentation_sections"
     );
@@ -1625,7 +1625,33 @@ test("protected admin content waits for profile verification", async ({ page }) 
     await expect(page.locator("#admin-documentation-body")).not.toContainText("/bradmin");
 });
 
-test("complete admin command documentation stays readable without page overflow", async ({ page }) => {
+test("admin documentation has its own non-indexed page and never fetches public statistics", async ({
+    page,
+    request
+}, testInfo) => {
+    const statsRequests = [];
+    page.on("request", (request) => {
+        if (request.url().includes("/cob_stats_exports")) statsRequests.push(request.url());
+    });
+    await openAdminApp(page, "admin/docs/");
+    await expect(page.locator("#admin-documentation-body .admin-command-entry").first()).toBeVisible();
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://callofblock.com/admin/docs/");
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex, nofollow");
+    await expect(page.locator("#leaderboard-view")).toHaveCount(0);
+    expect(statsRequests).toEqual([]);
+    expect(await (await request.get("/sitemap.xml")).text()).not.toContain("/admin/");
+    await page.screenshot({ path: testInfo.outputPath("admin-docs.png") });
+});
+
+test("admin documentation rejects logged-out visitors without querying protected sections", async ({ page }) => {
+    await installPageStubs(page, countingSupabaseStub);
+    await page.goto("/admin/docs/");
+    await expect(page.locator("#admin-documentation-body")).toContainText("Administrator access required.");
+    expect(await page.evaluate(() => window.__supabaseTableRequests?.admin_documentation_sections || 0)).toBe(0);
+    await expect(page.locator(".admin-command-entry")).toHaveCount(0);
+});
+
+test("complete admin command documentation stays readable without page overflow", async ({ page }, testInfo) => {
     await openAdminApp(page, "#admin-help");
     const body = page.locator("#admin-documentation-body");
     await expect(body.locator(".admin-command-entry").first()).toBeVisible();
@@ -1649,6 +1675,7 @@ test("complete admin command documentation stays readable without page overflow"
             dimensions.commandWidths.every((entry) => entry.scroll <= entry.client + 1),
             `command overflow at ${width}px`
         ).toBe(true);
+        if (width === 320) await page.screenshot({ path: testInfo.outputPath("admin-docs-320.png") });
     }
 });
 

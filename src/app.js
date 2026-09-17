@@ -2339,6 +2339,10 @@ function applyRoute() {
         return;
     }
     if (route === "admin-help") {
+        if (document.body?.dataset.publicRoute !== "admin-docs") {
+            window.location.replace("/admin/docs/");
+            return;
+        }
         if (!openProtectedAdminRoute("home")) return;
         state.view = "adminHelp";
         state.matchPlayerId = "";
@@ -2503,6 +2507,10 @@ function applyPublicPageRoute() {
         state.page = 1;
         return;
     }
+    if (route === "admin-docs") {
+        state.view = "adminHelp";
+        return;
+    }
     if (route === "playtests") {
         state.view = "playtests";
         return;
@@ -2606,6 +2614,7 @@ function viewNeedsStatsData() {
 
 function enforceProtectedAdminRoute() {
     if (!state.authReady || isPlaytestAdmin()) return;
+    if (state.view === "adminHelp" && document.body?.dataset.publicRoute === "admin-docs") return;
     const protectedView = state.view;
     if (!["store", "adminHelp", "adminTickets", "adminProgression", "communityAdmin"].includes(protectedView)) return;
 
@@ -2655,6 +2664,10 @@ function routeTo(route) {
             render();
             return;
         }
+        if (document.body?.dataset.publicRoute !== "admin-docs") {
+            window.location.assign("/admin/docs/");
+            return;
+        }
         state.view = "adminHelp";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -2676,6 +2689,10 @@ function routeTo(route) {
             if (!setRouteHash("feedback")) render();
             return;
         }
+        if (document.body?.dataset.publicRoute === "admin-docs") {
+            window.location.assign("/stats/#admin-tickets");
+            return;
+        }
         state.view = "adminTickets";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -2689,6 +2706,10 @@ function routeTo(route) {
             state.profilePreviewOpen = false;
             window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
             render();
+            return;
+        }
+        if (document.body?.dataset.publicRoute === "admin-docs") {
+            window.location.assign("/stats/#admin-progression");
             return;
         }
         state.view = "adminProgression";
@@ -4431,7 +4452,7 @@ function renderAccountSidePanel() {
                                 ? `
                             <button class="profile-drawer-tickets" type="button" data-route="admin-tickets">Ticket dashboard</button>
                             <button class="profile-drawer-progression" type="button" data-route="admin-progression">Progression &amp; missions</button>
-                            <button class="profile-drawer-docs" type="button" data-route="admin-help">Admin documentation</button>
+                            <a class="profile-drawer-docs" href="/admin/docs/">Admin documentation</a>
                             <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
                         `
                                 : ""
@@ -5237,16 +5258,20 @@ function ticketSummaryText(ticket) {
 function renderAdminDocumentationPage() {
     const body = document.getElementById("admin-documentation-body");
     if (!body) return;
+    if (!state.authReady) {
+        body.innerHTML = '<div class="panel-state"><strong>Verifying administrator access...</strong></div>';
+        return;
+    }
+    if (!isPlaytestAdmin()) {
+        body.innerHTML = '<div class="panel-state"><strong>Administrator access required.</strong></div>';
+        return;
+    }
     if (!renderAdminDocumentationContent) {
         renderLazyFeature(body, "Loading administrator documentation...", ensureFeedbackFeature);
         return;
     }
-    if (!state.authReady || state.feedback.documentationLoading) {
+    if (state.feedback.documentationLoading) {
         body.innerHTML = renderAdminDocumentationContent({ loading: true, sections: [], error: "" });
-        return;
-    }
-    if (!isPlaytestAdmin()) {
-        enforceProtectedAdminRoute();
         return;
     }
     if (!state.feedback.documentationLoaded) void loadAdminDocumentation();
@@ -12818,6 +12843,8 @@ function syncChampionScroll(smooth) {
 }
 
 function renderHeroStatus() {
+    const playerCount = document.getElementById("hero-player-count");
+    if (!playerCount) return;
     const exportedTotal = Number(state.data?.totalTrackedPlayers);
     const totalPlayers = Number.isFinite(exportedTotal)
         ? exportedTotal
@@ -12828,7 +12855,7 @@ function renderHeroStatus() {
                       number(profile.freeForAll?.stats?.games) >
                   0
           ).length;
-    document.getElementById("hero-player-count").textContent = String(totalPlayers);
+    playerCount.textContent = String(totalPlayers);
     renderLiveStatus();
 
     const lastMatch = state.cache.lastMatch;

@@ -59,7 +59,6 @@ const routeViewAllowlist = {
         "leaderboard-view",
         "admin-tickets-view",
         "community-admin-view",
-        "admin-help-view",
         "admin-progression-view",
         "player-view",
         "match-view",
@@ -69,7 +68,8 @@ const routeViewAllowlist = {
     playtests: new Set(["playtests-view", "community-admin-view"]),
     feedback: new Set(["feedback-view", "ticket-view"]),
     help: new Set(["home-view"]),
-    about: new Set()
+    about: new Set(),
+    "admin-docs": new Set(["admin-help-view"])
 };
 
 for (const [id, page] of Object.entries(pages)) {
@@ -105,6 +105,10 @@ function renderPublicPage(html, { id, page, canonicalUrl, socialImageUrl, public
     const entry = String(page.entry || id).replace(/[^a-z0-9-]/gi, "");
     const rendered = html
         .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtml(page.title)}</title>`)
+        .replace(
+            metaPattern("name", "robots"),
+            `$1${page.private ? "noindex, nofollow" : "index, follow, max-image-preview:large"}$2`
+        )
         .replace(metaPattern("name", "description"), `$1${escapeHtml(page.description)}$2`)
         .replace(metaPattern("property", "og:title"), `$1${escapeHtml(page.title)}$2`)
         .replace(metaPattern("property", "og:description"), `$1${escapeHtml(page.description)}$2`)
@@ -160,6 +164,20 @@ function renderPageHero(html, routeId, page) {
 
 function pruneSharedPageShell(html, routeId) {
     let output = html;
+    if (routeId === "admin-docs") {
+        output = output
+            .replace(/\s*<header class="hero">[\s\S]*?<\/header>/i, "")
+            .replace("<h2>Protected operations documentation.</h2>", "<h1>Admin Documentation</h1>")
+            .replace("<p>Documentation is loaded only after Supabase verifies an authenticated administrator.</p>", "")
+            .replace(
+                '<button type="button" data-route="admin-tickets">Ticket dashboard</button>',
+                '<a href="/stats/#admin-tickets">Ticket dashboard</a>'
+            )
+            .replace(
+                '<button type="button" data-route="admin-progression">Progression &amp; missions</button>',
+                '<a href="/stats/#admin-progression">Progression &amp; missions</a>'
+            );
+    }
     if (routeId !== "home") {
         output = output.replace(/\s*<div class="hero-champions">[\s\S]*?(?=\s*<div class="hero-status">)/i, "");
         output = output.replace(
@@ -285,6 +303,7 @@ function pageStructuredData(id, page, canonicalUrl, publicSiteUrl) {
 
 function buildSitemap(pageDefinitions, baseUrl) {
     const urls = pageDefinitions
+        .filter((page) => !page.private)
         .map(
             (page) =>
                 `    <url><loc>${escapeXml(new URL(String(page.path || "/").replace(/^\//, ""), baseUrl))}</loc></url>`

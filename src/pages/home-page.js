@@ -332,6 +332,10 @@ function redirectLegacyRoute() {
     if (!hash) return false;
     const params = new URLSearchParams(hash);
     const route = params.get("view") || hash;
+    if (route === "admin-help") {
+        window.location.replace("/admin/docs/");
+        return true;
+    }
     if (
         params.has("player") ||
         params.has("match") ||
@@ -343,7 +347,6 @@ function redirectLegacyRoute() {
             "account",
             "store",
             "admin-progression",
-            "admin-help",
             "admin-tickets",
             "community-dates"
         ].includes(route)

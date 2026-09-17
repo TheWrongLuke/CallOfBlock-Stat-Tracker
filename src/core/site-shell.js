@@ -491,7 +491,7 @@ function renderAccountPanel(shell, host) {
                     admin
                         ? `<a class="profile-drawer-tickets" href="/stats/#admin-tickets">Ticket dashboard</a>
                            <a class="profile-drawer-progression" href="/stats/#admin-progression">Progression &amp; missions</a>
-                           <a class="profile-drawer-docs" href="/stats/#admin-help">Admin documentation</a>
+                           <a class="profile-drawer-docs" href="/admin/docs/">Admin documentation</a>
                            <a class="profile-drawer-store" href="/stats/#store">Open store admin</a>`
                         : ""
                 }

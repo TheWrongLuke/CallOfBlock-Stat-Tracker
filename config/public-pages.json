@@ -53,6 +53,15 @@
             "The How to Play and FAQ sections also cover server access, playtests, profiles, privacy and website safety."
         ]
     },
+    "admin-docs": {
+        "directory": "admin/docs",
+        "path": "/admin/docs/",
+        "private": true,
+        "title": "Call of Block Admin Documentation",
+        "description": "Protected Call of Block administration reference.",
+        "kicker": "Administration",
+        "heading": "Admin Documentation"
+    },
     "about": {
         "directory": "about",
         "path": "/about/",
