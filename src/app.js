@@ -781,6 +781,7 @@ let accountProfilesRequestKey = "";
 let accountProfilesGeneration = 0;
 let remotePlaytestsRequest = null;
 let cosmeticCatalogRequest = null;
+let routeRedirectPending = false;
 
 function createEmptyFeedbackDraftSession() {
     return {
@@ -853,11 +854,12 @@ function renderLazyFeature(body, label, loader) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    applyRoute();
+    if (routeRedirectPending) return;
     setupLiveConfig();
     setupAuthClient();
     if (pageNeedsPlaytestData()) loadPlaytestState();
     bindAvatarImageEvents();
-    applyRoute();
     bindStaticEvents();
     if (usesHomePresentation()) startChampionRotation();
     if (document.body?.dataset.publicRoute === "stats") {
@@ -2340,6 +2342,7 @@ function applyRoute() {
     }
     if (route === "admin-help") {
         if (document.body?.dataset.publicRoute !== "admin-docs") {
+            routeRedirectPending = true;
             window.location.replace("/admin/docs/");
             return;
         }
@@ -4156,6 +4159,7 @@ function rebuildCache() {
 }
 
 function render() {
+    if (routeRedirectPending) return;
     const finishRender = performanceDiagnostics.startRender(state.view);
     renderHeroStatus();
     renderHeaderActions();

@@ -1625,6 +1625,26 @@ test("protected admin content waits for profile verification", async ({ page }) 
     await expect(page.locator("#admin-documentation-body")).not.toContainText("/bradmin");
 });
 
+test("legacy Stats documentation URLs redirect without rendering the discarded page", async ({ page }) => {
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await installPageStubs(page, countingSupabaseStub);
+    for (const hash of ["#admin-help", "#view=admin-help"]) {
+        await page.goto(`/stats/${hash}`);
+        await expect(page).toHaveURL(/\/admin\/docs\/$/);
+        await expect(page.locator("#admin-documentation-body")).toContainText("Administrator access required.");
+        expect(pageErrors).toEqual([]);
+    }
+    await page.goto("/stats/");
+    await expect(page.locator("#leaderboard-view")).toBeVisible();
+    await page.evaluate(() => {
+        window.location.hash = "admin-help";
+    });
+    await expect(page).toHaveURL(/\/admin\/docs\/$/);
+    await expect(page.locator("#admin-documentation-body")).toContainText("Administrator access required.");
+    expect(pageErrors).toEqual([]);
+});
+
 test("admin documentation has its own non-indexed page and never fetches public statistics", async ({
     page,
     request
