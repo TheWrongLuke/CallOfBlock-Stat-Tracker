@@ -5520,6 +5520,31 @@ body.notification-gift-open {
 }
 
 .home-route .hero-champions .featured-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 9px;
+    min-height: 24px;
+    text-align: center;
+}
+
+.home-route .hero-champions .featured-header h3 {
+    margin: 0;
+    font-size: 1.08rem;
+    line-height: 1.1;
+}
+
+.champion-rank-label,
+.champion-empty-state {
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.champion-empty-state {
+    margin: 0;
+}
+
+.champion-empty-state[hidden] {
     display: none;
 }
 
@@ -6451,6 +6476,21 @@ body.notification-gift-open {
     color: var(--gold);
     font-family: "Chakra Petch", sans-serif;
     font-size: 1.18rem;
+}
+
+.champion-slot-empty {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(105, 111, 120, 0.13);
+    color: rgba(225, 229, 235, 0.58);
+    pointer-events: none;
+}
+
+.champion-placeholder-avatar {
+    display: block;
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
+        #252a31;
+    filter: grayscale(1);
 }
 
 body[data-public-route="admin-docs"] .admin-help-hero,
@@ -13418,19 +13458,18 @@ code {
     }
 
     .home-route .podium-list {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        grid-template-areas: "first second third";
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-areas:
+            "first first second second third third"
+            ". fourth fourth fifth fifth .";
         gap: 6px;
-    }
-
-    .home-route .podium-rank-4,
-    .home-route .podium-rank-5 {
-        display: none;
     }
 
     .home-route .podium-rank-1,
     .home-route .podium-rank-2,
-    .home-route .podium-rank-3 {
+    .home-route .podium-rank-3,
+    .home-route .podium-rank-4,
+    .home-route .podium-rank-5 {
         min-height: 92px;
         grid-template-columns: 1fr;
         align-content: center;
@@ -13443,7 +13482,9 @@ code {
 
     .home-route .podium-rank-1 .featured-avatar,
     .home-route .podium-rank-2 .featured-avatar,
-    .home-route .podium-rank-3 .featured-avatar {
+    .home-route .podium-rank-3 .featured-avatar,
+    .home-route .podium-rank-4 .featured-avatar,
+    .home-route .podium-rank-5 .featured-avatar {
         width: 34px;
         height: 34px;
         border-radius: 7px;
@@ -13451,7 +13492,9 @@ code {
 
     .home-route .podium-rank-1 .featured-player-main div,
     .home-route .podium-rank-2 .featured-player-main div,
-    .home-route .podium-rank-3 .featured-player-main div {
+    .home-route .podium-rank-3 .featured-player-main div,
+    .home-route .podium-rank-4 .featured-player-main div,
+    .home-route .podium-rank-5 .featured-player-main div {
         justify-content: center;
     }
 

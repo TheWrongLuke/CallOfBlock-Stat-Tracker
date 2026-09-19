@@ -11,6 +11,13 @@ import { discordAvatarCandidates, uniqueImageUrls } from "../utils/avatar-url.js
 const CHAMPION_ROTATE_MS = 5000;
 const STATS_SLICE_UPDATED_EVENT = "cob:stats-slice-updated";
 const CALL_OF_BLOCK_ICON_URL = "/assets/branding/icon-256.webp";
+const CHAMPION_MODES = [
+    { id: "battleRoyale", container: "featured-battle-royale", empty: "featured-battle-royale-empty" },
+    { id: "zombieSurvival", container: "featured-zombie-survival", empty: "featured-zombie-survival-empty" },
+    { id: "teamDeathmatch", container: "featured-team-deathmatch", empty: "featured-team-deathmatch-empty" },
+    { id: "freeForAll", container: "featured-free-for-all", empty: "featured-free-for-all-empty" },
+    { id: "duel", container: "featured-duel", empty: "featured-duel-empty" }
+];
 
 export async function initializeHomePage() {
     if (redirectLegacyRoute()) return;
@@ -78,29 +85,22 @@ function resolveShellProfile(profile, catalog) {
 }
 
 function renderHome(data, profiles, catalog) {
-    renderFeaturedList("battleRoyale", data, profiles, catalog);
-    renderFeaturedList("teamDeathmatch", data, profiles, catalog);
-    renderFeaturedList("freeForAll", data, profiles, catalog);
+    CHAMPION_MODES.forEach(({ id }) => renderFeaturedList(id, data, profiles, catalog));
     renderLatestMatch(data?.latestMatch || null);
     renderCreatorProfile(profiles, catalog);
 }
 
 function renderFeaturedList(mode, data, profiles, catalog) {
-    const containers = {
-        battleRoyale: "featured-battle-royale",
-        teamDeathmatch: "featured-team-deathmatch",
-        freeForAll: "featured-free-for-all"
-    };
-    const container = document.getElementById(containers[mode]);
+    const modeConfig = CHAMPION_MODES.find(({ id }) => id === mode);
+    const container = document.getElementById(modeConfig?.container || "");
     if (!container) return;
     const players = Array.isArray(data?.modes?.[mode]?.players) ? data.modes[mode].players.slice(0, 5) : [];
-    if (!players.length) {
-        container.innerHTML = '<p class="mode-empty">No games have been played yet.</p>';
-        return;
-    }
+    const emptyState = document.getElementById(modeConfig?.empty || "");
+    if (emptyState) emptyState.hidden = players.length > 0;
 
-    container.innerHTML = players
+    container.innerHTML = Array.from({ length: 5 }, (_value, index) => players[index] || null)
         .map((player, index) => {
+            if (!player) return renderEmptyChampionSlot(index);
             const profile = findAccountProfile(profiles, player);
             const name = String(profile?.display_name || player.name || "Unknown player");
             const avatarCandidates = profileAvatarCandidates(profile, player, catalog, 96);
@@ -121,6 +121,17 @@ function renderFeaturedList(mode, data, profiles, catalog) {
             </a>`;
         })
         .join("");
+}
+
+function renderEmptyChampionSlot(index) {
+    return `<div class="featured-player champion-slot-empty podium-rank-${index + 1}" aria-label="Champion slot ${index + 1} is empty">
+        <span class="player-avatar featured-avatar champion-placeholder-avatar" aria-hidden="true"></span>
+        <div class="featured-player-main">
+            <div><span class="rank-badge rank-${Math.min(index + 1, 3)}">${index + 1}</span><strong>Empty</strong></div>
+            <small>No result</small>
+        </div>
+        <div class="featured-player-stat" aria-hidden="true"><strong>-</strong><span>WR</span></div>
+    </div>`;
 }
 
 function renderLatestMatch(match) {
@@ -175,7 +186,7 @@ async function loadPublicProfiles(client, data) {
     const names = [
         ...new Set([
             "RTXLuke",
-            ...["battleRoyale", "teamDeathmatch", "freeForAll"].flatMap((mode) =>
+            ...CHAMPION_MODES.map(({ id }) => id).flatMap((mode) =>
                 (Array.isArray(data?.modes?.[mode]?.players) ? data.modes[mode].players : []).map(
                     (player) => player?.name
                 )
@@ -282,7 +293,7 @@ function renderAvatarImage(url, name, loading = "lazy", fallbacks = []) {
 function startChampionCarousel() {
     const carousel = document.getElementById("champion-carousel");
     if (!carousel) return;
-    const modes = ["battleRoyale", "teamDeathmatch", "freeForAll"];
+    const modes = CHAMPION_MODES.map(({ id }) => id);
     let modeIndex = 0;
     let timer = 0;
     let visible = true;

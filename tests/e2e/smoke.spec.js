@@ -709,6 +709,19 @@ test("the homepage reuses its public statistics cache after a reload", async ({ 
     expect(await page.evaluate(() => window.__cobPublicDataDiagnostics?.requests?.length || 0)).toBe(0);
 });
 
+test("the homepage keeps five champion slots for every game mode", async ({ page }) => {
+    await installPageStubs(page, supabaseStub);
+    await page.goto("/");
+    await expect(page.locator("#featured-battle-royale .featured-player").first()).toBeVisible();
+    await expect(page.locator("[data-champion-panel]")).toHaveCount(5);
+    for (const mode of ["battleRoyale", "zombieSurvival", "teamDeathmatch", "freeForAll", "duel"]) {
+        const panel = page.locator(`[data-champion-panel="${mode}"]`);
+        await expect(panel.locator(".featured-header h3")).not.toBeEmpty();
+        await expect(panel.locator(".podium-list .featured-player")).toHaveCount(5);
+    }
+    await expect(page.locator("#featured-zombie-survival-empty")).toContainText("No games played yet");
+});
+
 test("the signed-in homepage account pill opens the profile drawer and reveals admin Store access", async ({
     page
 }) => {

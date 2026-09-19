@@ -107,35 +107,50 @@
             <div class="section-heading">
                 <h2>Current Champions</h2>
             </div>
-            <div class="champion-carousel" id="champion-carousel" tabindex="0" aria-label="Featured leaderboard carousel">
+            <div class="champion-carousel" id="champion-carousel" tabindex="0" aria-label="Current champions by game mode">
                 <article class="podium-panel podium-br" data-champion-panel="battleRoyale">
                     <div class="featured-header">
-                        <div>
-                            <p class="panel-kicker">Battle Royale</p>
-                            <h3>Top 5</h3>
-                        </div>
+                        <h3>Battle Royale</h3>
+                        <span class="champion-rank-label">Top 5</span>
+                        <p class="champion-empty-state" id="featured-battle-royale-empty" hidden>No games played yet</p>
                     </div>
                     <div class="featured-list podium-list" id="featured-battle-royale"></div>
                 </article>
 
+                <article class="podium-panel podium-zombie" data-champion-panel="zombieSurvival">
+                    <div class="featured-header">
+                        <h3>Zombie Survival</h3>
+                        <span class="champion-rank-label">Top 5</span>
+                        <p class="champion-empty-state" id="featured-zombie-survival-empty" hidden>No games played yet</p>
+                    </div>
+                    <div class="featured-list podium-list" id="featured-zombie-survival"></div>
+                </article>
+
                 <article class="podium-panel podium-dm" data-champion-panel="teamDeathmatch">
                     <div class="featured-header">
-                        <div>
-                            <p class="panel-kicker">Team Deathmatch</p>
-                            <h3>Top 5</h3>
-                        </div>
+                        <h3>Team Deathmatch</h3>
+                        <span class="champion-rank-label">Top 5</span>
+                        <p class="champion-empty-state" id="featured-team-deathmatch-empty" hidden>No games played yet</p>
                     </div>
                     <div class="featured-list podium-list" id="featured-team-deathmatch"></div>
                 </article>
 
                 <article class="podium-panel podium-dm" data-champion-panel="freeForAll">
                     <div class="featured-header">
-                        <div>
-                            <p class="panel-kicker">Free For All</p>
-                            <h3>Top 5</h3>
-                        </div>
+                        <h3>Free For All</h3>
+                        <span class="champion-rank-label">Top 5</span>
+                        <p class="champion-empty-state" id="featured-free-for-all-empty" hidden>No games played yet</p>
                     </div>
                     <div class="featured-list podium-list" id="featured-free-for-all"></div>
+                </article>
+
+                <article class="podium-panel podium-duel" data-champion-panel="duel">
+                    <div class="featured-header">
+                        <h3>Duels</h3>
+                        <span class="champion-rank-label">Top 5</span>
+                        <p class="champion-empty-state" id="featured-duel-empty" hidden>No games played yet</p>
+                    </div>
+                    <div class="featured-list podium-list" id="featured-duel"></div>
                 </article>
             </div>
         </div>
