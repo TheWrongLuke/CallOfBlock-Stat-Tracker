@@ -4134,6 +4134,169 @@ body[data-public-route="about"] .site-header-nav a[data-site-route="about"]::aft
     font-size: 0.92rem;
 }
 
+.featured-video-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    width: 100%;
+}
+
+.featured-video-card {
+    overflow: hidden;
+
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+
+    background: rgba(7, 13, 16, 0.65);
+
+    text-decoration: none;
+
+    transition:
+        transform 0.18s ease,
+        border-color 0.18s ease;
+}
+
+.featured-video-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(118, 230, 94, 0.55);
+}
+
+.featured-video-thumb {
+    position: relative;
+    overflow: hidden;
+    aspect-ratio: 16 / 9;
+    background: #05090b;
+}
+
+.featured-video-thumb img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+
+    transition: transform 0.25s ease;
+}
+
+.featured-video-card:hover .featured-video-thumb img {
+    transform: scale(1.035);
+}
+
+.featured-video-play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+
+    transform: translate(-50%, -50%);
+
+    display: grid;
+    place-items: center;
+
+    width: 48px;
+    height: 48px;
+
+    border-radius: 50%;
+
+    background: rgba(5, 10, 12, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+
+    color: white;
+    font-size: 17px;
+
+    padding-left: 3px;
+}
+
+.featured-video-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    padding: 13px 15px 15px;
+}
+
+.featured-video-info span {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #7de66c;
+}
+
+.featured-video-info strong {
+    color: #e8edf2;
+    font-size: 0.95rem;
+}
+
+@media (max-width: 700px) {
+    .featured-video-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .launcher-links {
+        gap: 10px;
+    }
+}
+
+.launcher-links {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    width: 100%;
+}
+
+.launcher-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    min-width: 95px;
+    padding: 14px 12px;
+
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+
+    text-decoration: none;
+    transition:
+        transform 0.18s ease,
+        border-color 0.18s ease,
+        background 0.18s ease;
+}
+
+.launcher-link img {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+}
+
+.launcher-link strong {
+    font-size: 0.82rem;
+    color: #e8edf2;
+}
+
+.launcher-link:hover {
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.curseforge-link:hover {
+    border-color: #f16436;
+}
+
+.modrinth-link:hover {
+    border-color: #1bd96a;
+}
+
+/* Your CurseForge SVG is black, so make it visible on the dark site */
+.curseforge-link img {
+    filter: invert(1);
+}
+
+.download-note {
+    margin-top: 10px;
+    font-size: 0.72rem;
+    color: #81909b;
+}
+
 .server-pill {
     color: rgba(238, 244, 241, 0.78);
     border-color: rgba(238, 244, 241, 0.16);

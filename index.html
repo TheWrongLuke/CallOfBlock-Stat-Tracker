@@ -292,13 +292,32 @@
                     <span>Server Access</span>
                     <strong>Not public yet</strong>
                 </article>
-                <article>
+                <article class="modpack-card">
                     <span>Modpack</span>
-                    <div class="link-row">
-                        <a href="https://www.curseforge.com/minecraft/modpacks/call-of-block" target="_blank" rel="noopener noreferrer">Download the official Call of Block modpack on CurseForge</a>
-                        <a href="https://modrinth.com/modpack/call-of-block" target="_blank" rel="noopener noreferrer">Download the official Call of Block modpack on Modrinth</a>
-                        <span class="download-note">Launcher install recommended</span>
+
+                    <div class="launcher-links">
+                        <a class="launcher-link curseforge-link"
+                            href="https://www.curseforge.com/minecraft/modpacks/call-of-block"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Download Call of Block on CurseForge">
+
+                            <img src="/assets/icons/curseforge.svg" alt="">
+                            <strong>CurseForge</strong>
+                        </a>
+
+                        <a class="launcher-link modrinth-link"
+                            href="https://modrinth.com/modpack/call-of-block"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Download Call of Block on Modrinth">
+
+                            <img src="/assets/icons/modrinth.svg" alt="">
+                            <strong>Modrinth</strong>
+                        </a>
                     </div>
+
+                    <span class="download-note">Launcher install recommended</span>
                 </article>
                 <article>
                     <span>YouTube</span>
@@ -308,15 +327,56 @@
         </section>
 
         <section class="video-section">
-            <div>
+            <div class="video-section-copy">
                 <p class="panel-kicker">Featured Videos</p>
-                <h2>Call of Block clips and updates.</h2>
-                <p>Follow TheWrongLuke on YouTube for Call of Block match highlights, trailers, development updates, and event recaps.</p>
+                <h2>See Call of Block in action.</h2>
+                <p>
+                    Short gameplay showcases covering movement,
+                    weapons, the shooting range and loadout creation.
+                </p>
             </div>
-            <div class="video-card">
-                <span>YouTube</span>
-                <strong>TheWrongLuke</strong>
-                <a href="https://www.youtube.com/@thewrongluke" target="_blank" rel="noopener noreferrer">Open channel</a>
+
+            <div class="featured-video-grid">
+
+                <a class="featured-video-card"
+                    href="https://youtu.be/JZqvvCtTd6Y"
+                    target="_blank"
+                    rel="noopener noreferrer">
+
+                    <div class="featured-video-thumb">
+                        <img
+                            src="https://i.ytimg.com/vi/JZqvvCtTd6Y/hqdefault.jpg"
+                            alt="Call of Block parkour showcase">
+
+                        <span class="featured-video-play" aria-hidden="true">▶</span>
+                    </div>
+
+                    <div class="featured-video-info">
+                        <span>Gameplay Showcase</span>
+                        <strong>Parkour Movement</strong>
+                    </div>
+                </a>
+
+
+                <a class="featured-video-card"
+                    href="https://youtu.be/Os_69_Fz0xU"
+                    target="_blank"
+                    rel="noopener noreferrer">
+
+                    <div class="featured-video-thumb">
+                        <img
+                            src="https://i.ytimg.com/vi/Os_69_Fz0xU/hqdefault.jpg"
+                            alt="Call of Block shooting range and kit creation">
+
+                        <span class="featured-video-play" aria-hidden="true">▶</span>
+                    </div>
+
+                    <div class="featured-video-info">
+                        <span>Gameplay Showcase</span>
+                        <strong>Shooting Range &amp; Kit Creation</strong>
+                    </div>
+                </a>
+
             </div>
         </section>
 
