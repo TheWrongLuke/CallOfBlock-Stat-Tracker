@@ -4,7 +4,7 @@ function rpcObject(data) {
 
 export async function ensureWeeklyMissions(client) {
     if (!client?.rpc) return { data: null, error: new Error("A Supabase client is required.") };
-    const result = await client.rpc("ensure_weekly_missions_v2");
+    const result = await client.rpc("get_weekly_mission_state_v4");
     return { ...result, data: rpcObject(result.data) };
 }
 

@@ -2,6 +2,27 @@
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
 export function weeklyMissionProgress(profile, mission) {
+    const authoritative = mission?.serverProgress;
+    if (authoritative && typeof authoritative.complete === "boolean") {
+        const value = Math.max(0, number(authoritative.value));
+        const target = Math.max(1, number(authoritative.target));
+        return {
+            value,
+            target,
+            complete: authoritative.complete,
+            progress: Math.max(0, Math.min(1, number(authoritative.progress))),
+            status: Array.isArray(authoritative.parts)
+                ? authoritative.parts
+                      .map(
+                          (part) =>
+                              `${modeShort(part.mode)} ${formatMetric(part.value, part.metric)} / ${formatMetric(part.target, part.metric)}`
+                      )
+                      .join(" | ")
+                : authoritative.complete
+                  ? "Complete"
+                  : `${formatMetric(value, mission.metric)} / ${formatMetric(target, mission.metric)}`
+        };
+    }
     const requirement = normalizeRequirements(mission?.requirements);
     if (requirement.type === "all") {
         const baselines = Array.isArray(mission?.baseline?.values) ? mission.baseline.values : [];
@@ -114,7 +135,7 @@ function distinctValues(profile, mission, requirement) {
             mapEntries(profile).map((entry) => [entry.id, number(normalizeStats(entry.stats)[requirement.metric])])
         );
     const weapons = weaponEntries(profile, mission.mode).filter(
-        (entry) => entry.id && weaponCategory(entry) !== "utility"
+        (entry) => entry.id && entry.id !== "unknown" && weaponCategory(entry) !== "utility"
     );
     if (requirement.collection === "categories") {
         const values = {};

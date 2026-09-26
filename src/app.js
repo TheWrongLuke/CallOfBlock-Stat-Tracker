@@ -1,6 +1,5 @@
 import { createFeedbackApi } from "./api/feedback.js";
 import { weeklyMissionProgress } from "./core/weekly-mission-progress.js";
-import { findStatsProfile, mergeStatsProfile } from "./core/mission-profile.js";
 import { createNotificationApi } from "./api/notifications.js";
 import {
     deleteOwnAccount,
@@ -61,6 +60,13 @@ import {
 import { claimCanonicalProgressionCosmetics } from "./services/progression-claims.js";
 import { renderGiftNotificationPopup, renderNotificationInbox } from "./views/notifications.js";
 const performanceDiagnostics = createPerformanceDiagnostics();
+
+window.setInterval(() => {
+    if (!document.hidden && (state.accountPanelOpen || state.view === "account")) void syncWeeklyMissions();
+}, 30_000);
+window.addEventListener("focus", () => {
+    if (state.accountPanelOpen || state.view === "account") void syncWeeklyMissions();
+});
 globalThis.__cobPerformanceDiagnostics = performanceDiagnostics;
 const STATS_REQUEST_TIMEOUT_MS = 4_500;
 const STATUS_REQUEST_TIMEOUT_MS = 2_500;
@@ -8868,40 +8874,23 @@ async function syncWeeklyMissions() {
     if (missionState.syncing) return;
 
     const cycle = weeklyMissionCycle();
-    if (
-        missionState.source === "local" &&
-        missionState.row?.cycle_key === cycle.key &&
-        !(missionState.row.awaiting_link && profile)
-    )
-        return;
     missionState.syncing = true;
-    missionState.loading = !missionState.row || missionState.row.cycle_key !== cycle.key;
+    missionState.loading = true;
+    missionState.statsProfile = null;
     renderAccountMissionViews();
 
     try {
-        const playerId = accountStatsPlayerId();
-        if (playerId && (missionState.statsPlayerId !== playerId || !missionState.statsProfile
-            || Date.now() - (missionState.statsLoadedAt || 0) >= 30_000)) {
-            const results = await Promise.all(["", ":weapons", ":maps"].map(async (suffix) => {
-                const result = await fetchSupabaseExport({ rowId: `profile:${playerId}${suffix}` });
-                return findStatsProfile(result.payload, playerId);
-            }));
-            if (state.weeklyMissions !== missionState || state.authProfile?.id !== account.id) return;
-            missionState.statsProfile = results.every(Boolean) ? mergeStatsProfile(...results) : null;
-            missionState.statsPlayerId = playerId;
-            missionState.statsLoadedAt = Date.now();
-        }
-        let row = missionState.row?.cycle_key === cycle.key ? missionState.row : null;
-        if (!row || (row.awaiting_link && profile)) row = await loadRemoteWeeklyMissionRow(account, profile, cycle);
+        const row = await loadRemoteWeeklyMissionRow(account, profile, cycle);
         if (state.weeklyMissions !== missionState || state.authProfile?.id !== account.id) return;
+        missionState.statsProfile = row.stats_profile || null;
         missionState.row = normalizeWeeklyMissionRow(row);
         missionState.source = "supabase";
         missionState.message = "";
     } catch (error) {
         console.warn("Weekly mission persistence is not available", error);
-        missionState.row = loadLocalWeeklyMissionRow(account, profile, cycle);
-        missionState.source = "local";
-        missionState.message = "Preview mode: secure weekly mission persistence is currently unavailable.";
+        if (state.weeklyMissions !== missionState || state.authProfile?.id !== account.id) return;
+        missionState.statsProfile = null;
+        missionState.message = "Mission statistics are unavailable. Reopen this panel to retry.";
     } finally {
         missionState.loading = false;
         missionState.syncing = false;
@@ -8923,6 +8912,8 @@ async function loadRemoteWeeklyMissionRow(account, profile, cycle) {
     return data;
 }
 
+// Offline preview tooling only. Live account views must not substitute local assignments.
+// eslint-disable-next-line no-unused-vars
 function loadLocalWeeklyMissionRow(account, profile, cycle) {
     const storageId = `${account.id}:${cycle.key}`;
     try {
@@ -9033,6 +9024,9 @@ async function claimWeeklyMission(missionId) {
     } finally {
         missionState.claimingId = "";
         renderAccountMissionViews();
+        if (state.weeklyMissions === missionState && state.authProfile?.id === accountId) {
+            await syncWeeklyMissions();
+        }
     }
 }
 
@@ -9103,6 +9097,7 @@ function renderWeeklyMissionSwapDialog() {
 
 async function submitWeeklyMissionSwap() {
     const missionState = state.weeklyMissions;
+    const accountId = state.authProfile?.id;
     const mission = missionState.row?.missions?.find((entry) => entry.id === missionState.swapMissionId);
     if (
         isCurrentAccountCommunityBanned() ||
@@ -9117,6 +9112,7 @@ async function submitWeeklyMissionSwap() {
     renderWeeklyMissionSwapDialog();
     try {
         const { data, error } = await swapWeeklyMission(state.authClient, mission.id);
+        if (state.weeklyMissions !== missionState || state.authProfile?.id !== accountId) return;
         if (error) throw error;
         missionState.row = normalizeWeeklyMissionRow(data);
         missionState.message = "Mission swapped. The new mission starts from your current stats.";
@@ -9128,6 +9124,9 @@ async function submitWeeklyMissionSwap() {
         missionState.swapping = false;
         renderWeeklyMissionSwapDialog();
         renderAccountMissionViews();
+        if (state.weeklyMissions === missionState && state.authProfile?.id === accountId) {
+            await syncWeeklyMissions();
+        }
     }
 }
 

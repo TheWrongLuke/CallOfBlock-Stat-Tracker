@@ -272,6 +272,21 @@ const adminSupabaseStub = `
                     }
                 },
                 rpc: async (name, args = {}) => {
+                    if (name === "get_weekly_mission_state_v4") {
+                        const {findStatsProfile, mergeStatsProfile} = await import(location.origin + '/src/core/mission-profile.js');
+                        const {weeklyMissionProgress} = await import(location.origin + '/src/core/weekly-mission-progress.js');
+                        const snapshots = await Promise.all(['', ':weapons', ':maps'].map(async (suffix) => {
+                            const response = await fetch('https://test.supabase.co/rest/v1/cob_stats_exports?id=eq.'
+                                + encodeURIComponent('profile:' + profile.minecraft_player_id + suffix));
+                            const rows = await response.json();
+                            return findStatsProfile(rows[0]?.payload, profile.minecraft_player_id);
+                        }));
+                        const stats = snapshots.every(Boolean) ? mergeStatsProfile(...snapshots) : null;
+                        if (stats?.battleRoyale?.stats) stats.battleRoyale.stats.kills += window.__missionBonus || 0;
+                        return {data: {...missionRow, stats_profile: stats, missions: missionRow.missions.map(mission => ({
+                            ...mission, serverProgress: stats ? weeklyMissionProgress(stats, mission) : undefined
+                        }))}, error: null};
+                    }
                     if (name === "get_my_notification_preferences") {
                         return { data: { ...emailPreferences }, error: null };
                     }
@@ -313,8 +328,6 @@ const adminSupabaseStub = `
                     return {
                         data: name === "sync_discord_profile_v2" || name === "save_profile_customization_v2"
                             ? profile
-                            : name === "ensure_weekly_missions_v2"
-                                ? missionRow
                                 : name === "reconcile_cosmetic_ownership_v2"
                                     ? { eligible: 0, added: 0, removed: 0 }
                                     : name === "admin_list_managed_players"
@@ -350,7 +363,7 @@ const discordAvatarSupabaseStub = adminSupabaseStub
     .replace('image_url: "./assets/branding/icon.png"', 'image_url: "./Icon.png"');
 
 const giftSupabaseStub = adminSupabaseStub.replace(
-    'rpc: async (name, args = {}) => {\n                    if (name === "get_my_notification_preferences"',
+    "rpc: async (name, args = {}) => {",
     `rpc: async (name, args = {}) => {
                     window.__giftNotification = window.__giftNotification || {
                         id: "323e4567-e89b-42d3-a456-426614174222",
@@ -384,7 +397,7 @@ const giftSupabaseStub = adminSupabaseStub.replace(
                         gift.deleted = true;
                         return { data: true, error: null };
                     }
-                    if (name === "get_my_notification_preferences"`
+                    `
 );
 
 const delayedAdminSupabaseStub = `window.__profileSyncDelayMs = 1200;\n${adminSupabaseStub}`
@@ -496,7 +509,9 @@ test("homepage and primary navigation load without fatal errors", async ({ page 
     page.on("pageerror", (error) => pageErrors.push(error.message));
     await openApp(page);
     await expect(page.getByRole("heading", { level: 1, name: "Call of Block" })).toBeVisible();
-    await expect(page.locator(".video-card")).toBeVisible();
+    await expect(page.locator(".featured-video-card")).toHaveCount(2);
+    await expect(page.locator(".featured-video-card").first()).toHaveAttribute("href", "https://youtu.be/JZqvvCtTd6Y");
+    await expect(page.locator(".featured-video-card").last()).toHaveAttribute("href", "https://youtu.be/Os_69_Fz0xU");
     await expect(page.locator("#leaderboard-view")).toBeHidden();
     await expect(page.locator("[data-stats-refresh-control]")).toBeHidden();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
@@ -522,9 +537,7 @@ test("public pages do not expose editorial placeholder copy", async ({ page }) =
     }
 
     await page.goto("/");
-    await expect(page.locator(".video-section")).toContainText(
-        "Follow TheWrongLuke on YouTube for Call of Block match highlights, trailers, development updates, and event recaps."
-    );
+    await expect(page.locator(".video-section")).toContainText("See Call of Block in action.");
 });
 
 test("public pages keep the compact mobile shell at supported widths", async ({ page }) => {
@@ -970,6 +983,12 @@ for (const route of ["/", "/stats/", "/playtests/", "/feedback/", "/help/", "/ab
                         }
                     })
                 );
+            });
+            // Partial exports cannot replace the authenticated, complete mission snapshot.
+            await expect(br).toContainText("23 / 100");
+            await page.evaluate(() => {
+                window.__missionBonus = 10;
+                window.dispatchEvent(new Event("focus"));
             });
             await expect(br).toContainText("33 / 100");
             await expect(weapon).toContainText("5 / 10");

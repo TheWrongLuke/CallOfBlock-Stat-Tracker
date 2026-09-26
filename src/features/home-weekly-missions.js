@@ -1,6 +1,5 @@
 import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "../api/weekly-missions.js";
 import { weeklyMissionProgress } from "../core/weekly-mission-progress.js";
-import { findStatsProfile, mergeStatsProfile } from "../core/mission-profile.js";
 export { weeklyMissionProgress } from "../core/weekly-mission-progress.js";
 import { escapeHtml, formatDate, number } from "../core/site-shell.js";
 
@@ -21,8 +20,7 @@ export function initializeHomeWeeklyMissions(shell) {
         message: "",
         identity: "",
         generation: 0,
-        loadedAt: 0,
-        slices: {}
+        loadedAt: 0
     };
 
     shell.setAccountPanelAddon(() => renderWeeklyMissions(state));
@@ -34,21 +32,16 @@ export function initializeHomeWeeklyMissions(shell) {
         shell.refreshAccountPanel();
         if (shell.accountPanelOpen) void loadWeeklyMissions(shell, state);
     });
-    window.addEventListener("cob:stats-slice-updated", (event) => {
-        if (state.loading || !state.loaded || state.identity !== accountIdentity(shell)) return;
-        const playerId = String(shell.profile?.minecraft_player_id || "").trim();
-        const slot = [`profile:${playerId}`, `profile:${playerId}:weapons`, `profile:${playerId}:maps`].indexOf(
-            event.detail?.id
-        );
-        if (slot < 0) return;
-        state.slices[slot] = findStatsProfile(event.detail.payload, playerId);
-        state.statsProfile = mergeStatsProfile(state.slices[0], state.slices[1], state.slices[2]);
-        shell.refreshAccountPanel();
+    window.addEventListener("focus", () => {
+        if (shell.accountPanelOpen) void loadWeeklyMissions(shell, state, true);
     });
+    window.setInterval(() => {
+        if (!document.hidden && shell.accountPanelOpen) void loadWeeklyMissions(shell, state, true);
+    }, 30_000);
     if (shell.accountPanelOpen) void loadWeeklyMissions(shell, state);
 }
 
-async function loadWeeklyMissions(shell, state, force = false) {
+async function loadWeeklyMissions(shell, state, force = true) {
     resetIdentity(shell, state);
     if (
         state.loading ||
@@ -59,31 +52,16 @@ async function loadWeeklyMissions(shell, state, force = false) {
         return;
     const generation = state.generation;
     state.loading = true;
+    state.statsProfile = null;
     state.message = "";
     shell.refreshAccountPanel();
     try {
         const playerId = String(shell.profile.minecraft_player_id || "").trim();
-        const [missionsResult, corePayload, weaponsPayload, mapsPayload] = await Promise.all([
-            ensureWeeklyMissions(shell.client),
-            playerId
-                ? shell.loadStatsSlice(`profile:${playerId}`, { force: true, fallback: false })
-                : Promise.resolve(null),
-            playerId
-                ? shell.loadStatsSlice(`profile:${playerId}:weapons`, { force: true, fallback: false })
-                : Promise.resolve(null),
-            playerId
-                ? shell.loadStatsSlice(`profile:${playerId}:maps`, { force: true, fallback: false })
-                : Promise.resolve(null)
-        ]);
+        const missionsResult = await ensureWeeklyMissions(shell.client);
         if (generation !== state.generation || state.identity !== accountIdentity(shell)) return;
         if (missionsResult.error) throw missionsResult.error;
         state.row = normalizeMissionRow(missionsResult.data);
-        state.slices = [
-            findStatsProfile(corePayload, playerId),
-            findStatsProfile(weaponsPayload, playerId),
-            findStatsProfile(mapsPayload, playerId)
-        ];
-        state.statsProfile = state.slices.every(Boolean) ? mergeStatsProfile(...state.slices) : null;
+        state.statsProfile = missionsResult.data?.stats_profile || null;
         state.loaded = Boolean(state.statsProfile) || !playerId;
         state.loadedAt = Date.now();
         if (!state.statsProfile)
@@ -117,7 +95,6 @@ function resetIdentity(shell, state) {
         loaded: false,
         loading: false,
         loadedAt: 0,
-        slices: {},
         busyId: "",
         swapId: "",
         rewardingId: "",
@@ -174,7 +151,7 @@ async function handleMissionSubmit(event, shell, state) {
         if (generation === state.generation) {
             state.busyId = "";
             renderSwapDialog(state);
-            shell.refreshAccountPanel();
+            await loadWeeklyMissions(shell, state, true);
         }
     }
 }
@@ -208,7 +185,7 @@ async function claimMission(shell, state, missionId) {
     } finally {
         if (generation === state.generation) {
             state.busyId = "";
-            shell.refreshAccountPanel();
+            await loadWeeklyMissions(shell, state, true);
         }
     }
 }

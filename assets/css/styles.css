@@ -4142,6 +4142,8 @@ body[data-public-route="about"] .site-header-nav a[data-site-route="about"]::aft
 }
 
 .featured-video-card {
+    display: block;
+    min-width: 0;
     overflow: hidden;
 
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -4216,7 +4218,7 @@ body[data-public-route="about"] .site-header-nav a[data-site-route="about"]::aft
 .featured-video-info span {
     font-size: 0.65rem;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0;
     color: #7de66c;
 }
 
@@ -4237,6 +4239,7 @@ body[data-public-route="about"] .site-header-nav a[data-site-route="about"]::aft
 
 .launcher-links {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 18px;
     width: 100%;
@@ -4262,12 +4265,6 @@ body[data-public-route="about"] .site-header-nav a[data-site-route="about"]::aft
         background 0.18s ease;
 }
 
-.launcher-link img {
-    width: 44px;
-    height: 44px;
-    object-fit: contain;
-}
-
 .launcher-link strong {
     font-size: 0.82rem;
     color: #e8edf2;
@@ -4284,11 +4281,6 @@ body[data-public-route="about"] .site-header-nav a[data-site-route="about"]::aft
 
 .modrinth-link:hover {
     border-color: #1bd96a;
-}
-
-/* Your CurseForge SVG is black, so make it visible on the dark site */
-.curseforge-link img {
-    filter: invert(1);
 }
 
 .download-note {
@@ -6293,16 +6285,21 @@ body.notification-gift-open {
 
 .video-section {
     display: grid;
-    grid-template-columns: minmax(0, 0.72fr) minmax(320px, 0.28fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
     align-items: stretch;
     padding: clamp(22px, 3vw, 34px);
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: none;
 }
 
 .video-section h2 {
     margin: 8px 0 0;
     font-family: "Chakra Petch", sans-serif;
-    font-size: clamp(1.9rem, 3.2vw, 3.4rem);
+    font-size: 2rem;
     line-height: 0.94;
 }
 

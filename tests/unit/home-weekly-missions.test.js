@@ -18,6 +18,40 @@ const profile = {
 };
 
 describe("homepage weekly mission progress", () => {
+    it("uses reward-validated server progress instead of a stale local profile", () => {
+        const mission = {
+            metric: "kills",
+            mode: "battleRoyale",
+            target: 10,
+            serverProgress: { value: 7, target: 10, complete: false, progress: 0.7 }
+        };
+        expect(sharedProgress(profile, mission)).toMatchObject({
+            value: 7,
+            target: 10,
+            complete: false,
+            progress: 0.7,
+            status: "7 / 10"
+        });
+        expect(sharedProgress(null, mission)).toEqual(sharedProgress(profile, mission));
+    });
+
+    it("preserves multipart completion and fraction from the server", () => {
+        const mission = {
+            serverProgress: {
+                value: 15,
+                target: 12,
+                complete: false,
+                progress: 0.5,
+                parts: [
+                    { mode: "battleRoyale", metric: "kills", value: 15, target: 10 },
+                    { mode: "deathmatch", metric: "wins", value: 0, target: 2 }
+                ]
+            }
+        };
+        expect(sharedProgress(profile, mission)).toMatchObject({ complete: false, progress: 0.5 });
+        expect(sharedProgress(profile, mission).status).toContain("0 / 2");
+    });
+
     it("uses exactly the same calculator as the Stats account page", () => {
         expect(weeklyMissionProgress).toBe(sharedProgress);
     });

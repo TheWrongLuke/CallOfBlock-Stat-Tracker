@@ -8,7 +8,7 @@ describe("weekly mission API", () => {
 
         const result = await ensureWeeklyMissions({ rpc });
 
-        expect(rpc).toHaveBeenCalledWith("ensure_weekly_missions_v2");
+        expect(rpc).toHaveBeenCalledWith("get_weekly_mission_state_v4");
         expect(result.data).toEqual(row);
     });
 
