@@ -1,6 +1,21 @@
 // Shared by every account surface; progress is derived from exported statistics and saved baselines.
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
+// Capture the same metrics used below; callers choose the authoritative assignment-time profile.
+export function weeklyMissionBaseline(profile, mission) {
+    const requirement = normalizeRequirements(mission?.requirements);
+    if (requirement.type === "all") {
+        return {
+            type: "all",
+            values: requirement.components.map((component) => missionMetric(profile, { ...mission, ...component }))
+        };
+    }
+    if (requirement.type === "distinct") {
+        return { type: "distinct", values: distinctValues(profile, mission, requirement) };
+    }
+    return requirementValue(profile, mission, requirement);
+}
+
 export function weeklyMissionProgress(profile, mission) {
     const authoritative = mission?.serverProgress;
     if (authoritative && typeof authoritative.complete === "boolean") {
@@ -172,7 +187,7 @@ function missionModes(profile, mode) {
     return ["battleRoyale", ...dm];
 }
 
-function weaponEntries(profile, mode) {
+export function weaponEntries(profile, mode) {
     if (!profile) return [];
     const merged = new Map();
     for (const weapon of missionModes(profile, mode).flatMap((key) => profile[key]?.details?.weapons || [])) {
@@ -256,7 +271,7 @@ function combineStats(...sources) {
     return total;
 }
 
-function weaponCategory(entry) {
+export function weaponCategory(entry) {
     const value = `${entry?.id || ""} ${entry?.label || ""}`.toLowerCase();
     if (/grenade|smoke|knife|m320|launcher|mine|c4|rocket/.test(value)) return "utility";
     if (/m1014|shotgun/.test(value)) return "shotgun";

@@ -2,6 +2,7 @@ import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } fro
 import { weeklyMissionProgress } from "../core/weekly-mission-progress.js";
 export { weeklyMissionProgress } from "../core/weekly-mission-progress.js";
 import { escapeHtml, formatDate, number } from "../core/site-shell.js";
+import { applyNetworkAccountProjection } from "../core/network-profile.js";
 
 const MISSION_LIMIT = 7;
 const initializedShells = new WeakSet();
@@ -60,6 +61,7 @@ async function loadWeeklyMissions(shell, state, force = true) {
         const missionsResult = await ensureWeeklyMissions(shell.client);
         if (generation !== state.generation || state.identity !== accountIdentity(shell)) return;
         if (missionsResult.error) throw missionsResult.error;
+        applyMissionAccountProfile(shell, state, missionsResult.data);
         state.row = normalizeMissionRow(missionsResult.data);
         state.statsProfile = missionsResult.data?.stats_profile || null;
         state.loaded = Boolean(state.statsProfile) || !playerId;
@@ -82,6 +84,15 @@ async function loadWeeklyMissions(shell, state, force = true) {
 
 function accountIdentity(shell) {
     return [shell.profile?.id, shell.profile?.minecraft_player_id, shell.profile?.minecraft_player_name].join(":");
+}
+
+export function applyMissionAccountProfile(shell, state, row) {
+    if (row?.environment !== "TEST" || row.user_id !== shell.profile?.id) return;
+    const profile = { ...applyNetworkAccountProjection(shell.profile, row), network_stats_unavailable: false };
+    // UUID adoption on the first successful read must not invalidate this same account's
+    // in-flight mission request. A different authenticated account is never accepted here.
+    state.identity = accountIdentity({ ...shell, profile });
+    shell.setProfile(profile);
 }
 
 function resetIdentity(shell, state) {
@@ -169,7 +180,8 @@ async function claimMission(shell, state, missionId) {
         if (generation !== state.generation) return;
         if (result.error) throw result.error;
         state.row.claimed_ids = stringArray(result.data?.claimed_ids || [...claimed, missionId]);
-        if (Number.isFinite(Number(result.data?.xp)))
+        if (result.data?.environment === "TEST") applyMissionAccountProfile(shell, state, result.data);
+        else if (Number.isFinite(Number(result.data?.xp)))
             shell.setProfile({ ...shell.profile, xp: number(result.data.xp) });
         state.rewardingId = missionId;
         state.message = "";

@@ -53,6 +53,60 @@
             "The How to Play and FAQ sections also cover server access, playtests, profiles, privacy and website safety."
         ]
     },
+    "admin-matches": {
+        "directory": "admin/matches",
+        "path": "/admin/matches/",
+        "private": true,
+        "entry": "admin",
+        "title": "Call of Block Admin Matches",
+        "description": "Protected match administration.",
+        "heading": "Matches"
+    },
+    "admin-tickets": {
+        "directory": "admin/tickets",
+        "path": "/admin/tickets/",
+        "private": true,
+        "entry": "admin",
+        "title": "Call of Block Admin Tickets",
+        "description": "Protected ticket administration.",
+        "heading": "Tickets"
+    },
+    "admin-progression": {
+        "directory": "admin/progression",
+        "path": "/admin/progression/",
+        "private": true,
+        "entry": "admin",
+        "title": "Call of Block Admin Progression",
+        "description": "Protected progression administration.",
+        "heading": "Progression"
+    },
+    "admin-community": {
+        "directory": "admin/community",
+        "path": "/admin/community/",
+        "private": true,
+        "entry": "admin",
+        "title": "Call of Block Admin Community",
+        "description": "Protected playtest administration.",
+        "heading": "Community"
+    },
+    "admin-catalog": {
+        "directory": "admin/catalog",
+        "path": "/admin/catalog/",
+        "private": true,
+        "entry": "admin",
+        "title": "Call of Block Admin Catalog",
+        "description": "Protected catalog administration.",
+        "heading": "Catalog"
+    },
+    "admin": {
+        "directory": "admin",
+        "path": "/admin/",
+        "private": true,
+        "entry": "admin",
+        "title": "Call of Block Administration",
+        "description": "Protected Call of Block administration.",
+        "heading": "Administration"
+    },
     "admin-docs": {
         "directory": "admin/docs",
         "path": "/admin/docs/",

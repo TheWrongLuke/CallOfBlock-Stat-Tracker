@@ -1,7 +1,9 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { transform } from "lightningcss";
+import { publicNetworkRuntime } from "./network-runtime-config.mjs";
+import { isPublicBuildFile } from "./public-build-files.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDirectory, "..");
@@ -9,6 +11,7 @@ const output = path.join(root, "dist");
 const config = JSON.parse(await readFile(path.join(root, "config", "site.config.json"), "utf8"));
 const pages = JSON.parse(await readFile(path.join(root, "config", "public-pages.json"), "utf8"));
 const publicSiteUrl = String(process.env.COB_PUBLIC_SITE_URL || config.publicSiteUrl).replace(/\/+$/, "/");
+const networkRuntime = publicNetworkRuntime(process.env);
 
 if (path.dirname(output) !== root || path.basename(output) !== "dist") {
     throw new Error("Refusing to clean an unexpected build directory.");
@@ -17,14 +20,20 @@ if (path.dirname(output) !== root || path.basename(output) !== "dist") {
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
-const publicFiles = ["robots.txt", "sitemap.xml", "site.webmanifest", "llms.txt"];
+const publicFiles = ["robots.txt", "sitemap.xml", "site.webmanifest"];
 const directories = ["assets", "data", "src"];
 
 for (const file of publicFiles) {
     await cp(path.join(root, "public", file), path.join(output, file));
 }
 for (const directory of directories) {
-    await cp(path.join(root, directory), path.join(output, directory), { recursive: true });
+    await cp(path.join(root, directory), path.join(output, directory), {
+        recursive: true,
+        filter: async (file) => {
+            const info = await lstat(file);
+            return !info.isSymbolicLink() && isPublicBuildFile(path.relative(root, file), info.isDirectory());
+        }
+    });
 }
 
 const stylesheetPath = path.join(root, "assets", "css", "styles.css");
@@ -47,6 +56,7 @@ const routeViewTags = new Map([
     ["community-admin-view", "main"],
     ["admin-help-view", "main"],
     ["admin-progression-view", "main"],
+    ["admin-matches-view", "main"],
     ["player-view", "section"],
     ["match-view", "main"],
     ["account-view", "main"],
@@ -55,21 +65,18 @@ const routeViewTags = new Map([
 
 const routeViewAllowlist = {
     home: new Set(["home-view"]),
-    stats: new Set([
-        "leaderboard-view",
-        "admin-tickets-view",
-        "community-admin-view",
-        "admin-progression-view",
-        "player-view",
-        "match-view",
-        "account-view",
-        "store-view"
-    ]),
-    playtests: new Set(["playtests-view", "community-admin-view"]),
+    stats: new Set(["leaderboard-view", "player-view", "match-view", "account-view"]),
+    playtests: new Set(["playtests-view"]),
     feedback: new Set(["feedback-view", "ticket-view"]),
     help: new Set(["home-view"]),
     about: new Set(),
-    "admin-docs": new Set(["admin-help-view"])
+    "admin-docs": new Set(["admin-help-view"]),
+    "admin-matches": new Set(["admin-matches-view"]),
+    "admin-tickets": new Set(["admin-tickets-view", "ticket-view"]),
+    "admin-progression": new Set(["admin-progression-view"]),
+    "admin-community": new Set(["community-admin-view"]),
+    "admin-catalog": new Set(["store-view"]),
+    admin: new Set(["admin-matches-view"])
 };
 
 for (const [id, page] of Object.entries(pages)) {
@@ -89,7 +96,7 @@ apiConfig = apiConfig.replace(
     /window\.COB_PUBLIC_SITE_URL\s*=\s*"[^"]*";/,
     `window.COB_PUBLIC_SITE_URL = ${JSON.stringify(publicSiteUrl)};`
 );
-await writeFile(apiConfigPath, apiConfig, "utf8");
+await writeFile(apiConfigPath, apiConfig + networkRuntime, "utf8");
 
 await writeFile(
     path.join(output, "robots.txt"),
@@ -164,6 +171,17 @@ function renderPageHero(html, routeId, page) {
 
 function pruneSharedPageShell(html, routeId) {
     let output = html;
+    if (routeId === "admin" || routeId.startsWith("admin-")) {
+        output = output.replace(/\s*<header class="hero">[\s\S]*?<\/header>/i, "");
+        output = output.replace(
+            /(<main\b)/i,
+            `<nav class="admin-navigation" aria-label="Administration">
+            <a href="/admin/matches/">Matches</a><a href="/admin/tickets/">Tickets</a>
+            <a href="/admin/community/">Community</a><a href="/admin/progression/">Progression</a>
+            <a href="/admin/catalog/">Catalog</a><a href="/admin/docs/">Documentation</a>
+        </nav>\n$1`
+        );
+    }
     if (routeId === "admin-docs") {
         output = output
             .replace(/\s*<header class="hero">[\s\S]*?<\/header>/i, "")
@@ -171,11 +189,11 @@ function pruneSharedPageShell(html, routeId) {
             .replace("<p>Documentation is loaded only after Supabase verifies an authenticated administrator.</p>", "")
             .replace(
                 '<button type="button" data-route="admin-tickets">Ticket dashboard</button>',
-                '<a href="/stats/#admin-tickets">Ticket dashboard</a>'
+                '<a href="/admin/tickets/">Ticket dashboard</a>'
             )
             .replace(
                 '<button type="button" data-route="admin-progression">Progression &amp; missions</button>',
-                '<a href="/stats/#admin-progression">Progression &amp; missions</a>'
+                '<a href="/admin/progression/">Progression &amp; missions</a>'
             );
     }
     if (routeId !== "home") {
@@ -189,7 +207,7 @@ function pruneSharedPageShell(html, routeId) {
     if (!new Set(["home", "stats"]).has(routeId)) {
         output = output.replace(/\s*<div class="hero-status">[\s\S]*?<\/div>(?=\s*<\/header>)/i, "");
     }
-    if (routeId !== "stats") {
+    if (routeId !== "admin-catalog") {
         output = output.replace(/\s*<script src="\.\/src\/config\/store-catalog\.js\?v=[^"]*"><\/script>/i, "");
     }
     if (routeId === "help") {

@@ -1,3 +1,5 @@
+import { networkAccountRequest } from "./network-account.js";
+
 function rpcObject(data) {
     return Array.isArray(data) ? data[0] || null : data || null;
 }
@@ -24,6 +26,8 @@ export async function syncDiscordProfile(client) {
 }
 
 export async function saveProfileCustomization(client, profile) {
+    const network = await networkAccountRequest(client, "customize", profile);
+    if (network) return network;
     if (!client?.rpc) return { data: null, error: new Error("A Supabase client is required.") };
     const result = await client.rpc("save_profile_customization_v2", {
         p_display_name: profile.displayName,

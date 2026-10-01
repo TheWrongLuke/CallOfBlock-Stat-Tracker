@@ -82,7 +82,7 @@
                     <a href="/about/" data-site-route="about">About</a>
                 </nav>
             </details>
-            <a class="store-float hidden" href="/stats/#store" data-route="store" data-admin-store-link hidden>Store</a>
+            <a class="store-float hidden" href="/admin/catalog/" data-route="store" data-admin-store-link hidden>Catalog</a>
             <div class="stats-refresh-control hidden" data-stats-refresh-control aria-live="polite">
                 <button type="button" class="stats-refresh-button" data-stats-refresh>
                     <span class="stats-refresh-symbol" aria-hidden="true">&#8635;</span>
@@ -645,7 +645,6 @@
                 <div id="playtest-list"></div>
                 <div id="playtest-identity"></div>
                 <div id="playtest-preferences"></div>
-                <div id="playtest-admin"></div>
             </aside>
             <section class="playtest-board" id="playtest-board" aria-live="polite"></section>
         </section>
@@ -666,6 +665,8 @@
     <main class="ticket-view hidden" id="ticket-view">
         <div class="ticket-detail-body" id="ticket-detail-body" aria-live="polite"></div>
     </main>
+
+    <main class="admin-matches-view hidden" id="admin-matches-view" aria-live="polite"></main>
 
     <main class="admin-tickets-view hidden" id="admin-tickets-view">
         <section class="feedback-hero">
@@ -690,6 +691,8 @@
                 <a href="https://discord.gg/y8JRduKyZA" target="_blank" rel="noopener noreferrer">Discord</a>
             </div>
         </section>
+        <div id="playtest-list"></div>
+        <div id="playtest-admin"></div>
         <section id="community-admin-board" class="community-admin-board" aria-live="polite"></section>
     </main>
     <main class="admin-help-view hidden" id="admin-help-view">

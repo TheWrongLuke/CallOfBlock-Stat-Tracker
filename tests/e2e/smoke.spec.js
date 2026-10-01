@@ -9,8 +9,19 @@ const liveStatsExportFixture = JSON.parse(
     readFileSync(new URL("../../data/stats.json", import.meta.url), "utf8").replace(/^\uFEFF/, "")
 );
 const zombieTelemetryFixture = JSON.parse(
-    readFileSync(new URL("../../data/match-telemetry/fixture-zombie.json", import.meta.url), "utf8")
+    readFileSync(new URL("../fixtures/match-telemetry/fixture-zombie.json", import.meta.url), "utf8")
 );
+
+test.beforeEach(async ({ page }) => {
+    await page.route("**/data/match-telemetry/fixture-*.json", async (route) => {
+        const name = new URL(route.request().url()).pathname.split("/").at(-1);
+        if (!/^fixture-(?:br|dm|partial|zombie)\.json$/.test(name)) return route.fallback();
+        await route.fulfill({
+            contentType: "application/json",
+            body: readFileSync(new URL(`../fixtures/match-telemetry/${name}`, import.meta.url), "utf8")
+        });
+    });
+});
 
 function zombieTelemetryWithCount(count) {
     const fixture = structuredClone(zombieTelemetryFixture);
@@ -744,7 +755,7 @@ test("the signed-in homepage account pill opens the profile drawer and reveals a
     await expect(accountButton).toBeVisible();
     await expect(accountButton).toContainText("Test Admin");
     await expect(page.locator(".store-float")).toBeVisible();
-    await expect(page.locator(".store-float")).toHaveAttribute("href", "/stats/#store");
+    await expect(page.locator(".store-float")).toHaveAttribute("href", "/admin/catalog/");
     await expect(page.locator("[data-notification-panel-open]")).toBeVisible();
     const headerLayout = await page.evaluate(() => {
         const navigation = document.querySelector(".site-header-nav")?.getBoundingClientRect();
@@ -764,7 +775,10 @@ test("the signed-in homepage account pill opens the profile drawer and reveals a
     await expect(drawer).toBeVisible();
     await expect(drawer.getByRole("heading", { name: "PROFILE" })).toBeVisible();
     await expect(drawer.getByRole("link", { name: "Customize profile" })).toHaveAttribute("href", "/stats/#account");
-    await expect(drawer.getByRole("link", { name: "Open store admin" })).toHaveAttribute("href", "/stats/#store");
+    await expect(drawer.getByRole("link", { name: "Catalog administration" })).toHaveAttribute(
+        "href",
+        "/admin/catalog/"
+    );
     await expect(drawer.getByText("Renewable Missions")).toBeVisible();
     await expect(drawer.getByText("On the Board")).toBeVisible();
 
@@ -1214,7 +1228,7 @@ test("public entry points share styling without loading unrelated tracker code",
         performance.getEntriesByType("resource").map((entry) => entry.name)
     );
     expect(statsResources.some((url) => /\/src\/app\.js(?:\?|$)/.test(url))).toBe(true);
-    expect(statsResources.some((url) => /\/src\/config\/store-catalog\.js(?:\?|$)/.test(url))).toBe(true);
+    expect(statsResources.some((url) => /\/src\/config\/store-catalog\.js(?:\?|$)/.test(url))).toBe(false);
 });
 
 test("robots and sitemap expose only canonical public pages", async ({ request }) => {
@@ -1606,18 +1620,23 @@ test("signed-in feedback restores ticket fields and evidence after reload and re
 
 test("admin routes reject a logged-out visitor", async ({ page }) => {
     const routes = [
-        ["#admin-tickets", "#admin-tickets-view", /#feedback$/],
-        ["#admin-progression", "#admin-progression-view", /\/$/],
-        ["#store", "#store-view", /\/$/],
-        ["#community-dates", "#community-admin-view", /#playtests$/],
-        ["#community-admin", "#community-admin-view", /#community-admin$/]
+        ["#admin-tickets", /\/admin\/tickets\/$/],
+        ["#admin-progression", /\/admin\/progression\/$/],
+        ["#store", /\/admin\/catalog\/$/],
+        ["#community-dates", /\/admin\/community\/$/],
+        ["#community-admin", /\/admin\/community\/$/],
+        ["#admin-matches", /\/admin\/matches\/$/]
     ];
 
     await openApp(page, routes[0][0]);
-    for (const [route, selector, fallback] of routes) {
+    for (const [route, destination] of routes) {
         await page.goto(`/${route}`);
-        await expect(page).toHaveURL(fallback);
-        await expect(page.locator(selector)).toBeHidden();
+        await expect(page).toHaveURL(destination);
+        await expect(page.locator("main:visible")).toContainText(/Administrator|administrator|Admin access required/);
+        await expect(
+            page.locator("[data-match-confirm], [data-store-catalog-edit], [data-admin-ticket-save]")
+        ).toHaveCount(0);
+        await expect(page.locator("#leaderboard-view")).toHaveCount(0);
     }
     await expect(page.getByRole("button", { name: "Admin documentation" })).toHaveCount(0);
 });
@@ -1625,7 +1644,8 @@ test("admin routes reject a logged-out visitor", async ({ page }) => {
 test("admin routes reject a signed-in non-admin on direct navigation and refresh", async ({ page }) => {
     await openMemberApp(page, "#admin-progression");
     await expect(page).not.toHaveURL(/#admin-progression$/);
-    await expect(page.locator("#admin-progression-view")).toBeHidden();
+    await expect(page).toHaveURL(/\/admin\/progression\/$/);
+    await expect(page.locator("#admin-progression-view")).toContainText(/Administrator|administrator/);
 
     await page.evaluate(() => window.history.replaceState(null, document.title, "#admin-help"));
     await page.reload();
@@ -2602,18 +2622,152 @@ test("tactical controls work from the keyboard and reduced motion stays usable",
     expect(transitionDuration).toMatch(/0\.001s|1ms/);
 });
 
-test("administrators receive protected telemetry diagnostics and replay management", async ({ page }) => {
-    await openAdminApp(page, "#view=match&match=fixture-br");
+test("normal match viewer never instantiates admin diagnostics or replay editors even for administrators", async ({
+    page
+}) => {
+    await installPageStubs(
+        page,
+        adminSupabaseStub.replace(
+            "rpc: async (name, args = {}) => {",
+            `rpc: async (name, args = {}) => {
+                if (name === "cob_list_match_replays") return { data: [{
+                    replay_id: "123e4567-e89b-42d3-a456-426614174099",
+                    label: "Public replay", visibility: "public", file_size: 2048
+                }], error: null };`
+        )
+    );
+    await page.goto("/#view=match&match=fixture-br");
 
     const matchView = page.locator("#match-view");
-    await expect(matchView.locator(".match-diagnostics")).toBeVisible();
-    await matchView.locator(".match-diagnostics").getByText("Admin telemetry diagnostics").click();
-    await expect(matchView.locator("[data-match-diagnostics]")).toContainText("No validation errors.");
-    await expect(matchView.locator("[data-match-diagnostics]")).toContainText("Snapshots");
-
+    await expect(matchView.locator(".match-diagnostics")).toHaveCount(0);
     await expect(matchView.getByRole("button", { name: "Download" })).toBeVisible();
-    await matchView.locator(".match-replay-manage").getByText("Manage").click();
-    await expect(matchView.locator("[data-replay-edit-form]")).toBeVisible();
-    await expect(matchView.locator("[data-replay-edit-form]")).toContainText("Replace file");
-    await expect(matchView.locator("[data-replay-upload-form]")).toBeVisible();
+    await expect(matchView.locator(".match-replay-manage")).toHaveCount(0);
+    await expect(matchView.locator("[data-replay-edit-form], [data-replay-upload-form]")).toHaveCount(0);
+});
+
+test("TEST match administration previews without mutation and requires confirmation for VOID and RESTORE", async ({
+    page
+}) => {
+    await installPageStubs(
+        page,
+        adminSupabaseStub.replace("session: {", 'session: { access_token: "fixture-admin-token",')
+    );
+    await page.route("**/api-config.js*", (route) =>
+        route.fulfill({
+            contentType: "text/javascript",
+            body:
+                configStub +
+                '\nwindow.COB_STATS_ENVIRONMENT="TEST";window.COB_NETWORK_STATS_API_URL=location.origin+"/functions/v1/network-stats";'
+        })
+    );
+    await page.route("**/network/**", (route) =>
+        route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"Unlinked fixture account"}' })
+    );
+    const id = "123e4567-e89b-42d3-a456-426614174099",
+        player = "123e4567-e89b-42d3-a456-426614174000";
+    let state = "COMPLETED",
+        previews = 0,
+        commits = 0;
+    const row = () => ({
+        match_id: id,
+        started_at: "2026-10-01T12:00:00Z",
+        ended_at: "2026-10-01T12:05:00Z",
+        server_id: "arena-01",
+        mode: "freeForAll",
+        map_id: "Raid",
+        player_count: 1,
+        state,
+        replay_count: 0
+    });
+    await page.route("**/admin/matches**", async (route) => {
+        const request = route.request(),
+            url = new URL(request.url());
+        if (request.headers().authorization !== "Bearer fixture-admin-token") return route.continue();
+        let body;
+        if (url.pathname.endsWith("/preview")) {
+            previews++;
+            const target = request.postDataJSON().target;
+            body = {
+                confirmation: "fixture-confirmation-" + target,
+                impact: {
+                    matchId: id,
+                    targetState: target,
+                    history: { beforeVisible: state === "COMPLETED", afterVisible: target === "COMPLETED" },
+                    replay: {
+                        artifactCount: 0,
+                        beforeVisible: state === "COMPLETED",
+                        afterVisible: target === "COMPLETED"
+                    },
+                    players: [
+                        {
+                            name: "AdminMC",
+                            playerUuid: player,
+                            stats: [
+                                {
+                                    field: "kills",
+                                    before: target === "VOIDED" ? 3 : 0,
+                                    after: target === "VOIDED" ? 0 : 3,
+                                    delta: target === "VOIDED" ? -3 : 3
+                                }
+                            ],
+                            achievementIds: [],
+                            progression: {
+                                xp: {
+                                    before: target === "VOIDED" ? 350 : 0,
+                                    after: target === "VOIDED" ? 0 : 350,
+                                    delta: target === "VOIDED" ? -350 : 350
+                                },
+                                level: { before: 1, after: 1 },
+                                changedMissions: [{ id: "kills", before: 3, after: 0 }],
+                                changedClaims: [],
+                                changedBadges: [],
+                                revokedEntitlements: target === "VOIDED" ? [{ type: "title", id: "earned-title" }] : [],
+                                addedEntitlements: []
+                            }
+                        }
+                    ]
+                }
+            };
+        } else if (url.pathname.endsWith("/confirm")) {
+            const submitted = request.postDataJSON();
+            expect(submitted.confirmed).toBe(true);
+            expect(submitted.reason).toBe("Private test cleanup");
+            state = submitted.confirmation.endsWith("VOIDED") ? "VOIDED" : "COMPLETED";
+            commits++;
+            body = { state };
+        } else if (url.pathname.endsWith("/" + id)) {
+            body = {
+                match: row(),
+                players: [{ name: "AdminMC", playerUuid: player, raw: { kills: 3 }, contribution: { kills: 3 } }],
+                replays: [],
+                recordings: [],
+                incidents: [],
+                finalization: { retries: 1 },
+                operations: []
+            };
+        } else body = { matches: [row()] };
+        return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+    });
+    await page.goto("/admin/matches/");
+    await page.locator("[data-match-open]").click();
+    await expect(page.locator("[data-match-preview]")).toHaveText("Void Match");
+    for (const operation of ["Void", "Restore"]) {
+        await page.getByRole("button", { name: operation + " Match", exact: true }).click();
+        const dialog = page.getByRole("dialog");
+        await expect(dialog).toContainText("AdminMC");
+        await expect(dialog).toContainText("350");
+        expect(commits).toBe(operation === "Void" ? 0 : 1);
+        await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
+        expect(commits).toBe(operation === "Void" ? 0 : 1);
+        await dialog.locator('textarea[name="reason"]').fill("Private test cleanup");
+        await dialog.getByRole("checkbox").check();
+        await dialog.getByRole("button", { name: "Confirm", exact: true }).click();
+        await expect(dialog).toHaveCount(0);
+        await expect(page.locator("[data-match-preview]")).toHaveText(
+            operation === "Void" ? "Restore Match" : "Void Match"
+        );
+    }
+    expect(previews).toBe(2);
+    expect(commits).toBe(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

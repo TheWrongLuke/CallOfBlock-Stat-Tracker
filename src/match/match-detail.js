@@ -2,6 +2,7 @@ import { MatchMapRenderer } from "./match-map-renderer.js";
 import { MatchPlaybackController } from "./match-playback-controller.js";
 import { loadMatchPlaybackPreferences, saveMatchPlaybackPreferences } from "./match-playback-preferences.js";
 import { validateMatchTelemetry } from "./match-telemetry-normalizer.js";
+import { renderReplayUploadForm, replayMetadataFromForm } from "./replay-admin-form.js";
 
 const FILTER_LABELS = {
     engagements: "Engagements",
@@ -516,7 +517,7 @@ export function createMatchDetailPage({
                             ? `<button type="button" data-replay-download="${escapeHtml(replayId)}">Download</button>`
                             : `<span class="match-replay-locked">${isAuthenticated() ? "Not available to this account" : "Discord login and linked Minecraft account required"}</span>`
                     }
-                    ${isAdmin() ? renderReplayManagement(replay, replayId, visibility, recorderName) : ""}
+                    ${isAdmin() && !replay.immutable ? renderReplayManagement(replay, replayId, visibility, recorderName) : ""}
                 </div>
             </article>
         `;
@@ -554,26 +555,7 @@ export function createMatchDetailPage({
     }
 
     function renderReplayAdminForm() {
-        return `
-            <form class="match-replay-admin" data-replay-upload-form>
-                <h4>Attach administrator replay</h4>
-                <label>Replay file <input type="file" name="replay" accept=".mcpr,application/zip" required></label>
-                <label>Label <input type="text" name="label" maxlength="80" placeholder="Admin cinematic perspective" required></label>
-                <label>Recorder name <input type="text" name="recorderName" maxlength="64"></label>
-                <label>Visibility
-                    <select name="visibility">
-                        <option value="participants">Participants</option>
-                        <option value="community">Community</option>
-                        <option value="public">Public</option>
-                    </select>
-                </label>
-                <label>Replay Mod version <input type="text" name="replayModVersion" maxlength="32"></label>
-                <label>Modpack version <input type="text" name="modpackVersion" maxlength="32"></label>
-                <label>Notes <textarea name="notes" maxlength="500"></textarea></label>
-                <label><input type="checkbox" name="mayContainChat" checked> May contain chat</label>
-                <button type="submit">Upload replay</button>
-            </form>
-        `;
+        return renderReplayUploadForm();
     }
 
     function renderDiagnostics(diagnostics) {
@@ -914,19 +896,6 @@ export function createMatchDetailPage({
             replayState.message = "";
             updateReplayHost();
         }
-    }
-
-    function replayMetadataFromForm(form) {
-        return {
-            label: form.elements.label.value.trim(),
-            recorderName: form.elements.recorderName.value.trim(),
-            visibility: form.elements.visibility.value,
-            minecraftVersion: "1.20.1",
-            replayModVersion: form.elements.replayModVersion.value.trim(),
-            modpackVersion: form.elements.modpackVersion.value.trim(),
-            notes: form.elements.notes.value.trim(),
-            mayContainChat: form.elements.mayContainChat.checked
-        };
     }
 
     async function refreshReplayList(message = "") {

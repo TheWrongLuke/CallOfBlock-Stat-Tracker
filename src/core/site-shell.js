@@ -2,6 +2,9 @@ import { getDrawerController } from "./drawer-controller.js";
 import { syncDiscordProfile } from "../api/profile.js";
 import { readPublicStatsCache, writePublicStatsCache } from "../utils/public-data-cache.js";
 import { createRequestSignal } from "../utils/request-timeout.js";
+import { networkTrackerConfigured, fetchNetworkTracker } from "../api/network-tracker.js";
+import { networkAccountRequest } from "../api/network-account.js";
+import { applyNetworkAccountProjection } from "./network-profile.js";
 import { discordAvatarCandidates, discordDefaultAvatarUrl, uniqueImageUrls } from "../utils/avatar-url.js";
 
 const CONTACT_EMAIL_CODES = [
@@ -155,6 +158,18 @@ function createSupabaseClient() {
 }
 
 async function loadStatsSlice(id, { force = false, fallback = id !== "status" } = {}) {
+    if (id !== "status" && networkTrackerConfigured()) {
+        const request = createRequestSignal(null, STATS_FETCH_TIMEOUT_MS);
+        try {
+            // Never reuse a production/local cached export or sample when TEST tracking is enabled.
+            return await fetchNetworkTracker(id, { signal: request.signal });
+        } catch (error) {
+            console.warn("TEST tracker unavailable", error);
+            return null;
+        } finally {
+            request.cleanup();
+        }
+    }
     const baseUrl = String(window.COB_SUPABASE_URL || "").replace(/\/+$/, "");
     const key = String(window.COB_SUPABASE_KEY || "").trim();
     if (!baseUrl || !key) return null;
@@ -310,7 +325,14 @@ async function initializeAuthenticatedAccountOnce(shell, userId) {
         const result = await syncDiscordProfile(shell.client);
         if (result.error) throw result.error;
         if (String(shell.session?.user?.id || "") !== userId) return;
-        const profile = await resolveShellProfile(shell.client, result.data);
+        let source = result.data;
+        if (networkTrackerConfigured()) {
+            const projection = await networkAccountRequest(shell.client, "read");
+            source = projection?.error
+                ? { ...source, network_stats_unavailable: true }
+                : { ...applyNetworkAccountProjection(source, projection?.data), network_stats_unavailable: false };
+        }
+        const profile = await resolveShellProfile(shell.client, source);
         if (String(shell.session?.user?.id || "") !== userId) return;
         shell.setProfile(profile);
     } catch (error) {
@@ -470,6 +492,7 @@ function renderAccountPanel(shell, host) {
     const title = String(profile.resolved_title_text || "").trim();
     const rarity = cleanRarity(profile.resolved_title_rarity);
     const level = accountLevel(profile.xp);
+    const progressionUnavailable = networkTrackerConfigured() && profile.network_stats_unavailable;
     host.innerHTML = `<div class="profile-drawer-backdrop" data-shell-account-backdrop>
         <aside class="profile-drawer" role="dialog" aria-modal="true" aria-labelledby="shell-profile-drawer-title">
             <header class="profile-drawer-header">
@@ -481,7 +504,7 @@ function renderAccountPanel(shell, host) {
                 <div>
                     <strong>${escapeHtml(name)}</strong>
                     ${title ? `<span class="profile-title-cosmetic rarity-${rarity} compact">${escapeHtml(title)}</span>` : ""}
-                    <div class="account-level-pill" title="${escapeHtml(`${number(profile.xp).toLocaleString()} total XP`)}"><strong>LVL ${level}</strong><span>${number(profile.xp).toLocaleString()} XP</span></div>
+                    <div class="account-level-pill" title="${progressionUnavailable ? "TEST tracking unavailable" : escapeHtml(`${number(profile.xp).toLocaleString()} total XP`)}"><strong>${progressionUnavailable ? "LVL ?" : `LVL ${level}`}</strong><span>${progressionUnavailable ? "Unavailable" : `${number(profile.xp).toLocaleString()} XP`}</span></div>
                 </div>
             </div>
             <div class="profile-drawer-actions ${admin ? "admin" : ""}">
@@ -489,10 +512,11 @@ function renderAccountPanel(shell, host) {
                 <a class="profile-drawer-support" href="/feedback/">Feedback &amp; support</a>
                 ${
                     admin
-                        ? `<a class="profile-drawer-tickets" href="/stats/#admin-tickets">Ticket dashboard</a>
-                           <a class="profile-drawer-progression" href="/stats/#admin-progression">Progression &amp; missions</a>
+                        ? `<a class="profile-drawer-tickets" href="/admin/matches/">Match administration</a>
+                           <a class="profile-drawer-tickets" href="/admin/tickets/">Ticket dashboard</a>
+                           <a class="profile-drawer-progression" href="/admin/progression/">Progression &amp; missions</a>
                            <a class="profile-drawer-docs" href="/admin/docs/">Admin documentation</a>
-                           <a class="profile-drawer-store" href="/stats/#store">Open store admin</a>`
+                           <a class="profile-drawer-store" href="/admin/catalog/">Catalog administration</a>`
                         : ""
                 }
             </div>

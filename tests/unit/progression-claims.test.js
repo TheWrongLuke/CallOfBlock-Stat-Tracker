@@ -1,7 +1,25 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { claimCanonicalProgressionCosmetics } from "../../src/services/progression-claims.js";
 
 describe("canonical progression claims", () => {
+    afterEach(() => vi.unstubAllGlobals());
+    it("TEST private rewards never invoke legacy production claim RPCs", async () => {
+        vi.stubGlobal("window", {
+            COB_NETWORK_STATS_API_URL: "https://tracker.callofblock.com",
+            COB_STATS_ENVIRONMENT: "TEST"
+        });
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue({ ok: true, json: async () => ({ environment: "TEST", entitlements: [] }) })
+        );
+        const client = {
+            rpc: vi.fn(),
+            auth: { getSession: async () => ({ data: { session: { access_token: "fixture-only" } } }) }
+        };
+        const result = await claimCanonicalProgressionCosmetics(client);
+        expect(client.rpc).not.toHaveBeenCalled();
+        expect(result.projection.environment).toBe("TEST");
+    });
     it("uses the canonical inventory claim function", async () => {
         const rpc = vi.fn().mockResolvedValue({ data: [{ cosmetic_id: "veteran" }], error: null });
 

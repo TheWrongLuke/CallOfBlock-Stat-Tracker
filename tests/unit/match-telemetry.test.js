@@ -10,7 +10,7 @@ import { buildMeaningfulMoments, MatchPlaybackController } from "../../src/match
 import { createReplayApi, validateReplayFile } from "../../src/match/replay-downloads.js";
 
 async function fixture(id) {
-    const source = await readFile(new URL(`../../data/match-telemetry/${id}.json`, import.meta.url), "utf8");
+    const source = await readFile(new URL(`../fixtures/match-telemetry/${id}.json`, import.meta.url), "utf8");
     return JSON.parse(source);
 }
 

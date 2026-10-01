@@ -7,6 +7,7 @@ import {
     skinHeadUrl
 } from "../core/site-shell.js";
 import { discordAvatarCandidates, uniqueImageUrls } from "../utils/avatar-url.js";
+import { adminRedirect } from "../core/admin-routes.js";
 
 const CHAMPION_ROTATE_MS = 5000;
 const STATS_SLICE_UPDATED_EVENT = "cob:stats-slice-updated";
@@ -343,24 +344,15 @@ function redirectLegacyRoute() {
     if (!hash) return false;
     const params = new URLSearchParams(hash);
     const route = params.get("view") || hash;
-    if (route === "admin-help") {
-        window.location.replace("/admin/docs/");
+    const adminDestination = adminRedirect(route, window.location.pathname, window.location.hash);
+    if (adminDestination) {
+        window.location.replace(adminDestination);
         return true;
     }
     if (
         params.has("player") ||
         params.has("match") ||
-        [
-            "leaderboard",
-            "leaderboards",
-            "weapons",
-            "maps",
-            "account",
-            "store",
-            "admin-progression",
-            "admin-tickets",
-            "community-dates"
-        ].includes(route)
+        ["leaderboard", "leaderboards", "weapons", "maps", "account"].includes(route)
     ) {
         window.location.replace(`/stats/${window.location.search}#${hash}`);
         return true;

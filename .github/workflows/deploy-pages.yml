@@ -15,6 +15,9 @@ concurrency:
 jobs:
     build:
         runs-on: ubuntu-latest
+        env:
+            COB_STATS_ENVIRONMENT: ${{ vars.COB_STATS_ENVIRONMENT || 'TEST' }}
+            COB_NETWORK_STATS_API_URL: ${{ vars.COB_NETWORK_STATS_API_URL || 'https://dtmnbplnubttbfzgkxfg.supabase.co/functions/v1/network-stats' }}
         steps:
             - name: Check out repository
               uses: actions/checkout@v6

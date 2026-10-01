@@ -9,7 +9,7 @@ import { normalizeMatchTelemetry } from "../src/match/match-telemetry-normalizer
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, "..");
-const fixtureUrl = new URL("../data/match-telemetry/fixture-zombie.json", import.meta.url);
+const fixtureUrl = new URL("../tests/fixtures/match-telemetry/fixture-zombie.json", import.meta.url);
 const baseFixture = JSON.parse(await readFile(fixtureUrl, "utf8"));
 const statsFixture = JSON.parse(
     (await readFile(new URL("../data/stats.sample.json", import.meta.url), "utf8")).replace(/^\uFEFF/, "")

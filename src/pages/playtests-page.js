@@ -253,7 +253,6 @@ function render(state) {
     renderList(state);
     renderIdentity(state);
     renderPreferences(state);
-    renderAdmin(state);
     renderBoard(state);
     renderConfirmation(state);
 }
@@ -302,17 +301,6 @@ function renderPreferences(state) {
         return;
     }
     host.innerHTML = `<section class="playtest-side-block"><p class="panel-kicker">Session Preference</p><fieldset class="preference-field"><legend>Mode</legend>${MODE_OPTIONS.map((mode) => `<label><input type="radio" name="playtest-mode" value="${escapeHtml(mode)}" ${state.modePreference === mode ? "checked" : ""}><span>${escapeHtml(mode)}</span></label>`).join("")}</fieldset></section>`;
-}
-
-function renderAdmin(state) {
-    const host = document.getElementById("playtest-admin");
-    if (!host) return;
-    const playtest = activePlaytest(state);
-    if (!state.profile?.is_admin) {
-        host.innerHTML = "";
-        return;
-    }
-    host.innerHTML = `<section class="playtest-side-block admin-draft-block"><details><summary>Admin controls</summary><div class="admin-action-grid"><a class="button-link" href="/stats/#community-dates">Community calendar</a><button type="button" data-playtest-reload>Reload calendar</button><button type="button" data-playtest-admin="${playtest?.status === "closed" ? "reopen" : "close"}" ${playtest ? "" : "disabled"}>${playtest?.status === "closed" ? "Reopen" : "Close voting"}</button><button type="button" data-playtest-admin="${playtest?.frozen ? "unfreeze" : "freeze"}" ${playtest ? "" : "disabled"}>${playtest?.frozen ? "Unfreeze" : "Freeze votes"}</button></div><form class="playtest-create-form" id="playtest-create-form"><label><span>Title</span><input name="title" type="text" placeholder="Battle Royale Playtest" required></label><label><span>Description</span><textarea name="description" rows="3" placeholder="Focus for this test"></textarea></label><label><span>First featured date</span><input name="mainSlot" type="datetime-local" required></label><label><span>Other featured dates</span><textarea name="alternativeSlots" rows="4" placeholder="2026-09-17T20:00&#10;2026-09-19T20:00"></textarea></label><label><span>Status</span><select name="status"><option value="voting">Voting</option><option value="upcoming">Upcoming</option><option value="closed">Closed</option></select></label><button type="submit">Create playtest</button></form></details></section>`;
 }
 
 function renderBoard(state) {
@@ -389,7 +377,7 @@ function renderSelectedDate(state, playtest, selected) {
     const canVote = Boolean(
         state.shell.session?.user && !state.profile?.banned_from_voting && !playtestLock(playtest) && !isPastKey(key)
     );
-    return `<article class="main-date-card selected-date-card"><div class="date-card-topline"><span class="main-date-label">${slot?.source === "featured" ? "Featured date" : slot ? "Community date" : "Selected date"}</span>${confirmationBadge(slot)}</div><strong>${escapeHtml(weekday(key))}</strong><span>${escapeHtml(formatDate(`${key}T12:00:00`, { month: "long" }))}</span>${slot ? `<time datetime="${escapeHtml(slot.startAt)}">${escapeHtml(formatTimeRange(slot))}</time><div class="main-date-counts"><span>${summary.availableTotal} available</span><span>${summary.counts.preferred} preferred</span></div>${renderBestTime(summary)}` : '<p class="selected-date-note">No one has started this date yet. Voting here creates a community date.</p>'}<div class="vote-time-fields"><span>Your time</span><label><small>Start</small><input type="text" value="${range.start}" maxlength="5" inputmode="numeric" data-vote-start ${canVote ? "" : "disabled"}></label><label><small>End</small><input type="text" value="${range.end}" maxlength="5" inputmode="numeric" data-vote-end ${canVote ? "" : "disabled"}></label></div><small class="selected-date-note">Times use ${escapeHtml(Intl.DateTimeFormat().resolvedOptions().timeZone || "your local timezone")}.</small>${renderNotification(state, playtest, slot, ownVote)}${state.profile?.is_admin && slot ? `<div class="date-admin-actions"><button type="button" data-confirm-slot="${escapeHtml(slot.id)}" ${slot.confirmedAt ? "disabled" : ""}>Confirm date</button><button type="button" data-unconfirm-slot="${escapeHtml(slot.id)}" ${slot.confirmedAt ? "" : "disabled"}>Unconfirm</button></div>` : ""}<div class="vote-row compact">${STATUS_OPTIONS.map((option) => `<button class="vote-button vote-${option.id} ${ownVote?.status === option.id ? "active" : ""}" type="button" ${slot ? `data-playtest-vote="${option.id}" data-slot-id="${escapeHtml(slot.id)}"` : `data-playtest-calendar-vote="${option.id}" data-calendar-date="${key}"`} aria-pressed="${ownVote?.status === option.id}" ${canVote ? "" : "disabled"}>${option.label}</button>`).join("")}</div></article>`;
+    return `<article class="main-date-card selected-date-card"><div class="date-card-topline"><span class="main-date-label">${slot?.source === "featured" ? "Featured date" : slot ? "Community date" : "Selected date"}</span>${confirmationBadge(slot)}</div><strong>${escapeHtml(weekday(key))}</strong><span>${escapeHtml(formatDate(`${key}T12:00:00`, { month: "long" }))}</span>${slot ? `<time datetime="${escapeHtml(slot.startAt)}">${escapeHtml(formatTimeRange(slot))}</time><div class="main-date-counts"><span>${summary.availableTotal} available</span><span>${summary.counts.preferred} preferred</span></div>${renderBestTime(summary)}` : '<p class="selected-date-note">No one has started this date yet. Voting here creates a community date.</p>'}<div class="vote-time-fields"><span>Your time</span><label><small>Start</small><input type="text" value="${range.start}" maxlength="5" inputmode="numeric" data-vote-start ${canVote ? "" : "disabled"}></label><label><small>End</small><input type="text" value="${range.end}" maxlength="5" inputmode="numeric" data-vote-end ${canVote ? "" : "disabled"}></label></div><small class="selected-date-note">Times use ${escapeHtml(Intl.DateTimeFormat().resolvedOptions().timeZone || "your local timezone")}.</small>${renderNotification(state, playtest, slot, ownVote)}${state.profile?.is_admin ? '<a href="/admin/community/">Manage event</a>' : ""}<div class="vote-row compact">${STATUS_OPTIONS.map((option) => `<button class="vote-button vote-${option.id} ${ownVote?.status === option.id ? "active" : ""}" type="button" ${slot ? `data-playtest-vote="${option.id}" data-slot-id="${escapeHtml(slot.id)}"` : `data-playtest-calendar-vote="${option.id}" data-calendar-date="${key}"`} aria-pressed="${ownVote?.status === option.id}" ${canVote ? "" : "disabled"}>${option.label}</button>`).join("")}</div></article>`;
 }
 
 function renderNotification(state, playtest, slot, ownVote) {

@@ -1,11 +1,20 @@
+import { createNetworkReplayApi } from "../api/network-replays.js";
 const DEFAULT_MAX_REPLAY_BYTES = 512 * 1024 * 1024;
 
 export function createReplayApi({
     supabaseClient = null,
     supabaseUrl = "",
     supabaseKey = "",
-    maxReplayBytes = DEFAULT_MAX_REPLAY_BYTES
+    maxReplayBytes = DEFAULT_MAX_REPLAY_BYTES,
+    adminMatchId = null
 } = {}) {
+    if (globalThis.window?.COB_STATS_ENVIRONMENT === "TEST")
+        return createNetworkReplayApi({
+            client: supabaseClient,
+            validateFile: validateReplayFile,
+            uploadToSignedPath,
+            adminMatchId
+        });
     return {
         async list(matchId) {
             if (!supabaseClient?.rpc) return { available: false, replays: [] };

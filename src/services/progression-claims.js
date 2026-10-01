@@ -5,6 +5,11 @@ function missingRpc(error, functionName) {
 }
 
 export async function claimCanonicalProgressionCosmetics(client) {
+    if (globalThis.window?.COB_NETWORK_STATS_API_URL) {
+        const result = await networkAccountRequest(client, "read");
+        // The private reducer earns reversible cosmetics automatically; no legacy claim RPC.
+        return { data: result?.error ? null : [], error: result?.error || null, projection: result?.data || null };
+    }
     if (!client?.rpc) return { data: [], error: new Error("A Supabase client is required.") };
 
     const canonical = await client.rpc("claim_progression_cosmetics_v2");
@@ -13,3 +18,4 @@ export async function claimCanonicalProgressionCosmetics(client) {
     }
     return client.rpc("claim_progression_cosmetics");
 }
+import { networkAccountRequest } from "../api/network-account.js";

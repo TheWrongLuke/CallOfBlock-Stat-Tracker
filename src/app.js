@@ -10,6 +10,9 @@ import {
 } from "./api/profile.js";
 import { createProgressionAdminApi } from "./api/progression.js?v=weekly-missions-3";
 import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "./api/weekly-missions.js";
+import { applyNetworkAccountProjection } from "./core/network-profile.js";
+import { networkTrackerConfigured, networkTrackerUrl, fetchNetworkTracker } from "./api/network-tracker.js";
+import { ADMIN_ROUTES, ADMIN_VIEWS, adminRedirect } from "./core/admin-routes.js";
 import { canOpenAdminRoute, isAdminProfile } from "./auth/permissions.js";
 import {
     COSMETIC_ACQUISITION_TYPES,
@@ -31,6 +34,7 @@ import {
     normalizeBadgeCatalogOverride
 } from "./config/badge-catalog.js?v=badge-editor-2";
 import { BADGE_CATALOG, badgeTierLevel } from "./config/badges.js";
+import { badgeTierState as sharedBadgeTierState, badgeMetricValue } from "./core/badge-progress.js";
 import {
     TICKET_SUBMIT_COOLDOWN_MS,
     USER_CLOSABLE_TICKET_STATUSES,
@@ -88,6 +92,18 @@ let renderFeedbackContent;
 let renderTicketDetailContent;
 let progressionAdminViewLoadPromise = null;
 let renderProgressionAdminContent;
+let adminMatchPagePromise;
+
+function renderAdminMatchesPage() {
+    const host = document.getElementById("admin-matches-view");
+    if (!host) return;
+    if (!adminMatchPagePromise) adminMatchPagePromise = import("./pages/admin-matches.js")
+        .then(({createAdminMatchPage}) => createAdminMatchPage(host));
+    void adminMatchPagePromise.then(page => {
+        if (state.view === "adminMatches") page.render({client:state.authClient,ready:state.authReady,
+            admin:isPlaytestAdmin(),accountId:state.authSession?.user?.id || state.authProfile?.id || ""});
+    }).catch(() => {host.textContent = "Match administration could not load. Refresh to retry.";});
+}
 
 const MODE_LABELS = {
     overall: "Overall",
@@ -487,7 +503,7 @@ const COSMETIC_CATALOG_TABLE = "cosmetic_catalog_items";
 const PUBLIC_COSMETIC_CATALOG_VIEW = "public_cosmetic_catalog";
 const PUBLIC_COSMETIC_INVENTORY_VIEW = "public_profile_cosmetic_inventory";
 const COSMETIC_MEDIA_BUCKET = "profile-media";
-const STORE_CHECKOUT_ENABLED = window.COB_STORE_CHECKOUT_ENABLED === true;
+const STORE_CHECKOUT_ENABLED = window.COB_STATS_ENVIRONMENT !== "TEST" && window.COB_STORE_CHECKOUT_ENABLED === true;
 const COSMETIC_ACQUISITION_VALUES = new Set(COSMETIC_ACQUISITION_TYPES.map((option) => option.value));
 const PROGRESSION_MODE_VALUES = new Set(PROGRESSION_MODES.map((option) => option.value));
 const PROGRESSION_METRIC_VALUES = new Set(PROGRESSION_METRICS.map((option) => option.value));
@@ -906,7 +922,7 @@ function bindAvatarImageEvents() {
 
 function setupLiveConfig() {
     const params = new URLSearchParams(window.location.search);
-    state.apiUrl = params.get("api") || window.COB_STATS_API_URL || "";
+    state.apiUrl = networkTrackerConfigured() ? networkTrackerUrl() : params.get("api") || window.COB_STATS_API_URL || "";
     state.supabaseUrl = params.get("supabaseUrl") || window.COB_SUPABASE_URL || "";
     state.supabaseKey = params.get("supabaseKey") || window.COB_SUPABASE_KEY || "";
     state.supabaseTable = params.get("supabaseTable") || window.COB_SUPABASE_TABLE || "cob_stats_exports";
@@ -976,7 +992,7 @@ async function ensureMatchDetailPage() {
                     ? statsHref(`player=${encodeURIComponent(state.matchPlayerId)}&tab=history`)
                     : statsHref("view=leaderboards&board=players&mode=battleRoyale&sort=wins"),
             getPlayerPresentation: matchPlayerPresentation,
-            isAdmin: isPlaytestAdmin,
+            isAdmin: () => isPlaytestAdmin() && (document.body?.dataset.publicRoute || "").startsWith("admin"),
             isAuthenticated: () => Boolean(state.authSession?.user)
         });
         return matchDetailPage;
@@ -1072,6 +1088,7 @@ async function claimProgressionCosmetics() {
     if (!state.authClient || !state.authSession?.user || isCurrentAccountCommunityBanned()) return;
     try {
         const result = await claimCanonicalProgressionCosmetics(state.authClient);
+        if (result.projection) state.authProfile = applyNetworkAccountProjection(state.authProfile, result.projection);
         if (result.error) {
             const code = String(result.error.code || "");
             if (
@@ -2323,6 +2340,16 @@ function applyRoute() {
     }
     const params = new URLSearchParams(hash);
     const route = params.get("view") || hash;
+    const adminDestination = adminRedirect(route, window.location.pathname, window.location.hash);
+    if (adminDestination) {
+        routeRedirectPending = true;
+        window.location.replace(adminDestination);
+        return;
+    }
+    if (ADMIN_ROUTES[route] && (document.body?.dataset.publicRoute || "").startsWith("admin")) {
+        applyPublicPageRoute();
+        return;
+    }
     const section = params.get("section") || "";
     const entry = params.get("entry") || "";
     if (route === "home") {
@@ -2380,6 +2407,10 @@ function applyRoute() {
         state.matchPlayerId = "";
         state.selectedId = null;
         state.profilePreviewOpen = false;
+        return;
+    }
+    if (route === "admin-matches") {
+        state.view = "adminMatches";
         return;
     }
     if (route === "playtests") {
@@ -2502,6 +2533,10 @@ function applyPublicPageRoute() {
     state.profilePreviewOpen = false;
     state.pendingScrollTarget = "";
     state.pendingDetailsTarget = "";
+    if (ADMIN_VIEWS[route] || route === "admin") {
+        state.view = ADMIN_VIEWS[route] || "adminMatches";
+        return;
+    }
 
     if (route === "stats") {
         state.view = "leaderboard";
@@ -2573,6 +2608,9 @@ function updatePlayerHash({ preserveScroll = false } = {}) {
 }
 
 function setRouteHash(hash, { preserveScroll = false } = {}) {
+    const route = new URLSearchParams(hash).get("view") || hash;
+    const destination = adminRedirect(route, window.location.pathname, `#${hash}`);
+    if (destination) {window.location.assign(destination);return true;}
     if (!isStatsPage() && isStatsHash(hash)) {
         window.location.assign(`/stats/#${hash}`);
         return true;
@@ -2603,12 +2641,7 @@ function isStatsHash(hash) {
             "leaderboards",
             "weapons",
             "maps",
-            "account",
-            "store",
-            "admin-help",
-            "admin-progression",
-            "admin-tickets",
-            "community-dates"
+            "account"
         ].includes(route)
     );
 }
@@ -2623,6 +2656,7 @@ function viewNeedsStatsData() {
 
 function enforceProtectedAdminRoute() {
     if (!state.authReady || isPlaytestAdmin()) return;
+    if ((document.body?.dataset.publicRoute || "").startsWith("admin")) return;
     if (state.view === "adminHelp" && document.body?.dataset.publicRoute === "admin-docs") return;
     const protectedView = state.view;
     if (!["store", "adminHelp", "adminTickets", "adminProgression", "communityAdmin"].includes(protectedView)) return;
@@ -2646,6 +2680,11 @@ function enforceProtectedAdminRoute() {
 
 function routeTo(route) {
     state.accountPanelOpen = false;
+    const adminDestination = adminRedirect(route, window.location.pathname);
+    if (adminDestination) {
+        window.location.assign(adminDestination);
+        return;
+    }
     if (route === "home") {
         state.view = "home";
         state.expandedMatchIds.clear();
@@ -2699,7 +2738,7 @@ function routeTo(route) {
             return;
         }
         if (document.body?.dataset.publicRoute === "admin-docs") {
-            window.location.assign("/stats/#admin-tickets");
+            window.location.assign("/admin/tickets/");
             return;
         }
         state.view = "adminTickets";
@@ -2718,7 +2757,7 @@ function routeTo(route) {
             return;
         }
         if (document.body?.dataset.publicRoute === "admin-docs") {
-            window.location.assign("/stats/#admin-progression");
+            window.location.assign("/admin/progression/");
             return;
         }
         state.view = "adminProgression";
@@ -2853,7 +2892,7 @@ async function ensureStatsDataForRoute() {
         applyData(cached.data, cached.preview, cached.dataMode, { fullRender: true, sliceId });
         return true;
     }
-    const persisted = readPublicStatsCache(sliceId, { maxAgeMs: 300_000, allowStale: true });
+    const persisted = networkTrackerConfigured() ? null : readPublicStatsCache(sliceId, { maxAgeMs: 300_000, allowStale: true });
     if (persisted && isStatsExport(persisted.payload)) {
         state.statsRefresh.lastUpdatedAt = new Date(persisted.storedAt);
         state.statsRefresh.status = "success";
@@ -2931,6 +2970,15 @@ function statsApiSliceUrl(apiUrl, sliceId) {
 }
 
 async function refreshData({ initial, signal = null, sliceId = desiredStatsSliceId() }) {
+    if (networkTrackerConfigured()) {
+        const request = createRequestSignal(signal, STATS_REQUEST_TIMEOUT_MS);
+        try {
+            const data = await fetchNetworkTracker(sliceId, { signal: request.signal });
+            const status = await fetchSupabaseExport({ signal, rowId: "status" });
+            applyData(mergeCurrentLiveStatus(data, status.payload), false, "TEST Network API", { fullRender: initial, sliceId });
+            return true;
+        } finally { request.cleanup(); }
+    }
     let loadedSliceId = sliceId;
     const [initialSupabaseResult, statusResult] = await Promise.all([
         fetchSupabaseExport({ signal, rowId: sliceId }),
@@ -4197,6 +4245,9 @@ function render() {
         case "adminTickets":
             renderAdminTicketsPage();
             break;
+        case "adminMatches":
+            renderAdminMatchesPage();
+            break;
         case "adminProgression":
             renderProgressionAdminPage();
             break;
@@ -4251,6 +4302,7 @@ function renderRoute() {
     );
     toggleRouteView("home-view", state.view === "home");
     toggleRouteView("admin-help-view", state.view === "adminHelp");
+    toggleRouteView("admin-matches-view", state.view === "adminMatches");
     toggleRouteView("playtests-view", state.view === "playtests");
     toggleRouteView("feedback-view", state.view === "feedback");
     toggleRouteView("ticket-view", state.view === "ticket");
@@ -4852,7 +4904,7 @@ function renderTicketDetailPage() {
         authConfigured: Boolean(feedback.api),
         authReady: state.authReady,
         loggedIn,
-        admin: isPlaytestAdmin(),
+        admin: isPlaytestAdmin() && document.body?.dataset.publicRoute === "admin-tickets",
         loading: feedback.detailLoading || (loggedIn && feedback.detailLoadedId !== ticketId),
         ticket: feedback.selectedTicket,
         messages: feedback.messages,
@@ -5092,6 +5144,7 @@ function renderAdminTicketsPage() {
         return;
     }
     if (!isPlaytestAdmin()) {
+        body.innerHTML = "<p>Administrator sign-in required.</p>";
         enforceProtectedAdminRoute();
         return;
     }
@@ -5348,6 +5401,7 @@ function renderProgressionAdminPage({ forceBadgeEditor = false } = {}) {
         return;
     }
     if (!isPlaytestAdmin()) {
+        body.innerHTML = "<p>Administrator sign-in required.</p>";
         enforceProtectedAdminRoute();
         return;
     }
@@ -7308,7 +7362,7 @@ function renderStorePage() {
         return;
     }
     if (!isPlaytestAdmin()) {
-        body.innerHTML = "";
+        body.innerHTML = "<p>Administrator sign-in required.</p>";
         enforceProtectedAdminRoute();
         return;
     }
@@ -8884,6 +8938,11 @@ async function syncWeeklyMissions() {
         if (state.weeklyMissions !== missionState || state.authProfile?.id !== account.id) return;
         missionState.statsProfile = row.stats_profile || null;
         missionState.row = normalizeWeeklyMissionRow(row);
+        if (row.environment === "TEST") {
+            state.authProfile = applyNetworkAccountProjection(state.authProfile,row);
+            state.accountProfiles = state.accountProfiles.map(profile=>applyNetworkAccountProjection(profile,row));
+            rebuildAccountProfileIndex();
+        }
         missionState.source = "supabase";
         missionState.message = "";
     } catch (error) {
@@ -9929,7 +9988,6 @@ function renderPlaytests() {
     renderPlaytestList(playtests, active);
     renderPlaytestIdentity();
     renderPlaytestPreferences(active);
-    renderPlaytestAdmin(active);
     renderPlaytestBoard(active);
 }
 
@@ -9949,11 +10007,13 @@ function renderCommunityAdminPage() {
 
     const playtests = activePlaytests();
     const playtest = activePlaytest(playtests);
+    renderPlaytestList(playtests, playtest);
+    renderPlaytestAdmin(playtest);
     if (!playtest) {
         board.innerHTML = `
             <section class="playtest-empty">
                 <h3>No playtest selected</h3>
-                <p>Create one from the scheduler admin controls first.</p>
+                <p>No playtests have been created.</p>
             </section>
         `;
         return;
@@ -13492,6 +13552,10 @@ async function submitAccountForm(form) {
         verifySavedProfile(data, payload);
         applyPlaytestProfile(data);
         await loadAccountProfiles({ force: true });
+        if (data.environment === "TEST") {
+            state.authProfile = applyNetworkAccountProjection(state.authProfile,data);
+            state.accountProfiles = state.accountProfiles.map(profile=>applyNetworkAccountProjection(profile,data));
+        }
         state.accountMessage = "Profile saved.";
     } catch (error) {
         console.error("Failed to save account profile", error);
@@ -13655,6 +13719,7 @@ function accountLinkedStatsProfile(account) {
         const byId = profileById(playerId);
         if (byId) return byId;
     }
+    if (networkTrackerConfigured()) return null;
     const nameKeys = accountMinecraftNameKeys(account);
     if (!nameKeys.size) return null;
     return state.cache.profiles.find((profile) => nameKeys.has(normalizePlayerName(profile.name))) || null;
@@ -13670,7 +13735,7 @@ function accountProfileForPlayer(player, profile) {
         const account = state.accountProfileIndex.byPlayerId.get(playerId);
         if (account) return account;
     }
-    return nameKey ? state.accountProfileIndex.byName.get(nameKey) || null : null;
+    return !networkTrackerConfigured() && nameKey ? state.accountProfileIndex.byName.get(nameKey) || null : null;
 }
 
 function accountMinecraftNameKeys(account) {
@@ -14240,81 +14305,7 @@ function badgeUnlockedFromContext(badge, context, awardedIds = profileAwardedBad
 }
 
 function badgeTierState(badge, context) {
-    if (!badge?.tiers?.length) return null;
-    let currentIndex = -1;
-    let currentSnapshot = null;
-    for (let index = 0; index < badge.tiers.length; index += 1) {
-        const snapshot = badgeRequirementSnapshot(badge, badge.tiers[index], context);
-        if (snapshot.actual >= snapshot.target) {
-            currentIndex = index;
-            currentSnapshot = snapshot;
-        }
-    }
-    const nextIndex = Math.min(badge.tiers.length - 1, currentIndex + 1);
-    const nextTier = currentIndex >= badge.tiers.length - 1 ? null : badge.tiers[nextIndex];
-    const nextSnapshot = nextTier ? badgeRequirementSnapshot(badge, nextTier, context) : currentSnapshot;
-    return {
-        currentIndex,
-        currentTier: currentIndex >= 0 ? badge.tiers[currentIndex] : null,
-        currentSnapshot,
-        nextTier,
-        nextSnapshot
-    };
-}
-
-function badgeRequirementSnapshot(badge, tier, context) {
-    const requirement = tier?.requirement;
-    if (requirement?.type === "dmMaps") {
-        const maps = Array.isArray(context?.dm?.details?.deathmatchMaps) ? context.dm.details.deathmatchMaps : [];
-        const qualifying = maps.filter((entry) => {
-            const stats = normalizeStats(entry?.stats);
-            return number(stats[requirement.stat]) >= number(requirement.targetPerMap);
-        }).length;
-        return {
-            actual: qualifying,
-            target: number(requirement.mapCount),
-            unit: "DM maps"
-        };
-    }
-    if (requirement?.type === "placement") {
-        const placements = context?.br?.details?.battleRoyalePlacement || {};
-        return {
-            actual: number(placements[requirement.stat]),
-            target: number(requirement.target),
-            unit: "placements"
-        };
-    }
-    if (requirement?.type === "flag") {
-        return {
-            actual: badgeMetricValue(requirement, context),
-            target: number(requirement.target),
-            unit: requirement.unit || badge.unit || ""
-        };
-    }
-    return {
-        actual: badgeMetricValue(badge.metric, context),
-        target: number(tier?.target),
-        unit: badge.unit || ""
-    };
-}
-
-function badgeMetricValue(metric, context) {
-    if (!metric) return 0;
-    const source =
-        metric.scope === "battleRoyale"
-            ? context?.br?.stats
-            : metric.scope === "deathmatch"
-              ? context?.dm?.stats
-              : metric.scope === "account"
-                ? context?.account
-                : metric.scope === "profile"
-                  ? context?.profile
-                  : context?.stats;
-
-    const camelStat = String(metric.stat || "").replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-    let value = number(source?.[metric.stat] ?? source?.[camelStat]);
-    if (metric.transform === "hours") value /= 3600;
-    return value;
+    return sharedBadgeTierState(badge, context, normalizeStats);
 }
 
 function badgeProgressState(badge, context, unlocked, tierState = badgeTierState(badge, context)) {

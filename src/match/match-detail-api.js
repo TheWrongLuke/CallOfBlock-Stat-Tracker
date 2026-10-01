@@ -1,4 +1,5 @@
 import { normalizeMatchTelemetry } from "./match-telemetry-normalizer.js";
+import { networkTrackerConfigured, networkTrackerUrl } from "../api/network-tracker.js";
 
 export function createMatchDetailApi({ supabaseClient = null, apiUrl = "", fetchImpl = globalThis.fetch } = {}) {
     const cache = new Map();
@@ -8,7 +9,8 @@ export function createMatchDetailApi({ supabaseClient = null, apiUrl = "", fetch
         async load(matchId, { force = false, signal = null } = {}) {
             const id = cleanMatchId(matchId);
             if (!id) throw new Error("A valid match ID is required.");
-            if (!force && cache.has(id)) return cache.get(id);
+            const network = networkTrackerConfigured();
+            if (!network && !force && cache.has(id)) return cache.get(id);
             if (!force && inflight.has(id)) return inflight.get(id).promise;
             if (force) inflight.get(id)?.controller.abort();
 
@@ -16,16 +18,26 @@ export function createMatchDetailApi({ supabaseClient = null, apiUrl = "", fetch
             const unlinkSignal = linkAbortSignal(signal, controller);
             const promise = (async () => {
                 const attempts = [];
-                const supabaseResult = await loadFromSupabase(supabaseClient, id, attempts, controller.signal);
+                const supabaseResult = network
+                    ? null
+                    : await loadFromSupabase(supabaseClient, id, attempts, controller.signal);
                 const apiResult =
-                    supabaseResult || (await loadFromApi(fetchImpl, apiUrl, id, attempts, controller.signal));
-                const fixtureResult = apiResult || (await loadFixture(fetchImpl, id, attempts, controller.signal));
+                    supabaseResult ||
+                    (await loadFromApi(
+                        fetchImpl,
+                        network ? networkTrackerUrl() : apiUrl,
+                        id,
+                        attempts,
+                        controller.signal
+                    ));
+                const fixtureResult =
+                    apiResult || (!network && (await loadFixture(fetchImpl, id, attempts, controller.signal)));
                 if (!fixtureResult) {
                     const reason = attempts.find((attempt) => attempt.error)?.error;
                     throw new Error(reason || "Detailed telemetry is not available for this match.");
                 }
                 const normalized = normalizeMatchTelemetry(fixtureResult, id);
-                cache.set(id, normalized);
+                if (!network) cache.set(id, normalized);
                 return normalized;
             })().finally(() => {
                 unlinkSignal();
