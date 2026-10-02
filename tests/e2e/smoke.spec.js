@@ -169,11 +169,26 @@ const adminSupabaseStub = `
 
     function resultFor(table, calls) {
         const single = calls.some(([method]) => method === "single" || method === "maybeSingle");
+        const write = calls.find(([method]) => method === "upsert");
+        if (table === "cosmetic_catalog_items" && write) {
+            window.__catalogWrites = window.__catalogWrites || [];
+            window.__catalogWrites.push(write[1][0]);
+            if (window.__failCosmeticSave) {
+                window.__failCosmeticSave = false;
+                return {data: null, error: {message: "Simulated save failure"}};
+            }
+            window.__savedCosmetics = window.__savedCosmetics || [];
+            const item = write[1][0];
+            const index = window.__savedCosmetics.findIndex(row => row.cosmetic_type === item.cosmetic_type && row.cosmetic_id === item.cosmetic_id);
+            if (index >= 0) window.__savedCosmetics.splice(index, 1, item);
+            else window.__savedCosmetics.push(item);
+            return {data: item, error: null};
+        }
         if (table === "profiles") return { data: single ? profile : [profile], error: null };
         if (table === "public_profiles") return { data: [profile], error: null };
         if (table === "badge_catalog_overrides") return { data: badgeOverrides.map((entry) => ({ ...entry })), error: null };
         if (table === "cosmetic_catalog_items") return {
-            data: [{
+            data: [...(window.__savedCosmetics || []), {
                 cosmetic_type: "icon",
                 cosmetic_id: "minecraft",
                 name: "Minecraft skin",
@@ -357,6 +372,58 @@ const adminSupabaseStub = `
 const memberSupabaseStub = adminSupabaseStub
     .replace("is_admin: true", "is_admin: false")
     .replace("is_owner: true", "is_owner: false");
+
+const playtestAdminSupabaseStub = adminSupabaseStub
+    .replace(
+        "function resultFor(table, calls) {",
+        `
+    const eventId = "423e4567-e89b-42d3-a456-426614174000";
+    const slotId = "523e4567-e89b-42d3-a456-426614174000";
+    window.__playtestEvents = [{id: eventId, title: "Friends arena test", description: "TDM and FFA", status: "voting", created_by: profile.id, main_slot_id: slotId, votes_frozen: false, archived_at: null, created_at: "2030-10-01T12:00:00Z"}];
+    window.__playtestSlots = [{id: slotId, playtest_id: eventId, start_datetime: "2030-10-02T18:00:00Z", end_datetime: "2030-10-02T20:00:00Z", label: "Featured date", source: "featured", is_main: true}];
+    window.__playtestVotes = [
+        {id: "vote", playtest_id: eventId, slot_id: slotId, user_id: profile.id, status: "available", mode_preference: "either", available_start_datetime: "2030-10-02T18:00:00Z", available_end_datetime: "2030-10-02T19:00:00Z"},
+        {id: "vote-member", playtest_id: eventId, slot_id: slotId, user_id: member.id, status: "maybe", mode_preference: "deathmatch", available_start_datetime: "2030-10-02T18:30:00Z", available_end_datetime: "2030-10-02T20:00:00Z"},
+        {id: "vote-away", playtest_id: eventId, slot_id: slotId, user_id: "away", status: "unavailable", mode_preference: "battle_royale"}
+    ];
+    function resultFor(table, calls) {
+        if (table === "public_profiles") return {data: [profile, member, {id: "away", username: "Busy Friend"}], error: null};
+        if (table === "playtests") {
+            const update = calls.find(([method]) => method === "update");
+            const id = calls.find(([method, args]) => method === "eq" && args[0] === "id")?.[1][1];
+            if (update) {
+                const row = window.__playtestEvents.find(event => event.id === id);
+                if (!row) return {data: null, error: {message: "Event missing"}};
+                Object.assign(row, update[1][0]);
+                return {data: {...row}, error: null};
+            }
+            const rows = window.__playtestEvents.filter(row => !calls.some(([method, args]) => method === "is" && args[0] === "archived_at") || !row.archived_at);
+            return {data: rows.map(row => ({...row})), error: null};
+        }
+        if (table === "playtest_slots") return {data: window.__playtestSlots.map(row => ({...row})), error: null};
+        if (table === "availability") return {data: window.__playtestVotes.map(row => ({...row})), error: null};
+`
+    )
+    .replace(
+        "rpc: async (name, args = {}) => {",
+        `rpc: async (name, args = {}) => {
+    if (name === "admin_create_playtest") {
+        window.__playtestCreateCalls = window.__playtestCreateCalls || [];
+        window.__playtestCreateCalls.push(args);
+        if (!window.__playtestEvents.some(row => row.id === args.p_request_id)) {
+            const starts = args.p_starts;
+            const mainId = args.p_request_id + "-main";
+            window.__playtestEvents.push({id: args.p_request_id, title: args.p_title, description: args.p_description, status: args.p_status, created_by: profile.id, main_slot_id: mainId, votes_frozen: false, archived_at: null, created_at: new Date().toISOString()});
+            starts.forEach((start, index) => window.__playtestSlots.push({id: index ? args.p_request_id + "-" + index : mainId, playtest_id: args.p_request_id, start_datetime: start, end_datetime: new Date(Date.parse(start) + args.p_duration_minutes * 60000).toISOString(), source: "featured", label: "Featured date", is_main: index === 0}));
+        }
+        if (window.__losePlaytestResponse) {
+            window.__losePlaytestResponse = false;
+            return {data: null, error: {message: "Simulated lost response; retry safely"}};
+        }
+        return {data: args.p_request_id, error: null};
+    }
+`
+    );
 
 const accountStatsSupabaseStub = adminSupabaseStub.replace(
     'minecraft_player_name: "AdminMC",',
@@ -1824,6 +1891,129 @@ test("new cosmetic fields follow type, ownership, and store limits", async ({ pa
     await expect(form.locator("[data-progression-store-fields]")).toBeHidden();
     await expect(form.locator("input[name='availableFrom']")).not.toHaveAttribute("required", "");
     await expect(form.locator("input[name='supplyLimit']")).not.toHaveAttribute("required", "");
+});
+
+test("a private tester title submits without hidden store validation and retains a failed draft", async ({ page }) => {
+    await openAdminApp(page);
+    await page.locator("[data-progression-playtester-title]").click();
+    const form = page.locator("[data-progression-cosmetic-form]");
+    await form.locator('[name="cosmeticType"]').selectOption("title");
+    await form.locator('[name="cosmeticId"]').fill("private_playtester");
+    await form.locator('[name="name"]').fill("Private Playtester");
+    await form.locator('[name="titleText"]').fill("Private Playtester");
+    await expect(form.locator('[name="shopPrice"]')).toBeDisabled();
+    await page.evaluate(() => {
+        window.__failCosmeticSave = true;
+    });
+    await form.locator('button[type="submit"]').click();
+    await expect(form.locator("[data-progression-editor-status]")).toContainText("Simulated save failure");
+    await expect(form.locator('[name="cosmeticId"]')).toHaveValue("private_playtester");
+    await expect(form.locator('[name="titleText"]')).toHaveValue("Private Playtester");
+    await form.locator('button[type="submit"]').click();
+    await expect(page.locator('[data-progression-cosmetic-open="title:private_playtester"]')).toHaveCount(1);
+    const writes = await page.evaluate(() => window.__catalogWrites);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toMatchObject({
+        cosmetic_type: "title",
+        cosmetic_id: "private_playtester",
+        title_text: "Private Playtester",
+        image_url: null,
+        acquisition_type: "exclusive",
+        shop_enabled: false
+    });
+    await expect(form.locator("[data-progression-title-fields]")).toBeVisible();
+    await expect(form.locator("[data-progression-asset-fields]")).toBeHidden();
+    await expect(form.locator('[name="titleText"]')).toHaveValue("Private Playtester");
+});
+
+test("playtest admin creates atomically and retries the same ID after a lost response", async ({ page }) => {
+    await installPageStubs(page, playtestAdminSupabaseStub);
+    await page.goto("/admin/community/");
+    await page.locator('[data-playtest-admin="new"]').click();
+    const form = page.locator("#playtest-create-form");
+    await form.locator('[name="title"]').fill("Private BR test");
+    await form.locator('[name="mainSlot"]').fill("2030-10-03T19:00");
+    await form.locator('[name="alternativeSlots"]').fill("bad date");
+    await form.locator('button[type="submit"]').click();
+    await expect(page.locator("#playtest-admin [role='alert']")).toContainText("Date 2");
+    expect(await page.evaluate(() => window.__playtestCreateCalls || [])).toHaveLength(0);
+    await form.locator('[name="alternativeSlots"]').fill("2030-10-04T19:00");
+    await page.evaluate(() => {
+        window.__losePlaytestResponse = true;
+    });
+    await form.locator('button[type="submit"]').click();
+    await expect(page.locator("#playtest-admin [role='alert']")).toContainText("lost response");
+    await expect(form.locator('[name="title"]')).toHaveValue("Private BR test");
+    await form.locator('button[type="submit"]').click();
+    await expect(page.locator("#playtest-admin [role='status']")).toContainText("created");
+    const result = await page.evaluate(() => ({
+        calls: window.__playtestCreateCalls,
+        events: window.__playtestEvents,
+        slots: window.__playtestSlots
+    }));
+    expect(result.calls).toHaveLength(2);
+    expect(result.calls[0].p_request_id).toBe(result.calls[1].p_request_id);
+    expect(result.events.filter((row) => row.title === "Private BR test")).toHaveLength(1);
+    expect(result.slots.filter((row) => row.playtest_id === result.calls[0].p_request_id)).toHaveLength(2);
+});
+
+test("playtest admin edits, freezes, finishes, archives and restores without losing responses", async ({
+    page
+}, testInfo) => {
+    await installPageStubs(page, playtestAdminSupabaseStub);
+    await page.goto("/admin/community/");
+    await expect(page.locator(".admin-playtest-roster")).toContainText("Test Admin");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+    await page.locator('[data-playtest-admin="edit"]').click();
+    await page.locator('#playtest-create-form [name="title"]').fill("Friends weekend test");
+    await page.locator('#playtest-create-form button[type="submit"]').click();
+    await expect(page.locator("#playtest-admin [role='status']")).toContainText("details saved");
+    await page.locator('[data-playtest-admin="freeze"]').click();
+    await expect(page.locator('[data-playtest-admin="unfreeze"]')).toBeVisible();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator('[data-playtest-admin="finish"]').click();
+    await expect(page.locator("#playtest-list")).toContainText("Finished");
+    page.once("dialog", (dialog) => dialog.dismiss());
+    await page.locator('[data-playtest-admin="archive"]').click();
+    expect(await page.evaluate(() => window.__playtestEvents[0].archived_at)).toBeNull();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.locator('[data-playtest-admin="archive"]').click();
+    await expect(page.locator("#playtest-list")).toContainText("No active playtests");
+    await page.locator("[data-admin-playtest-archived]").check();
+    await expect(page.locator("#playtest-list")).toContainText("Archived");
+    await page.locator('[data-playtest-admin="restore"]').click();
+    await expect(page.locator("#playtest-list")).toContainText("Finished");
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator('[data-playtest-admin="export"]').click();
+    expect((await downloadPromise).suggestedFilename()).toContain("availability.csv");
+    expect(await page.evaluate(() => window.__playtestVotes)).toHaveLength(3);
+    await page.locator("[data-admin-playtest-search]").fill("no match");
+    await page.locator("[data-admin-playtest-search]").press("Tab");
+    await expect(page.locator("#playtest-list")).toContainText("No playtests match");
+    await page.locator("[data-admin-playtest-search]").fill("");
+    await page.locator("[data-admin-playtest-search]").press("Tab");
+    await page.screenshot({ path: testInfo.outputPath("playtest-admin.png"), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});
+
+test("duplicate playtests remain drafts, status filters work, and reload retains unsaved edits", async ({ page }) => {
+    await installPageStubs(page, playtestAdminSupabaseStub);
+    await page.goto("/admin/community/");
+    await page.locator('[data-playtest-admin="duplicate"]').click();
+    const form = page.locator("#playtest-create-form");
+    await expect(form.locator('[name="title"]')).toHaveValue("Friends arena test Copy");
+    expect(await page.evaluate(() => window.__playtestEvents)).toHaveLength(1);
+    await form.locator('[name="title"]').fill("Unsaved plan");
+    await page.locator('[data-playtest-admin="reload"]').click();
+    await expect(form.locator('[name="title"]')).toHaveValue("Unsaved plan");
+    await page.locator('[data-playtest-admin="cancel"]').click();
+    await page.locator("[data-admin-playtest-status]").selectOption("closed");
+    await expect(page.locator("#playtest-list")).toContainText("No playtests match");
+    await page.locator("[data-admin-playtest-status]").selectOption("voting");
+    await expect(page.locator("#playtest-list")).toContainText("Friends arena test");
+    await expect(page.locator(".admin-playtest-roster")).toContainText("Community Player");
+    await expect(page.locator(".admin-playtest-roster")).toContainText("Busy Friend");
+    expect(await page.evaluate(() => window.__playtestCreateCalls || [])).toHaveLength(0);
 });
 
 test("an administrator can edit badge levels and animated icons in one persistent modal", async ({ page }) => {

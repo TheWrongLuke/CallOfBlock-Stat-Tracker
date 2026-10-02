@@ -6975,6 +6975,184 @@ body[data-public-route="admin-docs"] .admin-help-hero h1 {
     margin: 20px auto 0;
 }
 
+.admin-playtest-controls,
+.admin-playtest-roster {
+    min-width: 0;
+    padding: 18px 0;
+    border-top: 1px solid var(--line);
+}
+
+.community-admin-view .community-admin-board {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.admin-playtest-controls .admin-action-grid,
+.admin-playtest-roster header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.admin-playtest-roster header {
+    justify-content: space-between;
+}
+
+.admin-playtest-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+
+.admin-playtest-filters label {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
+.admin-playtest-filters input,
+.admin-playtest-filters select {
+    max-width: 100%;
+    min-height: 44px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--text);
+    background: var(--panel-strong);
+}
+
+.admin-playtest-filters .progression-check {
+    display: flex;
+    align-items: center;
+}
+
+.admin-playtest-filters input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    min-height: 18px;
+    padding: 0;
+}
+
+.community-admin-view .playtests-hero {
+    padding: 20px 0;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+.community-admin-view .playtests-hero h2 {
+    max-width: none;
+    font-size: 2rem;
+    line-height: 1.2;
+}
+
+.community-admin-view .community-calendar-panel {
+    padding: 18px 0;
+    border: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+.community-admin-view .admin-calendar-cell {
+    min-height: 80px;
+    border-radius: 6px;
+}
+
+.community-admin-view .admin-calendar-slot {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+}
+
+.catalog-shop-fields {
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    border: 0;
+}
+
+@media (max-width: 700px) {
+    .community-admin-view .admin-calendar-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .community-admin-view .admin-calendar-cell:not(.has-community, .has-event),
+    .community-admin-view .admin-calendar-grid .calendar-weekday {
+        display: none;
+    }
+}
+
+.admin-event-editor {
+    max-width: 720px;
+    margin-top: 18px;
+}
+
+.admin-roster-scroll {
+    overflow-x: auto;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.admin-playtest-roster table {
+    width: 100%;
+    min-width: 680px;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    text-align: left;
+}
+
+.admin-playtest-roster th,
+.admin-playtest-roster td {
+    padding: 12px 8px;
+    border-bottom: 1px solid var(--line);
+}
+
+.admin-playtest-roster td small {
+    display: block;
+    overflow-wrap: anywhere;
+    color: var(--muted);
+}
+
+.community-admin-view .community-admin-summary {
+    padding: 18px 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+.community-admin-view .community-admin-summary h3 {
+    font-size: 1.5rem;
+    line-height: 1.2;
+}
+
+.community-admin-view .playtest-list {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+}
+
+.community-admin-view #playtest-list .playtest-side-block {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+.community-admin-view .playtest-list-item {
+    flex: 0 0 240px;
+    border-radius: 6px;
+}
+
 .playtests-hero,
 .playtest-side-block,
 .playtest-detail-head,
@@ -7026,6 +7204,7 @@ body[data-public-route="admin-docs"] .admin-help-hero h1 {
 .identity-block a,
 .identity-block button,
 .admin-action-grid button,
+.admin-playtest-roster button,
 .playtest-create-form button,
 .slot-expand,
 .vote-button {
@@ -7045,6 +7224,7 @@ body[data-public-route="admin-docs"] .admin-help-hero h1 {
 .identity-block a,
 .identity-block button,
 .admin-action-grid button,
+.admin-playtest-roster button,
 .playtest-create-form button {
     display: inline-flex;
     align-items: center;

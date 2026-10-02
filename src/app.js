@@ -1,4 +1,6 @@
 import { createFeedbackApi } from "./api/feedback.js";
+import { captureFormDraft, restoreFormDraft } from "./core/form-draft.js";
+import { PLAYTEST_ADMIN_STATUSES, validatePlaytestDraft, playtestRoster, rosterCsv } from "./core/playtest-admin.js";
 import { weeklyMissionProgress } from "./core/weekly-mission-progress.js";
 import { createNotificationApi } from "./api/notifications.js";
 import {
@@ -1318,12 +1320,26 @@ function bindStaticEvents() {
             return;
         }
 
-        const progressionCosmeticNew = event.target.closest("[data-progression-cosmetic-new]");
+        const progressionCosmeticNew = event.target.closest("[data-progression-cosmetic-new], [data-progression-playtester-title]");
         if (progressionCosmeticNew) {
             event.preventDefault();
+            if (state.progression.saving) return;
+            state.progression.error = "";
+            state.progression.message = "";
             state.progression.editorKey = "";
             state.progression.creating = true;
             renderProgressionAdminPage();
+            if (progressionCosmeticNew.matches("[data-progression-playtester-title]")) {
+                const form = document.querySelector("[data-progression-cosmetic-form]");
+                form.elements.namedItem("cosmeticType").value = "title";
+                form.elements.namedItem("cosmeticId").value = "private_playtester";
+                form.elements.namedItem("name").value = "Private Playtester";
+                form.elements.namedItem("titleText").value = "Private Playtester";
+                form.elements.namedItem("category").value = "Playtesters";
+                form.elements.namedItem("acquisitionType").value = "exclusive";
+                syncProgressionCosmeticEditor(form);
+                updateProgressionDraftPreview(form);
+            }
             focusProgressionEditor();
             return;
         }
@@ -1331,6 +1347,9 @@ function bindStaticEvents() {
         const progressionCosmeticOpen = event.target.closest("[data-progression-cosmetic-open]");
         if (progressionCosmeticOpen) {
             event.preventDefault();
+            if (state.progression.saving) return;
+            state.progression.error = "";
+            state.progression.message = "";
             state.progression.editorKey = progressionCosmeticOpen.dataset.progressionCosmeticOpen || "";
             state.progression.creating = false;
             renderProgressionAdminPage();
@@ -1341,6 +1360,7 @@ function bindStaticEvents() {
         const progressionCosmeticClose = event.target.closest("[data-progression-cosmetic-close]");
         if (progressionCosmeticClose) {
             event.preventDefault();
+            if (state.progression.saving) return;
             state.progression.editorKey = "";
             state.progression.creating = false;
             renderProgressionAdminPage();
@@ -2000,10 +2020,9 @@ function bindStaticEvents() {
 
         if (event.target.matches("[data-catalog-acquisition]")) {
             const form = event.target.closest("[data-catalog-form]");
-            form?.querySelector("[data-catalog-shop-fields]")?.toggleAttribute(
-                "hidden",
-                event.target.value !== "store"
-            );
+            const fields = form?.querySelector("[data-catalog-shop-fields]");
+            fields?.toggleAttribute("hidden", event.target.value !== "store");
+            fields?.toggleAttribute("disabled", event.target.value !== "store");
         }
     });
 
@@ -2292,6 +2311,12 @@ function bindStaticEvents() {
     const communityAdminView = document.getElementById("community-admin-view");
     if (communityAdminView) {
         communityAdminView.addEventListener("click", handlePlaytestClick);
+        communityAdminView.addEventListener("submit", handlePlaytestSubmit);
+        communityAdminView.addEventListener("change", handlePlaytestChange);
+        communityAdminView.addEventListener("input", (event) => {
+            const form = event.target.closest("#playtest-create-form");
+            if (form) state.playtests.adminDraft = Object.fromEntries(new FormData(form));
+        });
     }
 
     const championCarousel = document.getElementById("champion-carousel");
@@ -3624,11 +3649,9 @@ async function loadRemotePlaytestsNow(options = {}) {
     if (!silent && shouldRender) render();
 
     try {
-        const { data: playtestRows, error: playtestError } = await state.authClient
-            .from("playtests")
-            .select(PLAYTEST_SELECT_COLUMNS)
-            .is("archived_at", null)
-            .order("created_at", { ascending: false });
+        let eventsQuery = state.authClient.from("playtests").select(PLAYTEST_SELECT_COLUMNS);
+        if (!isPlaytestAdmin()) eventsQuery = eventsQuery.is("archived_at", null);
+        const { data: playtestRows, error: playtestError } = await eventsQuery.order("created_at", { ascending: false });
         if (playtestError) throw playtestError;
 
         const playtestIds = [...new Set((playtestRows || []).map((row) => row.id).filter(Boolean))];
@@ -3678,7 +3701,6 @@ async function loadRemotePlaytestsNow(options = {}) {
         return true;
     } catch (error) {
         console.warn("Could not load Supabase playtests", error);
-        state.playtests.remotePlaytests = [];
         state.playtests.remoteError = remotePlaytestErrorMessage(error);
         return false;
     } finally {
@@ -3776,8 +3798,7 @@ function mapRemotePlaytests(playtestRows, slotRows, availabilityRows, profileMap
                 slots,
                 remoteVotesBySlot: votesByPlaytest.get(row.id) || {}
             };
-        })
-        .filter((playtest) => !playtest.archived);
+        });
 }
 
 function remoteSlotToLocal(row) {
@@ -5412,6 +5433,11 @@ function renderProgressionAdminPage({ forceBadgeEditor = false } = {}) {
     }
     if (!state.progression.loaded && !state.progression.loading) void loadProgressionAdminData();
     const adminCatalog = progressionAdminCatalogItems();
+    const oldCosmeticForm = body.querySelector("[data-progression-cosmetic-form]");
+    const sameCosmetic = oldCosmeticForm && state.progression.section === "cosmetics" &&
+        oldCosmeticForm.elements.namedItem("originalKey").value ===
+        (state.progression.creating ? "" : state.progression.editorKey);
+    const cosmeticDraft = sameCosmetic ? captureFormDraft(oldCosmeticForm) : null;
     body.innerHTML = renderProgressionAdminContent({
         loading: state.progression.loading,
         ready: state.progression.ready,
@@ -5482,6 +5508,15 @@ function renderProgressionAdminPage({ forceBadgeEditor = false } = {}) {
         error: state.progression.error,
         saving: state.progression.saving
     });
+    const cosmeticForm = body.querySelector("[data-progression-cosmetic-form]");
+    restoreFormDraft(cosmeticForm, cosmeticDraft);
+    syncProgressionCosmeticEditor(cosmeticForm);
+    if (cosmeticForm) {
+        updateProgressionDraftPreview(cosmeticForm);
+        const status = cosmeticForm.querySelector("[data-progression-editor-status]");
+        status.textContent = state.progression.error || state.progression.message;
+        status.classList.toggle("error", Boolean(state.progression.error));
+    }
 }
 
 async function loadProgressionAdminData({ force = false } = {}) {
@@ -6405,6 +6440,12 @@ function syncProgressionCosmeticEditor(form) {
     form.querySelector("[data-progression-store-fields]")?.toggleAttribute("hidden", !storeEnabled);
     form.querySelector("[data-progression-time-fields]")?.toggleAttribute("hidden", !timeLimited);
     form.querySelector("[data-progression-count-fields]")?.toggleAttribute("hidden", !countLimited);
+
+    for (const group of form.querySelectorAll(".progression-type-fields, [data-progression-mission-fields], [data-progression-store-fields]")) {
+        for (const input of group.querySelectorAll("input, select, textarea")) {
+            input.disabled = group.hidden || Boolean(input.closest("[data-progression-time-fields], [data-progression-count-fields]")?.hidden);
+        }
+    }
 
     for (const name of ["availableFrom", "availableUntil"]) {
         const input = form.elements.namedItem(name);
@@ -7490,7 +7531,7 @@ function renderCatalogEditor(item = null) {
               .join("")}</select>`;
     const idField = editing
         ? `<input type="hidden" name="cosmeticId" value="${escapeHtml(value.id)}"><span class="catalog-locked-value"><code>${escapeHtml(value.id)}</code></span>`
-        : `<input name="cosmeticId" required maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" placeholder="founder_night" autocomplete="off">`;
+        : `<input name="cosmeticId" required maxlength="64" pattern="[a-z0-9][a-z0-9_\\-]{0,63}" placeholder="founder_night" autocomplete="off">`;
 
     return `
         <form class="catalog-editor" data-catalog-form>
@@ -7525,11 +7566,11 @@ function renderCatalogEditor(item = null) {
                 <label><span>Sort order</span><input name="sortOrder" type="number" min="0" max="100000" step="1" value="${escapeHtml(String(value.sortOrder))}"></label>
                 <label class="catalog-check"><input type="checkbox" name="active" ${value.active ? "checked" : ""}><span>Visible in collections</span></label>
             </div>
-            <div class="catalog-shop-fields" data-catalog-shop-fields ${value.acquisitionType === "store" ? "" : "hidden"}>
+            <fieldset class="catalog-shop-fields" data-catalog-shop-fields ${value.acquisitionType === "store" ? "" : "disabled hidden"}>
                 <label><span>Preview price</span><input name="shopPrice" type="number" min="0.01" max="10000" step="0.01" value="${escapeHtml(price)}"></label>
                 <label><span>Currency</span><select name="shopCurrency">${["eur", "usd", "gbp"].map((currency) => `<option value="${currency}" ${value.currency === currency ? "selected" : ""}>${currency.toUpperCase()}</option>`).join("")}</select></label>
                 <label class="catalog-check"><input type="checkbox" name="shopFeatured" ${value.featured ? "checked" : ""}><span>Featured listing</span></label>
-            </div>
+            </fieldset>
             <p class="catalog-form-status" data-catalog-form-status></p>
             <button class="catalog-save-button" type="submit" ${state.store.savingCatalog ? "disabled" : ""}>${state.store.savingCatalog ? "Saving..." : editing ? "Save changes" : "Create cosmetic"}</button>
         </form>
@@ -10045,8 +10086,22 @@ function renderCommunityAdminPage() {
                 <span>${summariesTotalVoters([...communitySummaries, ...eventSummaries])} voters</span>
             </div>
         </section>
-        ${renderCommunityAdminCalendar(playtest, communitySummaries, eventSummaries, filters)}
+        ${playtest.archived ? `<p class="mode-empty">Archived. Votes and dates are retained.</p>` : renderCommunityAdminCalendar(playtest, communitySummaries, eventSummaries, filters)}
+        ${renderAdminPlaytestRoster(summaries)}
     `;
+}
+
+function renderAdminPlaytestRoster(summaries) {
+    const rows = playtestRoster(summaries);
+    return `<section class="admin-playtest-roster">
+        <header><h3>Participant availability</h3><button type="button" data-playtest-admin="export" ${rows.length ? "" : "disabled"}>Export CSV</button></header>
+        ${rows.length ? `<div class="admin-roster-scroll"><table><thead><tr><th>Player</th><th>Date</th><th>Response</th><th>Mode</th><th>Available from / until</th></tr></thead><tbody>${rows.map((row) => `<tr>
+            <td><strong>${escapeHtml(row.username)}</strong><small>${escapeHtml(row.userId)}</small></td>
+            <td>${escapeHtml(formatSlotShortRange({ startAt: row.startAt }))}</td>
+            <td>${escapeHtml(statusLabel(row.status))}</td><td>${escapeHtml(row.modePreference)}</td>
+            <td>${escapeHtml(row.availableStartAt ? formatSlotShortRange({ startAt: row.availableStartAt, endAt: row.availableEndAt }) : "Not specified")}</td>
+        </tr>`).join("")}</tbody></table></div>` : `<p class="mode-empty">No availability responses yet.</p>`}
+    </section>`;
 }
 
 function renderCommunityAdminCalendar(
@@ -10297,26 +10352,35 @@ function renderAdminSlotDeleteControl(playtest, summary) {
 function renderPlaytestList(playtests, active) {
     const container = document.getElementById("playtest-list");
     if (!container) return;
-    if (playtests.length === 0) {
+    const adminView = state.view === "communityAdmin" && isPlaytestAdmin();
+    const toolbar = adminView ? `<div class="admin-playtest-filters">
+        <label><span>Find playtest</span><input type="search" data-admin-playtest-search value="${escapeHtml(state.playtests.adminSearch)}" placeholder="Title or description"></label>
+        <label><span>Status</span><select data-admin-playtest-status><option value="all">All statuses</option>${PLAYTEST_ADMIN_STATUSES.map((status) => `<option value="${status}" ${state.playtests.adminStatus === status ? "selected" : ""}>${escapeHtml(status[0].toUpperCase() + status.slice(1))}</option>`).join("")}</select></label>
+        <label class="progression-check"><input type="checkbox" data-admin-playtest-archived ${state.playtests.adminShowArchived ? "checked" : ""}><span>Show archived</span></label>
+    </div>` : "";
+    const search = state.playtests.adminSearch.toLowerCase().trim();
+    const visible = adminView ? playtests.filter((event) => (state.playtests.adminStatus === "all" || event.status === state.playtests.adminStatus) &&
+        (!search || `${event.title} ${event.description}`.toLowerCase().includes(search))) : playtests;
+    if (visible.length === 0) {
         const status = state.playtests.remoteLoading
             ? "Loading public playtests..."
             : state.playtests.remoteError || "No active playtests.";
-        container.innerHTML = `<section class="playtest-side-block"><p class="mode-empty">${escapeHtml(status)}</p></section>`;
+        container.innerHTML = `${toolbar}<p class="mode-empty">${escapeHtml(playtests.length ? "No playtests match these filters." : status)}</p>`;
         return;
     }
 
     container.innerHTML = `
-        <section class="playtest-side-block">
+        ${toolbar}<section class="playtest-side-block">
             <p class="panel-kicker">Featured Plans</p>
             <div class="playtest-list">
-                ${playtests
+                ${visible
                     .map((playtest) => {
                         const summaries = summarizePlaytestSlots(playtest);
                         const best = bestPlaytestSlots(summaries)[0];
                         const selected = active?.id === playtest.id;
                         return `
                         <button class="playtest-list-item ${selected ? "active" : ""}" type="button" data-playtest-select="${escapeHtml(playtest.id)}" aria-pressed="${selected ? "true" : "false"}" aria-label="${escapeHtml(`${playtest.title}${selected ? ", selected" : ""}`)}">
-                            <span>${escapeHtml(playtestStatusLabel(playtest))}</span>
+                            <span>${escapeHtml(playtest.archived ? "Archived" : playtestStatusLabel(playtest))}${playtest.frozen ? " / Votes frozen" : ""}</span>
                             <strong>${escapeHtml(playtest.title)}</strong>
                             <small>${best ? `${escapeHtml(formatSlotShortRange(best.slot))} - Score ${best.score}` : "No slots"}</small>
                         </button>
@@ -10396,49 +10460,57 @@ function renderPlaytestAdmin(playtest) {
     const isFrozen = Boolean(playtest?.frozen);
     const isClosed = playtest?.status === "closed" || playtest?.status === "finished";
     const noPlaytest = !playtest;
+    const busy = state.playtests.adminBusy;
+    const draft = state.playtests.adminDraft;
+    const editing = Boolean(draft?.editId);
     container.innerHTML = `
-        <section class="playtest-side-block admin-draft-block">
-            <details>
-                <summary>Admin controls</summary>
+        <section class="admin-playtest-controls">
+                ${state.playtests.adminMessage ? `<p role="status">${escapeHtml(state.playtests.adminMessage)}</p>` : ""}
+                ${state.playtests.adminError || state.playtests.remoteError ? `<p class="error" role="alert">${escapeHtml(state.playtests.adminError || state.playtests.remoteError)}</p>` : ""}
                 <div class="admin-action-grid">
-                    <button type="button" data-route="community-dates">Community calendar</button>
+                    <button class="primary" type="button" data-playtest-admin="new">New playtest</button>
                     <button type="button" data-playtest-admin="reload">Reload calendar</button>
+                    <button type="button" data-playtest-admin="edit" ${noPlaytest ? "disabled" : ""}>Edit details</button>
                     <button type="button" data-playtest-admin="duplicate" ${noPlaytest ? "disabled" : ""}>Duplicate</button>
-                    <button type="button" data-playtest-admin="${isClosed ? "reopen" : "close"}" ${noPlaytest ? "disabled" : ""}>${isClosed ? "Reopen" : "Close voting"}</button>
-                    <button type="button" data-playtest-admin="${isFrozen ? "unfreeze" : "freeze"}" ${noPlaytest ? "disabled" : ""}>${isFrozen ? "Unfreeze" : "Freeze votes"}</button>
-                    <button type="button" data-playtest-admin="reset-votes" ${noPlaytest ? "disabled" : ""}>Reset my votes</button>
+                    <button type="button" data-playtest-admin="${isClosed ? "reopen" : "close"}" ${noPlaytest || playtest.archived ? "disabled" : ""}>${isClosed ? "Reopen voting" : "Close voting"}</button>
+                    <button type="button" data-playtest-admin="${isFrozen ? "unfreeze" : "freeze"}" ${noPlaytest || playtest.archived ? "disabled" : ""}>${isFrozen ? "Unfreeze votes" : "Freeze votes"}</button>
+                    <button type="button" data-playtest-admin="finish" ${noPlaytest || playtest.archived || playtest.status === "finished" ? "disabled" : ""}>Mark finished</button>
+                    <button type="button" data-playtest-admin="${playtest?.archived ? "restore" : "archive"}" ${noPlaytest ? "disabled" : ""}>${playtest?.archived ? "Restore playtest" : "Archive playtest"}</button>
+                    <button type="button" data-route="admin-progression">Tester cosmetics</button>
                 </div>
                 ${noPlaytest ? `<p class="mode-empty">Create the first public playtest to enable date-specific admin actions.</p>` : ""}
-                <form class="playtest-create-form" id="playtest-create-form">
+                ${draft ? `<form class="playtest-create-form admin-event-editor" id="playtest-create-form">
+                    <h3>${editing ? "Edit playtest details" : "New playtest"}</h3>
+                    <input type="hidden" name="editId" value="${escapeHtml(draft.editId || "")}">
                     <label>
                         <span>Title</span>
-                        <input name="title" type="text" placeholder="Battle Royale Playtest" required>
+                        <input name="title" type="text" value="${escapeHtml(draft.title || "")}" maxlength="120" placeholder="Private playtest" required>
                     </label>
                     <label>
                         <span>Description</span>
-                        <textarea name="description" rows="3" placeholder="Focus for this test"></textarea>
+                        <textarea name="description" rows="3" maxlength="2000" placeholder="Focus for this test">${escapeHtml(draft.description || "")}</textarea>
                     </label>
+                    ${editing ? "" : `
                     <label>
-                        <span>First featured date</span>
-                        <input name="mainSlot" type="datetime-local" required>
+                        <span>First date (${escapeHtml(viewerTimeZoneLabel())})</span>
+                        <input name="mainSlot" type="datetime-local" value="${escapeHtml(draft.mainSlot || "")}" required>
                     </label>
                     <label>
                         <span>Other featured dates</span>
-                        <textarea name="alternativeSlots" rows="4" placeholder="2026-07-17T20:00&#10;2026-07-19T20:00"></textarea>
+                        <textarea name="alternativeSlots" rows="3" placeholder="YYYY-MM-DDTHH:MM">${escapeHtml(draft.alternativeSlots || "")}</textarea>
                     </label>
+                    <label><span>Duration (minutes)</span><input name="durationMinutes" type="number" min="15" max="720" step="1" value="${escapeHtml(draft.durationMinutes || 120)}" required></label>`}
                     <label>
                         <span>Status</span>
                         <select name="status">
-                            <option value="voting">Voting</option>
-                            <option value="upcoming">Upcoming</option>
-                            <option value="closed">Closed</option>
+                            ${PLAYTEST_ADMIN_STATUSES.map((status) => `<option value="${status}" ${draft.status === status ? "selected" : ""}>${escapeHtml(status[0].toUpperCase() + status.slice(1))}</option>`).join("")}
                         </select>
                     </label>
-                    <button type="submit">Create playtest</button>
-                </form>
-            </details>
+                    <div class="admin-action-grid"><button type="submit">${busy ? "Saving..." : editing ? "Save details" : "Create playtest"}</button><button type="button" data-playtest-admin="cancel">Cancel</button></div>
+                </form>` : ""}
         </section>
     `;
+    if (busy) for (const input of container.querySelectorAll("button, input, select, textarea")) input.disabled = true;
 }
 
 function renderPlaytestBoard(playtest) {
@@ -11212,6 +11284,21 @@ function handlePlaytestClick(event) {
 }
 
 function handlePlaytestChange(event) {
+    if (isPlaytestAdmin()) {
+        if (event.target.matches("[data-admin-playtest-search]")) state.playtests.adminSearch = event.target.value;
+        else if (event.target.matches("[data-admin-playtest-status]")) state.playtests.adminStatus = event.target.value;
+        else if (event.target.matches("[data-admin-playtest-archived]")) state.playtests.adminShowArchived = event.target.checked;
+        else if (event.target.closest("#playtest-create-form")) {
+            state.playtests.adminDraft = Object.fromEntries(new FormData(event.target.closest("form")));
+            return;
+        } else return handlePlaytestPreferenceChange(event);
+        renderCommunityAdminPage();
+        return;
+    }
+    handlePlaytestPreferenceChange(event);
+}
+
+function handlePlaytestPreferenceChange(event) {
     const active = activePlaytest();
     if (!active) return;
     if (event.target.name === "playtest-mode") {
@@ -11255,119 +11342,85 @@ async function handleConfirmDateClick(confirmButton) {
 async function handlePlaytestSubmit(event) {
     if (event.target.id !== "playtest-create-form") return;
     event.preventDefault();
-    if (!isPlaytestAdmin()) return;
+    if (!isPlaytestAdmin() || state.playtests.adminBusy) return;
     const form = event.target;
-    const data = new FormData(form);
-    const mainSlotAt = parsePlaytestDateInput(data.get("mainSlot"));
-    if (!mainSlotAt) return;
-
-    const id = `local-playtest-${Date.now()}`;
-    const alternatives = String(data.get("alternativeSlots") || "")
-        .split(/\r?\n/)
-        .map((value) => parsePlaytestDateInput(value.trim()))
-        .filter(Boolean);
-    if (state.authClient && isDiscordLoggedIn()) {
-        const remoteCreated = await createRemotePlaytest(data, mainSlotAt, alternatives);
-        if (remoteCreated) form.reset();
-        return;
-    }
-
-    const slots = [
-        { id: `${id}-main`, label: "Featured date", startAt: mainSlotAt, source: "featured" },
-        ...alternatives.map((startAt, index) => ({
-            id: `${id}-alt-${index + 1}`,
-            label: `Featured date ${index + 2}`,
-            startAt,
-            source: "featured"
-        }))
-    ];
-
-    const playtest = {
-        id,
-        title: String(data.get("title") || "Community Playtest").trim() || "Community Playtest",
-        description: String(data.get("description") || "").trim(),
-        status: ["upcoming", "voting", "closed"].includes(data.get("status")) ? data.get("status") : "voting",
-        createdBy: PLAYTEST_VIEWER.userId,
-        createdAt: new Date().toISOString(),
-        mainSlotId: `${id}-main`,
-        slots
-    };
-
-    state.playtests.localPlaytests.push(playtest);
-    state.playtests.activeId = id;
-    savePlaytestState();
-    form.reset();
-    render();
-}
-
-async function createRemotePlaytest(data, mainSlotAt, alternatives) {
-    if (!state.authClient || !isPlaytestAdmin()) return false;
-    const title = String(data.get("title") || "Community Playtest").trim() || "Community Playtest";
-    const description = String(data.get("description") || "").trim();
-    const status = ["upcoming", "voting", "closed"].includes(data.get("status")) ? data.get("status") : "voting";
-
+    const draft = Object.fromEntries(new FormData(form));
+    state.playtests.adminDraft = draft;
+    state.playtests.adminError = "";
+    state.playtests.adminMessage = "";
     try {
-        const { data: playtest, error: playtestError } = await state.authClient
-            .from("playtests")
-            .insert({
-                title,
-                description,
-                status,
-                created_by: PLAYTEST_VIEWER.userId
-            })
-            .select(PLAYTEST_SELECT_COLUMNS)
-            .single();
-        if (playtestError) throw playtestError;
-
-        const slotRows = [
-            { startAt: mainSlotAt, label: "Featured date", isMain: true },
-            ...alternatives.map((startAt, index) => ({ startAt, label: `Featured date ${index + 2}`, isMain: false }))
-        ].map((slot) => ({
-            playtest_id: playtest.id,
-            start_datetime: slot.startAt,
-            end_datetime: defaultSlotEndAt(slot.startAt),
-            label: slot.label,
-            is_main: slot.isMain,
-            source: "featured"
-        }));
-
-        const { data: slots, error: slotError } = await state.authClient
-            .from("playtest_slots")
-            .insert(slotRows)
-            .select(PLAYTEST_SLOT_SELECT_COLUMNS);
-        if (slotError) throw slotError;
-
-        const mainSlot = (slots || []).find((slot) => slot.is_main) || slots?.[0];
-        if (mainSlot?.id) {
-            const { error: updateError } = await state.authClient
-                .from("playtests")
-                .update({ main_slot_id: mainSlot.id })
-                .eq("id", playtest.id);
-            if (updateError) throw updateError;
+        if (!state.authClient || !isDiscordLoggedIn()) throw new Error("Sign in as an administrator to save a playtest.");
+        const validated = validatePlaytestDraft(draft);
+        state.playtests.adminBusy = true;
+        renderCommunityAdminPage();
+        if (draft.editId) {
+            const result = await state.authClient.from("playtests").update(validated).eq("id", draft.editId).select("id").single();
+            if (result.error) throw result.error;
+        } else {
+            // Keep the ID even if an uncertain response is followed by a draft edit.
+            // The database rejects a conflicting retry instead of creating a second event.
+            state.playtests.createRequest ||= { id: crypto.randomUUID() };
+            const { data, error } = await state.authClient.rpc("admin_create_playtest", {
+                p_request_id: state.playtests.createRequest.id,
+                p_title: validated.title,
+                p_description: validated.description,
+                p_status: validated.status,
+                p_starts: validated.starts,
+                p_duration_minutes: validated.durationMinutes
+            });
+            if (error) throw error;
+            state.playtests.activeId = data;
+            state.playtests.createRequest = null;
         }
-
-        state.playtests.activeId = playtest.id;
-        state.authMessage = "";
+        state.playtests.adminDraft = null;
+        state.playtests.adminMessage = draft.editId ? "Playtest details saved. Existing dates and votes are unchanged." : "Playtest created.";
         await loadRemotePlaytests({ silent: true, render: false });
         savePlaytestState();
-        render();
-        return true;
     } catch (error) {
-        console.error("Failed to create Supabase playtest", error);
-        state.authMessage = "Could not create the public event. Check your admin role and Supabase schema.";
-        render();
-        return false;
+        state.playtests.adminError = error?.message || "Could not save this playtest. Your draft is retained.";
+    } finally {
+        state.playtests.adminBusy = false;
+        renderCommunityAdminPage();
     }
 }
 
 async function handlePlaytestAdmin(action) {
-    if (!isPlaytestAdmin()) return;
+    if (!isPlaytestAdmin() || state.playtests.adminBusy) return;
+    state.playtests.adminError = "";
+    state.playtests.adminMessage = "";
+    if (action === "new" || action === "cancel") {
+        state.playtests.adminDraft = action === "new" ? { status: "voting", durationMinutes: 120 } : null;
+        state.playtests.createRequest = null;
+        renderCommunityAdminPage();
+        return;
+    }
     if (action === "reload") {
         await loadRemotePlaytests({ silent: false });
         return;
     }
     const playtest = activePlaytest();
     if (!playtest) return;
+    if (action === "edit" || action === "duplicate") {
+        const dates = playtest.slots.filter(isFeaturedSlot).map((slot) => catalogDateTimeInputValue(slot.startAt));
+        state.playtests.adminDraft = { editId: action === "edit" ? playtest.id : "", title: `${playtest.title}${action === "duplicate" ? " Copy" : ""}`.slice(0, 120),
+            description: playtest.description, status: action === "edit" ? playtest.status : "voting", durationMinutes: 120,
+            mainSlot: dates[0] || "", alternativeSlots: dates.slice(1).join("\n") };
+        state.playtests.createRequest = null;
+        renderCommunityAdminPage();
+        return;
+    }
+    if (action === "export") {
+        const url = URL.createObjectURL(new Blob([rosterCsv(playtestRoster(summarizePlaytestSlots(playtest)))], { type: "text/csv;charset=utf-8" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `playtest-${playtest.id}-availability.csv`;
+        link.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        return;
+    }
+    if (["archive", "finish"].includes(action) && !window.confirm(action === "archive" ?
+        `Archive ${playtest.title}? It will disappear from the public calendar. Dates and votes will be kept and can be restored.` :
+        `Mark ${playtest.title} as finished? Voting will close. Existing votes will be kept.`)) return;
 
     if (isRemotePlaytest(playtest)) {
         await handleRemotePlaytestAdmin(action, playtest);
@@ -11376,9 +11429,7 @@ async function handlePlaytestAdmin(action) {
 
     const override = playtestOverride(playtest.id);
 
-    if (action === "duplicate") {
-        duplicatePlaytest(playtest);
-    } else if (action === "close") {
+    if (action === "close") {
         override.status = "closed";
     } else if (action === "reopen") {
         override.status = "voting";
@@ -11386,9 +11437,10 @@ async function handlePlaytestAdmin(action) {
         override.frozen = true;
     } else if (action === "unfreeze") {
         override.frozen = false;
-    } else if (action === "reset-votes") {
-        delete state.playtests.votes[playtest.id];
-        closeEmptyCommunitySlots();
+    } else if (action === "finish") {
+        override.status = "finished";
+    } else if (action === "archive" || action === "restore") {
+        override.archived = action === "archive";
     }
 
     savePlaytestState();
@@ -11396,79 +11448,39 @@ async function handlePlaytestAdmin(action) {
 }
 
 async function handleRemotePlaytestAdmin(action, playtest) {
+    state.playtests.adminBusy = true;
+    renderCommunityAdminPage();
     try {
-        if (action === "duplicate") {
-            await duplicateRemotePlaytest(playtest);
-        } else if (action === "close" || action === "reopen") {
+        if (["close", "reopen", "finish"].includes(action)) {
             const { error } = await state.authClient
                 .from("playtests")
-                .update({ status: action === "close" ? "closed" : "voting" })
-                .eq("id", playtest.id);
+                .update({ status: action === "close" ? "closed" : action === "finish" ? "finished" : "voting" })
+                .eq("id", playtest.id).select("id").single();
             if (error) throw error;
         } else if (action === "freeze" || action === "unfreeze") {
             const { error } = await state.authClient
                 .from("playtests")
                 .update({ votes_frozen: action === "freeze" })
-                .eq("id", playtest.id);
+                .eq("id", playtest.id).select("id").single();
             if (error) throw error;
-        } else if (action === "reset-votes") {
+        } else if (action === "archive" || action === "restore") {
             const { error } = await state.authClient
-                .from("availability")
-                .delete()
-                .eq("playtest_id", playtest.id)
-                .eq("user_id", PLAYTEST_VIEWER.userId);
+                .from("playtests")
+                .update({ archived_at: action === "archive" ? new Date().toISOString() : null })
+                .eq("id", playtest.id).select("id").single();
             if (error) throw error;
         }
-
+        state.playtests.adminMessage = "Playtest updated. Existing dates and votes are retained.";
         await loadRemotePlaytests({ silent: true, render: false });
         savePlaytestState();
-        render();
     } catch (error) {
-        console.error("Failed to update Supabase playtest", error);
-        state.authMessage = "Could not update the public event. Check your admin role.";
-        render();
+        state.playtests.adminError = error?.message || "Could not update the public event.";
+    } finally {
+        state.playtests.adminBusy = false;
+        renderCommunityAdminPage();
     }
 }
 
-async function duplicateRemotePlaytest(playtest) {
-    const { data: clone, error: playtestError } = await state.authClient
-        .from("playtests")
-        .insert({
-            title: `${playtest.title} Copy`,
-            description: playtest.description || "",
-            status: "voting",
-            created_by: PLAYTEST_VIEWER.userId,
-            votes_frozen: false
-        })
-        .select(PLAYTEST_SELECT_COLUMNS)
-        .single();
-    if (playtestError) throw playtestError;
-
-    const slotRows = (playtest.slots || []).map((slot, index) => ({
-        playtest_id: clone.id,
-        start_datetime: slot.startAt,
-        end_datetime: slot.endAt || defaultSlotEndAt(slot.startAt),
-        label: slot.label || "Featured date",
-        is_main: slot.id === playtest.mainSlotId || (!playtest.mainSlotId && index === 0),
-        source: "featured"
-    }));
-    if (slotRows.length) {
-        const { data: slots, error: slotError } = await state.authClient
-            .from("playtest_slots")
-            .insert(slotRows)
-            .select(PLAYTEST_SLOT_SELECT_COLUMNS);
-        if (slotError) throw slotError;
-        const mainSlot = (slots || []).find((slot) => slot.is_main) || slots?.[0];
-        if (mainSlot?.id) {
-            const { error: updateError } = await state.authClient
-                .from("playtests")
-                .update({ main_slot_id: mainSlot.id })
-                .eq("id", clone.id);
-            if (updateError) throw updateError;
-        }
-    }
-    state.playtests.activeId = clone.id;
-}
 
 async function setPlaytestVote(playtestId, slotId, status, timeRange = null) {
     if (!PLAYTEST_STATUS_OPTIONS.some((option) => option.id === status)) return;
@@ -11745,6 +11757,7 @@ function tallyPreferences(voters, property) {
 
 function canVoteOnPlaytest(playtest) {
     if (!playtest) return false;
+    if (playtest.archived) return false;
     if (playtest.frozen) return false;
     if (playtest.status !== "voting") return false;
     return true;
@@ -11767,7 +11780,7 @@ function activePlaytests() {
     );
     const playtests = [...remotePlaytests, ...DEFAULT_PLAYTESTS, ...localPlaytests]
         .map(applyPlaytestOverride)
-        .filter((playtest) => !playtest.archived);
+        .filter((playtest) => !playtest.archived || (state.view === "communityAdmin" && isPlaytestAdmin() && state.playtests.adminShowArchived));
 
     if (!playtests.some((playtest) => playtest.id === state.playtests.activeId)) {
         state.playtests.activeId = playtests[0]?.id || "";
@@ -12412,12 +12425,6 @@ function localDateTimeIso(key, time) {
     return localDateFromKey(key, time).toISOString();
 }
 
-function defaultSlotEndAt(startAt) {
-    const date = new Date(startAt);
-    if (Number.isNaN(date.getTime())) return "";
-    date.setHours(date.getHours() + 2);
-    return date.toISOString();
-}
 
 function localTimeKey(value) {
     const date = value instanceof Date ? value : new Date(value);
@@ -12465,7 +12472,7 @@ function normalizeTimeRange(startTime = "20:00", endTime = "22:00") {
 }
 
 function applyPlaytestOverride(playtest) {
-    const override = state.playtests.overrides?.[playtest.id] || {};
+    const override = playtest.remote ? {} : state.playtests.overrides?.[playtest.id] || {};
     const deletedSlots = state.playtests.deletedSlots?.[playtest.id] || {};
     const playtestSlots = (playtest.slots || []).filter((slot) => !deletedSlots[slot.id]);
     const communitySlots = playtest.remote
@@ -12505,29 +12512,6 @@ function syncPreferenceToExistingVotes(playtestId, preference) {
     });
 }
 
-function duplicatePlaytest(playtest) {
-    if (!isPlaytestAdmin()) return;
-    const id = `local-playtest-${Date.now()}`;
-    const slotIdMap = new Map((playtest.slots || []).map((slot, index) => [slot.id, `${id}-slot-${index + 1}`]));
-    const clone = {
-        id,
-        title: `${playtest.title} Copy`,
-        description: playtest.description,
-        status: "voting",
-        createdBy: PLAYTEST_VIEWER.userId,
-        createdAt: new Date().toISOString(),
-        mainSlotId: slotIdMap.get(playtest.mainSlotId) || `${id}-slot-1`,
-        slots: (playtest.slots || []).map((slot, index) => ({
-            id: slotIdMap.get(slot.id) || `${id}-slot-${index + 1}`,
-            label: slot.label,
-            startAt: slot.startAt,
-            endAt: slot.endAt || "",
-            source: "featured"
-        }))
-    };
-    state.playtests.localPlaytests.push(clone);
-    state.playtests.activeId = id;
-}
 
 function loadPlaytestState() {
     const fallback = emptyPlaytestState();
@@ -12609,6 +12593,14 @@ function savePlaytestState() {
 
 function emptyPlaytestState() {
     return {
+        adminSearch: "",
+        adminStatus: "all",
+        adminShowArchived: false,
+        adminDraft: null,
+        adminBusy: false,
+        adminError: "",
+        adminMessage: "",
+        createRequest: null,
         activeId: DEFAULT_PLAYTESTS[0]?.id || "",
         remotePlaytests: [],
         remoteLoading: false,
@@ -12719,13 +12711,6 @@ function sanitizeDeletedSlots(value) {
     );
 }
 
-function parsePlaytestDateInput(value) {
-    const text = String(value || "").trim();
-    if (!text) return "";
-    const date = new Date(text);
-    if (Number.isNaN(date.getTime())) return "";
-    return date.toISOString();
-}
 
 function seedUpdatedAt(index) {
     const minutes = 4 + ((number(index) * 7) % 84);
@@ -12742,7 +12727,6 @@ function statusLabel(status) {
 }
 
 function playtestStatusLabel(playtest) {
-    if (playtest?.frozen) return "Frozen";
     const status = String(playtest?.status || "upcoming");
     return status.charAt(0).toUpperCase() + status.slice(1);
 }

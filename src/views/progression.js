@@ -78,6 +78,7 @@ export function renderProgressionAdminContent({
             <label><span>Type</span><select data-progression-filter="type">${renderOptions([{ value: "all", label: "All types" }, ...COSMETIC_TYPES], filters.type || "all")}</select></label>
             <label class="progression-check"><input type="checkbox" data-progression-show-archived ${filters.showArchived ? "checked" : ""}><span>Show archived</span></label>
             <button type="button" data-progression-cosmetic-new>New cosmetic</button>
+            <button type="button" data-progression-playtester-title>Playtester title</button>
         </section>
         <section class="progression-catalog-grid" aria-live="polite">
             ${visibleCatalog.length ? visibleCatalog.map((item) => renderCosmeticCard(item, rules, grants)).join("") : `<p class="progression-empty">No cosmetics match these filters.</p>`}
@@ -144,8 +145,8 @@ function renderCosmeticEditorModal(item, rule, grants, saving, creating) {
                     <fieldset>
                         <legend>Catalog identity</legend>
                         <div class="progression-editor-fields">
-                            <label><span>Type</span><select name="cosmeticType" data-progression-cosmetic-type ${creating ? "" : "disabled"}>${renderOptions(COSMETIC_TYPES, item.type)}</select>${creating ? "" : `<input type="hidden" name="cosmeticType" value="${escapeHtml(item.type)}">`}</label>
-                            <label><span>Cosmetic ID</span><input name="cosmeticId" value="${escapeHtml(item.id)}" maxlength="64" pattern="[a-z0-9][a-z0-9_-]{0,63}" ${creating ? "" : "readonly"} required></label>
+                            <label><span>Type</span><select ${creating ? 'name="cosmeticType"' : "disabled"} data-progression-cosmetic-type>${renderOptions(COSMETIC_TYPES, item.type)}</select>${creating ? "" : `<input type="hidden" name="cosmeticType" value="${escapeHtml(item.type)}">`}</label>
+                            <label><span>Cosmetic ID</span><input name="cosmeticId" value="${escapeHtml(item.id)}" maxlength="64" pattern="[a-z0-9][a-z0-9_\\-]{0,63}" ${creating ? "" : "readonly"} required></label>
                             <label class="wide"><span>Name</span><input name="name" value="${escapeHtml(item.name || item.label || "")}" maxlength="80" required></label>
                             <label><span>Category</span><input name="category" value="${escapeHtml(item.category || "Default")}" maxlength="40" required></label>
                             <label><span>Rarity</span><select name="rarity">${renderOptions(
