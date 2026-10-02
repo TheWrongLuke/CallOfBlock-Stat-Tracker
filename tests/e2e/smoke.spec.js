@@ -1226,7 +1226,7 @@ test("canonical public pages load directly with unique indexable metadata", asyn
             title: "Call of Block Stats Tracker | Minecraft PvP Leaderboards",
             canonical: "https://callofblock.com/stats/",
             heading: "Call of Block Stats Tracker",
-            intro: "Compare Battle Royale, Deathmatch, Duel and Zombie Survival",
+            intro: "Compare Battle Royale, Zombie Survival, TDM, FFA and Duels",
             view: "#leaderboard-view"
         },
         {
@@ -2885,6 +2885,79 @@ test("Minecraft account link preserves its code across redraws and rejects stale
     await expect(host).toContainText("Account link response is unavailable.");
     await expect(host).not.toContainText("ABCDEF123456");
     expect(requests).toBe(4);
+});
+
+test("Shmar fits short and tall viewports including fullscreen without distorting overlays", async ({
+    page
+}, testInfo) => {
+    await openApp(page, "#view=match&match=fixture-br");
+    const stage = page.locator(".tactical-map-stage");
+    await expect(page.locator(".tactical-map-image")).toBeVisible();
+    for (const viewport of [
+        { width: 1366, height: 650 },
+        { width: 412, height: 740 },
+        { width: 1920, height: 1080 }
+    ]) {
+        await page.setViewportSize(viewport);
+        for (const fullscreen of [false, true]) {
+            if (fullscreen) await page.locator("[data-match-fullscreen]").click();
+            await expect
+                .poll(async () =>
+                    stage.evaluate((element) => element.getBoundingClientRect().height <= innerHeight - 50)
+                )
+                .toBe(true);
+            // Read both boxes in the same frame while fullscreen/ResizeObserver changes settle.
+            await expect
+                .poll(() =>
+                    stage.evaluate((element) => {
+                        const bounds = element.getBoundingClientRect();
+                        const image = element.querySelector(".tactical-map-image").getBoundingClientRect();
+                        return (
+                            Math.abs(bounds.width / bounds.height - 832 / 816) < 0.005 &&
+                            Math.abs(image.width - (bounds.width - 2)) < 0.1 &&
+                            Math.abs(image.height - (bounds.height - 2)) < 0.1
+                        );
+                    })
+                )
+                .toBe(true);
+            await stage.scrollIntoViewIfNeeded();
+            await page.screenshot({
+                path: testInfo.outputPath(`shmar-${viewport.width}-${fullscreen ? "fullscreen" : "normal"}.png`)
+            });
+            if (fullscreen) await page.locator("[data-match-fullscreen]").click();
+        }
+    }
+});
+
+test("tactical playback opens every current mode with its own label", async ({ page }) => {
+    const source = JSON.parse(
+        readFileSync(new URL("../fixtures/match-telemetry/fixture-dm.json", import.meta.url), "utf8")
+    );
+    const modes = [
+        ["battleRoyale", "Battle Royale"],
+        ["zombieSurvival", "Zombie Survival"],
+        ["teamDeathmatch", "Team Deathmatch"],
+        ["freeForAll", "Free For All"],
+        ["duel", "Duels"]
+    ];
+    for (const [mode] of modes) {
+        const matchId = `fixture-current-${mode}`;
+        await page.route(`**/data/match-telemetry/${matchId}.json`, (route) =>
+            route.fulfill({
+                contentType: "application/json",
+                body: JSON.stringify({ ...source, mode, matchId })
+            })
+        );
+    }
+    await openApp(page, "#view=match&match=fixture-current-battleRoyale");
+    for (const [mode, label] of modes) {
+        await page.goto(`/#view=match&match=fixture-current-${mode}`);
+        await expect(page.locator(".match-detail-header .panel-kicker")).toHaveText(label);
+        await expect(page.locator(".tactical-map-image")).toBeVisible();
+        await expect(page.locator(".tactical-player-marker")).toHaveCount(source.participants.length);
+        await page.locator("[data-match-play]").click();
+        await expect(page.locator("[data-match-play]")).toContainText("Pause");
+    }
 });
 
 test("completed Battle Royale telemetry opens as interactive tactical playback", async ({ page }) => {

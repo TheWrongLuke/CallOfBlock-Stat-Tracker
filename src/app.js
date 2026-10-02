@@ -53,6 +53,7 @@ import {
 } from "./config/feedback.js";
 import { headshotRatePercent, meetsSharpshooterRequirement } from "./utils/cosmetic-progress.js";
 import { findTacticalMap } from "./config/tactical-maps.js";
+import { modernizeModeText } from "./core/game-modes.js";
 import { createPerformanceDiagnostics } from "./utils/performance-diagnostics.js";
 import { readPublicStatsCache, writePublicStatsCache } from "./utils/public-data-cache.js";
 import { createRequestSignal } from "./utils/request-timeout.js";
@@ -114,7 +115,7 @@ function renderAdminMatchesPage() {
 const MODE_LABELS = {
     overall: "Overall",
     battleRoyale: "Battle Royale",
-    deathmatch: "Deathmatch",
+    deathmatch: "TDM / FFA (legacy)",
     teamDeathmatch: "Team Deathmatch",
     freeForAll: "Free For All",
     duel: "Duel",
@@ -227,7 +228,7 @@ const WEEKLY_MISSION_COUNT = 7;
 const WEEKLY_EASY_MISSION_COUNT = 4;
 const MISSION_MODES = [
     { id: "battleRoyale", label: "Battle Royale", short: "BR" },
-    { id: "deathmatch", label: "Deathmatch", short: "DM" }
+    { id: "deathmatch", label: "TDM / FFA", short: "TDM / FFA" }
 ];
 const PROFILE_BASE_COLUMNS = "id, discord_id, username, avatar_url, is_admin, banned_from_voting, created_at";
 const PROFILE_ACCOUNT_COLUMNS_LEGACY = [
@@ -363,7 +364,7 @@ const PROFILE_BACKGROUNDS = [
     },
     {
         id: "dm",
-        label: "Deathmatch",
+        label: "Arena",
         category: "Game Modes",
         rarity: "rare",
         unlock: "dm_winner",
@@ -410,7 +411,7 @@ const PFP_BORDERS = [
     },
     {
         id: "blue",
-        label: "Deathmatch Blue",
+        label: "Arena Blue",
         category: "Game Modes",
         rarity: "rare",
         unlock: "dm_winner",
@@ -450,7 +451,7 @@ const PROFILE_TITLES = [
     {
         id: "dm_victor",
         label: "DM Victor",
-        text: "Deathmatch Victor",
+        text: "Arena Victor",
         category: "Game Modes",
         rarity: "rare",
         unlock: "dm_winner"
@@ -475,7 +476,7 @@ const PROFILE_TITLES = [
     {
         id: "dm_champion",
         label: "DM Champion",
-        text: "Deathmatch Champion",
+        text: "Arena Champion",
         category: "Game Modes",
         rarity: "legendary",
         unlock: "dm_wins_live"
@@ -491,7 +492,7 @@ const PROFILE_TITLES = [
     {
         id: "dm_apex",
         label: "DM Apex",
-        text: "Deathmatch Apex",
+        text: "Arena Apex",
         category: "Game Modes",
         rarity: "mythic",
         unlock: "dm_kills_10000"
@@ -2328,8 +2329,11 @@ function bindStaticEvents() {
     championCarousel?.addEventListener("scroll", () => {
         window.clearTimeout(state.championScrollTimer);
         state.championScrollTimer = window.setTimeout(() => {
-            const mode =
-                championCarousel.scrollLeft > championCarousel.clientWidth * 0.5 ? "deathmatch" : "battleRoyale";
+            const panels = [...championCarousel.querySelectorAll("[data-champion-panel]")];
+            const mode = panels.sort((a, b) =>
+                Math.abs(a.offsetLeft - championCarousel.offsetLeft - championCarousel.scrollLeft)
+                - Math.abs(b.offsetLeft - championCarousel.offsetLeft - championCarousel.scrollLeft)
+            )[0]?.dataset.championPanel || "battleRoyale";
             if (mode !== state.championMode) {
                 state.championMode = mode;
                 renderChampionControls();
@@ -2355,7 +2359,8 @@ function restartChampionRotation() {
     window.clearInterval(state.championTimer);
     state.championTimer = window.setInterval(() => {
         if (state.view !== "home") return;
-        const nextMode = state.championMode === "battleRoyale" ? "deathmatch" : "battleRoyale";
+        const modes = Object.keys(PROFILE_MODE_LABELS);
+        const nextMode = modes[(modes.indexOf(state.championMode) + 1) % modes.length];
         showChampionMode(nextMode, true);
     }, CHAMPION_ROTATE_MS);
 }
@@ -4186,7 +4191,7 @@ function emptyExport() {
                 leaderboards: {},
                 players: []
             },
-            deathmatch: { id: "deathmatch", label: "Deathmatch", totalPlayers: 0, leaderboards: {}, players: [] },
+            deathmatch: { id: "deathmatch", label: "TDM / FFA (legacy)", totalPlayers: 0, leaderboards: {}, players: [] },
             duel: { id: "duel", label: "Duel", totalPlayers: 0, leaderboards: { wins: [] }, players: [], matches: [] },
             zombieSurvival: {
                 id: "zombieSurvival",
@@ -9865,11 +9870,11 @@ function renderHomeLatestMatch() {
         return;
     }
 
-    const mode = match.modeLabel || MODE_LABELS[match.mode] || "Match";
+    const mode = modernizeModeText(match.modeLabel || MODE_LABELS[match.mode] || "Match");
     const players = number(match.playerCount);
     const winner = matchWinnerText(match);
     const score =
-        match.mode === "deathmatch" && hasMatchScore(match)
+        canonicalHistoryMode(match) === "teamDeathmatch" && hasMatchScore(match)
             ? `<span>Final score Red ${escapeHtml(String(match.redScore))} - ${escapeHtml(String(match.blueScore))} Blue</span>`
             : "";
 
@@ -9899,7 +9904,7 @@ function renderHomePlaytestPromo() {
                 <p>
                     Planned dates are highlighted as featured sessions, while extra community suggestions live on the calendar.
                     Pick Available, Maybe, Unavailable, or Preferred, then choose whether you would rather test Battle Royale,
-                    Deathmatch, or either mode.
+                    Zombie Survival, TDM, FFA, Duels, or any mode.
                 </p>
             </div>
             <div class="playtest-promo-actions">
@@ -9949,7 +9954,7 @@ function renderFeaturedPlayer(player, rank, modeId) {
     const profile = profileById(player.playerId);
     const account = accountProfileForPlayer(player, profile);
     const name = playerDisplayName(player, profile);
-    const modeTab = modeId === "deathmatch" ? "deathmatch" : "battleRoyale";
+    const modeTab = Object.hasOwn(PROFILE_MODE_LABELS, modeId) ? modeId : "overall";
 
     return `
         <a class="featured-player podium-rank-${rank}" href="${statsHref(`player=${encodeURIComponent(player.playerId)}&tab=${encodeURIComponent(modeTab)}`)}">
@@ -12837,7 +12842,7 @@ function renderChampionControls() {
 }
 
 function showChampionMode(modeId, smooth) {
-    if (modeId !== "battleRoyale" && modeId !== "deathmatch") return;
+    if (!Object.hasOwn(PROFILE_MODE_LABELS, modeId)) return;
     state.championMode = modeId;
     renderChampionControls();
     syncChampionScroll(smooth);
@@ -12909,14 +12914,16 @@ function renderLiveStatus() {
 
 function liveStatusHeadline(status) {
     if (!status || status.state === "idle") return "Idle";
-    if (status.mode === "deathmatch") return status.state === "ending" ? "DM ending" : "DM live";
+    if (["deathmatch", "teamDeathmatch", "freeForAll"].includes(status.mode)) {
+        return `${compactModeLabel(MODE_LABELS[status.mode])} ${status.state === "ending" ? "ending" : "live"}`;
+    }
     if (status.mode === "battleRoyale") {
         if (status.state === "preparing") return "BR preparing";
         return status.state === "ending" ? "BR ending" : "BR live";
     }
-    if (status.mode === "duel") return status.state === "preparing" ? "Duel preparing" : "Duel live";
+    if (status.mode === "duel") return status.state === "preparing" ? "Duels preparing" : "Duels live";
     if (status.mode === "zombieSurvival") {
-        return status.state === "preparing" ? "Survival preparing" : "Survival live";
+        return status.state === "preparing" ? "Zombie preparing" : "Zombie live";
     }
     return status.label || "Idle";
 }
@@ -12924,7 +12931,7 @@ function liveStatusHeadline(status) {
 function liveStatusText(status) {
     if (status?.detail) return status.detail;
     if (!status || status.state === "idle") return "Waiting for the next match";
-    if (status.mode === "deathmatch") {
+    if (["deathmatch", "teamDeathmatch"].includes(status.mode)) {
         const map = status.mapName || status.mapId || "Unknown map";
         const red = Number.isFinite(Number(status.redScore)) ? Number(status.redScore) : 0;
         const blue = Number.isFinite(Number(status.blueScore)) ? Number(status.blueScore) : 0;
@@ -15244,7 +15251,7 @@ function renderMatchHistoryRow(match, { expandable, playerId = "" }) {
     const resultClass = match.won ? "win" : "loss";
     const mode =
         canonicalMode === "deathmatch"
-            ? "Deathmatch (legacy)"
+            ? "TDM / FFA (legacy)"
             : PROFILE_MODE_LABELS[canonicalMode] || match.modeLabel || MODE_LABELS[match.mode] || "Match";
     const expanded = state.expandedMatchIds.has(match.matchId);
     const matchHref = matchRouteHash(match.matchId, playerId);
@@ -16654,9 +16661,11 @@ function formatFullLocalDate(value) {
 function compactModeLabel(value) {
     const text = String(value || "").toLowerCase();
     if (text.includes("battle")) return "BR";
-    if (text.includes("death")) return "DM";
-    if (text.includes("duel")) return "Duel";
-    if (text.includes("zombie") || text.includes("survival")) return "Survival";
+    if (text.includes("team") || text === "tdm") return "TDM";
+    if (text.includes("free") || text === "ffa") return "FFA";
+    if (text.includes("death")) return "TDM / FFA";
+    if (text.includes("duel")) return "Duels";
+    if (text.includes("zombie") || text.includes("survival")) return "Zombie Survival";
     return value || "Match";
 }
 

@@ -1588,6 +1588,7 @@ body.replay-fullscreen-open {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 10;
+    margin-inline: auto;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.12);
     background: #0a1015;

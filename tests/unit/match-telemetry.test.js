@@ -15,6 +15,17 @@ async function fixture(id) {
 }
 
 describe("match telemetry normalization", () => {
+    it("opens telemetry for all five modes and resolves older arena formats", async () => {
+        const source = await fixture("fixture-dm");
+        for (const mode of ["battleRoyale", "zombieSurvival", "teamDeathmatch", "freeForAll", "duel"]) {
+            expect(normalizeMatchTelemetry({ ...source, mode }).mode).toBe(mode);
+        }
+        expect(normalizeMatchTelemetry(source).mode).toBe("teamDeathmatch");
+        source.participants.forEach((player, index) => {
+            player.teamId = `solo-${index + 1}`;
+        });
+        expect(normalizeMatchTelemetry(source).mode).toBe("freeForAll");
+    });
     it("normalizes a complete match and preserves unavailable values", async () => {
         const telemetry = normalizeMatchTelemetry(await fixture("fixture-partial"), "fixture-partial");
 

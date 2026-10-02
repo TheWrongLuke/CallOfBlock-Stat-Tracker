@@ -1,5 +1,6 @@
 import { weeklyMissionProgress } from "./weekly-mission-progress.js";
 import { escapeHtml } from "../utils/sanitization.js";
+import { modernizeModeText } from "./game-modes.js";
 
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const formatNumber = (value) => number(value).toLocaleString();
@@ -63,7 +64,7 @@ function renderMission(mission, { statsProfile, claimed, busyId, rewardingId, ac
             : `<span class="mission-xp">+${formatNumber(mission.xp)} XP</span>`;
     const width = Math.min(100, Math.max(0, Math.round(number(progress.progress) * 100)));
     return `<article class="mission-row weekly-mission-row ${progress.complete ? "complete" : ""} ${mission.carried ? "carried" : ""} ${rewarding ? "rewarding" : ""}">
-        <div><span class="mission-difficulty ${escapeHtml(mission.difficulty)}">${escapeHtml(mission.difficulty)}</span><strong>${escapeHtml(mission.label)}</strong><span>${escapeHtml(mission.description)}</span>${mission.carried ? '<small class="mission-carried-note">Carried over - progress preserved</small>' : ""}</div>
+        <div><span class="mission-difficulty ${escapeHtml(mission.difficulty)}">${escapeHtml(mission.difficulty)}</span><strong>${escapeHtml(modernizeModeText(mission.label))}</strong><span>${escapeHtml(modernizeModeText(mission.description))}</span>${mission.carried ? '<small class="mission-carried-note">Carried over - progress preserved</small>' : ""}</div>
         ${statsProfile ? `<div class="mission-progress"><i style="width: ${width}%"></i></div>` : ""}<small>${escapeHtml(progress.status)}</small>
         <div class="mission-actions">${action}${rewarding ? `<span class="mission-claim-burst">+${formatNumber(mission.xp)} XP</span>` : ""}</div>
     </article>`;

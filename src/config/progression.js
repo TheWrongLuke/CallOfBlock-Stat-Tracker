@@ -9,7 +9,7 @@ export const COSMETIC_ACQUISITION_TYPES = Object.freeze([
 export const PROGRESSION_MODES = Object.freeze([
     { value: "overall", label: "All modes" },
     { value: "battle_royale", label: "Battle Royale" },
-    { value: "deathmatch", label: "Deathmatch" }
+    { value: "deathmatch", label: "TDM / FFA" }
 ]);
 
 export const PROGRESSION_METRICS = Object.freeze([
@@ -45,8 +45,8 @@ export const WEEKLY_MISSION_DIFFICULTIES = Object.freeze([
 export const WEEKLY_MISSION_MODES = Object.freeze([
     { value: "overall", label: "All modes" },
     { value: "battleRoyale", label: "Battle Royale" },
-    { value: "deathmatch", label: "Deathmatch" },
-    { value: "random", label: "Random BR or DM" }
+    { value: "deathmatch", label: "TDM / FFA" },
+    { value: "random", label: "Random BR, TDM or FFA" }
 ]);
 
 export const WEEKLY_MISSION_METRICS = Object.freeze([
@@ -88,7 +88,7 @@ export const WEEKLY_MISSION_TRACKING_TYPES = Object.freeze([
     { value: "all", label: "Multiple requirements" },
     { value: "distinct", label: "Different items" },
     { value: "counter", label: "Tracked match or event counter" },
-    { value: "map_stat", label: "Deathmatch map statistic" }
+    { value: "map_stat", label: "TDM / FFA map statistic" }
 ]);
 
 export function progressionOptionLabel(options, value, fallback = "Unknown") {

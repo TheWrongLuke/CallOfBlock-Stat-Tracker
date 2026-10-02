@@ -120,7 +120,7 @@ const LIVE_COUNTER_BADGES = [
             tier("rare", "Frag Specialist", 500),
             tier("epic", "Match Enforcer", 2500),
             tier("legendary", "Arena Warlord", 5000),
-            tier("mythic", "Deathmatch Reaper", 10000)
+            tier("mythic", "Arena Reaper", 10000)
         ]
     }),
     tieredBadge({
@@ -150,7 +150,7 @@ const LIVE_COUNTER_BADGES = [
             tier("rare", "Score Leader", 10),
             tier("epic", "Match Dominator", 25),
             tier("legendary", "Arena Champion", 50),
-            tier("mythic", "Deathmatch Legend", 100)
+            tier("mythic", "Arena Legend", 100)
         ]
     }),
     tieredBadge({
@@ -179,7 +179,7 @@ const LIVE_COUNTER_BADGES = [
             tier("common", "Standout Fighter", 1),
             tier("rare", "Squad Leader", 10),
             tier("epic", "Arena Commander", 25),
-            tier("legendary", "Deathmatch Icon", 50),
+            tier("legendary", "Arena Icon", 50),
             tier("mythic", "Arena's Finest", 100)
         ]
     }),
@@ -352,7 +352,7 @@ const LIMITED_UPGRADABLE_BADGES = [
         badgeType: "limited",
         metric: { scope: "deathmatchMaps" },
         unit: "DM maps",
-        description: "Build results across four different Deathmatch maps.",
+        description: "Build results across four different TDM / FFA maps.",
         tiers: [
             tier("common", "Map Tourist", 4, {
                 requirement: { type: "dmMaps", stat: "games", targetPerMap: 1, mapCount: 4 }

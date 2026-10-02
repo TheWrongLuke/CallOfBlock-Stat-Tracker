@@ -1,4 +1,5 @@
 import { applyKnownTacticalMap } from "../config/tactical-maps.js";
+import { matchGameMode, modernizeModeText } from "../core/game-modes.js";
 
 export const MATCH_TELEMETRY_VERSION = 1;
 
@@ -49,7 +50,7 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
     if (!matchId || (expectedMatchId && matchId !== expectedMatchId)) {
         throw new Error("The telemetry match ID does not match this route.");
     }
-    const mode = enumText(raw.mode, ["battleRoyale", "deathmatch", "duel", "zombieSurvival"], "unknown");
+    const mode = matchGameMode(raw);
     const participants = array(raw.participants).map(normalizeParticipant).filter(Boolean);
     const participantIds = new Set(participants.map((participant) => participant.playerId));
     const warnings = [];
@@ -98,7 +99,7 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
         ...events.map((event) => event.timeMs)
     );
     const durationMs = finiteNonNegative(raw.durationMs) ?? highestTime;
-    const map = normalizeMap(raw.map, raw.mode);
+    const map = normalizeMap(raw.map, mode);
     if (!map.calibrated || !map.imageUrl) {
         warnings.push("Map calibration is unavailable; marker positions use the approximate coordinate grid.");
     }
@@ -257,7 +258,7 @@ function normalizeSnapshot(value, index, participantIds, warnings) {
     return {
         snapshotId,
         timeMs,
-        reason: text(value.reason) || "periodic",
+        reason: modernizeModeText(text(value.reason)) || "periodic",
         players: array(value.players)
             .map((player) => normalizePlayerState(player, participantIds))
             .filter(Boolean),
@@ -370,6 +371,7 @@ function normalizeEvent(value, index, participantIds, snapshotIds, warnings) {
         eventId: text(value.eventId) || `${type}-${index + 1}`,
         type,
         timeMs,
+        reason: modernizeModeText(text(value.reason)),
         phase: text(value.phase),
         remainingRespawns: finiteNonNegative(value.remainingRespawns),
         snapshotId: snapshotIds.has(text(value.snapshotId)) ? text(value.snapshotId) : "",

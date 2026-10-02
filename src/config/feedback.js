@@ -11,7 +11,10 @@ export const TICKET_CATEGORIES = Object.freeze([
 
 export const TICKET_CONTEXTS = Object.freeze([
     { value: "battle_royale", label: "Battle Royale" },
-    { value: "deathmatch", label: "Deathmatch" },
+    { value: "zombie_survival", label: "Zombie Survival" },
+    { value: "team_deathmatch", label: "Team Deathmatch" },
+    { value: "free_for_all", label: "Free For All" },
+    { value: "duels", label: "Duels" },
     { value: "lobby", label: "Lobby" },
     { value: "shooting_range", label: "Shooting Range" },
     { value: "parkour_room", label: "Parkour Room" },
@@ -77,6 +80,7 @@ export function ticketCategoryLabel(value) {
 }
 
 export function ticketContextLabel(value) {
+    if (value === "deathmatch") return "TDM / FFA (legacy)";
     return optionLabel(TICKET_CONTEXTS, value);
 }
 

@@ -677,9 +677,11 @@ function initials(value) {
 function compactMode(value) {
     const mode = String(value || "Match").toLowerCase();
     if (mode.includes("battle")) return "BR";
-    if (mode.includes("death")) return "DM";
-    if (mode.includes("zombie")) return "Survival";
-    if (mode.includes("duel")) return "Duel";
+    if (mode.includes("team") || mode === "tdm") return "TDM";
+    if (mode.includes("free") || mode === "ffa") return "FFA";
+    if (mode.includes("death")) return "TDM / FFA";
+    if (mode.includes("zombie")) return "Zombie Survival";
+    if (mode.includes("duel")) return "Duels";
     return titleCase(value) || "Match";
 }
 

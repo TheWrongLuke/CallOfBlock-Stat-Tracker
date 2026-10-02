@@ -8,6 +8,7 @@ import {
 } from "../core/site-shell.js";
 import { discordAvatarCandidates, uniqueImageUrls } from "../utils/avatar-url.js";
 import { adminRedirect } from "../core/admin-routes.js";
+import { gameModeLabel, matchGameMode, modernizeModeText } from "../core/game-modes.js";
 
 const CHAMPION_ROTATE_MS = 5000;
 const STATS_SLICE_UPDATED_EVENT = "cob:stats-slice-updated";
@@ -144,7 +145,7 @@ function renderLatestMatch(match) {
         return;
     }
     const endedAt = match.endedAt || match.completedAt || "";
-    const mode = match.modeLabel || modeLabel(match.mode);
+    const mode = modernizeModeText(match.modeLabel || gameModeLabel(matchGameMode(match)));
     const players = number(match.playerCount || match.participants?.length);
     container.innerHTML = `<div class="latest-match-card">
         <strong>${escapeHtml(mode)}</strong>
@@ -376,11 +377,6 @@ function normalizeName(value) {
     return String(value || "")
         .toLowerCase()
         .replace(/[^a-z0-9_]/g, "");
-}
-
-function modeLabel(value) {
-    const text = String(value || "Match").replace(/([a-z])([A-Z])/g, "$1 $2");
-    return text.replace(/^./, (character) => character.toUpperCase());
 }
 
 function whenReady() {

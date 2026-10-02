@@ -43,7 +43,11 @@ export class MatchMapRenderer {
         this.lockedPlayerId = "";
         this.lockedVehicleId = "";
         this.resizeObserver = null;
-        this.handleResize = () => this.applyMarkerOptions();
+        this.aspectRatio = 16 / 10;
+        this.handleResize = () => {
+            this.fitToViewport();
+            this.applyMarkerOptions();
+        };
         this.handleKeyDown = (event) => {
             if (event.key === "Escape") this.closeTooltip();
         };
@@ -149,7 +153,11 @@ export class MatchMapRenderer {
             const applyImageAspectRatio = () => {
                 const width = Number(this.telemetry.map.imageWidth) || image.naturalWidth;
                 const height = Number(this.telemetry.map.imageHeight) || image.naturalHeight;
-                if (width > 0 && height > 0) this.stage.style.aspectRatio = `${width} / ${height}`;
+                if (width > 0 && height > 0) {
+                    this.aspectRatio = width / height;
+                    this.stage.style.aspectRatio = `${width} / ${height}`;
+                    this.handleResize();
+                }
             };
             image.addEventListener("load", applyImageAspectRatio, { once: true });
             this.stage.append(image);
@@ -247,7 +255,7 @@ export class MatchMapRenderer {
         document.addEventListener("keydown", this.handleKeyDown);
         this.container.append(this.stage);
         this.observeStageSize();
-        this.applyMarkerOptions();
+        this.handleResize();
     }
 
     createPlayerMarker(participant) {
@@ -283,9 +291,40 @@ export class MatchMapRenderer {
         if (typeof ResizeObserver === "function") {
             this.resizeObserver = new ResizeObserver(this.handleResize);
             this.resizeObserver.observe(this.stage);
-            return;
+            this.resizeObserver.observe(this.container);
+            const panel = this.container.closest(".match-map-panel");
+            for (const child of panel?.children || []) {
+                if (child !== this.container) this.resizeObserver.observe(child);
+            }
         }
         globalThis.addEventListener?.("resize", this.handleResize);
+    }
+
+    fitToViewport() {
+        if (!this.stage || !this.container.clientWidth) return;
+        const panel = this.container.closest(".match-map-panel");
+        const layout = panel?.closest(".match-playback-layout");
+        const fullscreen = layout?.classList.contains("is-replay-fullscreen") || document.fullscreenElement === layout;
+        let reserved = fullscreen ? 24 : 100;
+        if (panel) {
+            const style = getComputedStyle(panel);
+            reserved += [style.paddingTop, style.paddingBottom, style.borderTopWidth, style.borderBottomWidth].reduce(
+                (sum, value) => sum + (parseFloat(value) || 0),
+                0
+            );
+            // Fit the map and its heading; the advanced controls remain scrollable below it.
+            for (const child of panel.children) {
+                if (child === this.container) break;
+                const childStyle = getComputedStyle(child);
+                reserved +=
+                    child.getBoundingClientRect().height +
+                    (parseFloat(childStyle.marginTop) || 0) +
+                    (parseFloat(childStyle.marginBottom) || 0);
+            }
+        }
+        const height = Math.max(64, (globalThis.innerHeight || 768) - reserved);
+        const width = Math.floor(Math.min(this.container.clientWidth, height * this.aspectRatio));
+        if (this.stage.style.width !== `${width}px`) this.stage.style.width = `${width}px`;
     }
 
     applyMarkerOptions() {

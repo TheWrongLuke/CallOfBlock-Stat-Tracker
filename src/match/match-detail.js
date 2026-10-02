@@ -3,6 +3,7 @@ import { MatchPlaybackController } from "./match-playback-controller.js";
 import { loadMatchPlaybackPreferences, saveMatchPlaybackPreferences } from "./match-playback-preferences.js";
 import { validateMatchTelemetry } from "./match-telemetry-normalizer.js";
 import { renderReplayUploadForm, replayMetadataFromForm } from "./replay-admin-form.js";
+import { gameModeLabel, modernizeModeText } from "../core/game-modes.js";
 
 const FILTER_LABELS = {
     engagements: "Engagements",
@@ -192,7 +193,7 @@ export function createMatchDetailPage({
                 <header class="match-detail-header">
                     <div>
                         <p class="panel-kicker">Match details</p>
-                        <h2>${escapeHtml(summary?.modeLabel || modeLabel(summary?.mode))}</h2>
+                        <h2>${escapeHtml(modernizeModeText(summary?.modeLabel || modeLabel(summary?.mode)))}</h2>
                         <p>${escapeHtml(formatDayMonthYear(summary?.endedAt))} - ${escapeHtml(activeMatchId)}</p>
                     </div>
                     <span class="match-telemetry-badge legacy">Legacy match</span>
@@ -1047,6 +1048,8 @@ export function createMatchDetailPage({
         button.setAttribute("aria-label", label);
         button.setAttribute("aria-pressed", String(active));
         button.title = label;
+        mapRenderer?.fitToViewport();
+        mapRenderer?.applyMarkerOptions();
     }
 
     async function downloadReplay(replayId, button) {
@@ -1213,11 +1216,7 @@ function eventPassesFilters(event, filters) {
 }
 
 function modeLabel(mode) {
-    if (mode === "battleRoyale") return "Battle Royale";
-    if (mode === "deathmatch") return "Deathmatch";
-    if (mode === "duel") return "Duel";
-    if (mode === "zombieSurvival") return "Zombie Survival";
-    return "Match";
+    return gameModeLabel(mode);
 }
 
 function eventLabel(type) {

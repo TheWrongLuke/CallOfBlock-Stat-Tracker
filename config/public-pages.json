@@ -3,7 +3,7 @@
         "directory": "",
         "path": "/",
         "title": "Call of Block | Competitive Minecraft PvP & Battle Royale",
-        "description": "Call of Block is a competitive Minecraft PvP shooter with guns, Battle Royale, Deathmatch, Duels, Zombie Survival, vehicles, parkour and tactical replays."
+        "description": "Call of Block is a competitive Minecraft PvP shooter with guns, Battle Royale, Zombie Survival, TDM, FFA, Duels, vehicles, parkour and tactical replays."
     },
     "stats": {
         "directory": "stats",
@@ -13,7 +13,7 @@
         "kicker": "Competitive Records",
         "heading": "Call of Block Stats Tracker",
         "intro": [
-            "Compare Battle Royale, Deathmatch, Duel and Zombie Survival results from tracked Call of Block matches.",
+            "Compare Battle Royale, Zombie Survival, TDM, FFA and Duels results from tracked Call of Block matches.",
             "Open a player profile for mode records, weapons, maps and match history. Detailed tactical telemetry loads only when a replay is opened."
         ]
     },
@@ -30,7 +30,7 @@
         "directory": "playtests",
         "path": "/playtests/",
         "title": "Call of Block Playtests | Join Minecraft PvP Testing",
-        "description": "Join Call of Block community playtests, vote for available dates and help test experimental Minecraft Battle Royale, Deathmatch, Duel and Zombie Survival features.",
+        "description": "Join Call of Block community playtests, vote for available dates and help test Minecraft Battle Royale, Zombie Survival, TDM, FFA and Duels features.",
         "kicker": "Community Testing",
         "heading": "Call of Block Playtests",
         "intro": [

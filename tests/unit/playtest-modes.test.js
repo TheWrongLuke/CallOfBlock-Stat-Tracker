@@ -19,7 +19,7 @@ describe("shared community mode preferences", () => {
             expect(dbModePreferenceToLabel(labelToDbModePreference(label))).toBe(label);
     });
     it("retains old deathmatch votes without offering an obsolete new choice", () => {
-        expect(dbModePreferenceToLabel("deathmatch")).toBe("Deathmatch (Legacy)");
+        expect(dbModePreferenceToLabel("deathmatch")).toBe("TDM / FFA (legacy)");
         expect(labelToDbModePreference("unknown")).toBe("either");
     });
 });

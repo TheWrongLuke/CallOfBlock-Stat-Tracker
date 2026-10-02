@@ -125,20 +125,20 @@ export const CURRENT_SERVER_COMMAND_SECTIONS = [
                 "Free For All",
                 "Runtime",
                 "No",
-                "Join or spectate FFA Deathmatch."
+                "Join or spectate Free For All."
             ),
             command(
                 "/cob dm queue <leave|status>",
                 "0 / player",
-                "Deathmatch",
+                "TDM / FFA",
                 "Runtime",
                 "No",
-                "Leave or inspect the selected Deathmatch queue."
+                "Leave or inspect the selected TDM / FFA queue."
             ),
             command(
                 "/cob dm vote <map <id>|random|show>",
                 "0 / player",
-                "Deathmatch",
+                "TDM / FFA",
                 "Runtime",
                 "No; queue required",
                 "Vote for or inspect the next map."
@@ -264,15 +264,15 @@ export const CURRENT_SERVER_COMMAND_SECTIONS = [
             command(
                 "/cob admin dm runtime <status|start [map]|end>",
                 "2",
-                "Deathmatch",
+                "TDM / FFA",
                 "Runtime",
                 "Depends",
-                "Inspect, start, or stop a Deathmatch round."
+                "Inspect, start, or stop a TDM / FFA round."
             ),
             command(
                 "/cob admin dm queue <status|sendmain>",
                 "2",
-                "Deathmatch",
+                "TDM / FFA",
                 "Runtime",
                 "No",
                 "Inspect queued players or send them to the general lobby."
@@ -280,7 +280,7 @@ export const CURRENT_SERVER_COMMAND_SECTIONS = [
             command(
                 "/cob admin dm vote <show|clear|status|start|endnow>",
                 "2",
-                "Deathmatch",
+                "TDM / FFA",
                 "Runtime",
                 "No",
                 "Administer the map-vote session."
@@ -511,7 +511,7 @@ export const CURRENT_SERVER_COMMAND_SECTIONS = [
             command(
                 "/cob admin dm config <show|reload|time|kills|ffakills|mode|celebration|vote|blockdamage> ...",
                 "2",
-                "Deathmatch",
+                "TDM / FFA",
                 "Read/persistent",
                 "No",
                 "Configure TDM/FFA defaults."
@@ -519,7 +519,7 @@ export const CURRENT_SERVER_COMMAND_SECTIONS = [
             command(
                 "/cob admin dm map <list|show|create|delete|setlobby|clearlobby|addspawn|removenearestspawn|addffaspawn|removenearestffaspawn|tprandom|tprandomffa> ...",
                 "2 / player where positioned",
-                "Deathmatch maps",
+                "TDM / FFA maps",
                 "Persistent",
                 "No",
                 "Author map metadata and team/FFA spawns."
@@ -527,7 +527,7 @@ export const CURRENT_SERVER_COMMAND_SECTIONS = [
             command(
                 "/cob admin dm lobby <list|show|create|delete|setspawn|tp|setgeneral> ...",
                 "2 / player where positioned",
-                "Deathmatch lobbies",
+                "TDM / FFA lobbies",
                 "Persistent",
                 "No",
                 "Author and select DM lobbies."

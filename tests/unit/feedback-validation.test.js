@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { validateExternalUrl, validateReplyInput, validateTicketInput } from "../../src/utils/feedback-validation.js";
+import { TICKET_CONTEXTS, ticketContextLabel } from "../../src/config/feedback.js";
 
 const validTicket = {
     category: "bug_report",
     title: "Weapon reload stops unexpectedly",
     description: "Reloading immediately after switching weapons can leave the weapon unable to fire.",
-    contextArea: "deathmatch",
+    contextArea: "team_deathmatch",
     severity: "medium",
     mapName: "Warehouse",
     weaponOrItem: "Example rifle",
@@ -17,6 +18,13 @@ const validTicket = {
 };
 
 describe("validateTicketInput", () => {
+    it("accepts every current mode and keeps old reports readable without offering the obsolete mode", () => {
+        for (const contextArea of ["battle_royale", "zombie_survival", "team_deathmatch", "free_for_all", "duels"]) {
+            expect(validateTicketInput({ ...validTicket, contextArea }).valid).toBe(true);
+        }
+        expect(TICKET_CONTEXTS.some((option) => option.value === "deathmatch")).toBe(false);
+        expect(ticketContextLabel("deathmatch")).toBe("TDM / FFA (legacy)");
+    });
     it("normalizes a complete valid report", () => {
         const result = validateTicketInput(validTicket);
         expect(result.valid).toBe(true);
