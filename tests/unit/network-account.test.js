@@ -2,7 +2,33 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ensureWeeklyMissions, claimWeeklyMissionReward, swapWeeklyMission } from "../../src/api/weekly-missions.js";
 import { applyNetworkAccountProjection, mergeSavedAccountProfile } from "../../src/core/network-profile.js";
 import { saveProfileCustomization } from "../../src/api/profile.js";
+import { networkAccountRequest } from "../../src/api/network-account.js";
 afterEach(() => vi.unstubAllGlobals());
+it("Minecraft verification uses the authenticated account and never submits browser UUIDs", async () => {
+    vi.stubGlobal("window", {
+        COB_NETWORK_STATS_API_URL: "https://tracking.example",
+        COB_STATS_ENVIRONMENT: "TEST"
+    });
+    const fetcher = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ environment: "TEST", linked: false })
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const client = {
+        auth: {
+            getSession: vi.fn().mockResolvedValue({
+                data: { session: { access_token: "verified-token" } }
+            })
+        }
+    };
+    await networkAccountRequest(client, "linkStatus");
+    await networkAccountRequest(client, "linkCode", "untrusted-uuid");
+    expect(fetcher.mock.calls[0][0].pathname).toBe("/account/link");
+    expect(fetcher.mock.calls[0][1].method).toBe("GET");
+    expect(fetcher.mock.calls[1][0].pathname).toBe("/account/link/code");
+    expect(fetcher.mock.calls[1][1].body).toBe("{}");
+    expect(fetcher.mock.calls[1][1].headers.Authorization).toBe("Bearer verified-token");
+});
 it("TEST with no API configured cannot mutate production missions or customization", async () => {
     vi.stubGlobal("window", { COB_STATS_ENVIRONMENT: "TEST" });
     const rpc = vi.fn(),
@@ -18,34 +44,55 @@ it("TEST with no API configured cannot mutate production missions or customizati
     expect(rpc).not.toHaveBeenCalled();
 });
 it("configured TEST mission requests use authenticated network results without falling back to stale RPC", async () => {
-    vi.stubGlobal("window", { COB_NETWORK_STATS_API_URL: "https://tracking.example", COB_STATS_ENVIRONMENT: "TEST" });
-    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ environment: "TEST", xp: 100 }) });
+    vi.stubGlobal("window", {
+        COB_NETWORK_STATS_API_URL: "https://tracking.example",
+        COB_STATS_ENVIRONMENT: "TEST"
+    });
+    const fetcher = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ environment: "TEST", xp: 100 })
+    });
     vi.stubGlobal("fetch", fetcher);
     const client = {
         rpc: vi.fn(),
-        auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: "token" } } }) }
+        auth: {
+            getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: "token" } } })
+        }
     };
     expect((await ensureWeeklyMissions(client)).data.xp).toBe(100);
     await claimWeeklyMissionReward(client, "mission");
     expect(fetcher.mock.calls[1][1].body).toBe(JSON.stringify({ missionId: "mission" }));
     expect(fetcher.mock.calls[1][1].headers.Authorization).toBe("Bearer token");
     expect(client.rpc).not.toHaveBeenCalled();
-    fetcher.mockResolvedValue({ ok: false, json: async () => ({ error: "tracking unavailable" }) });
+    fetcher.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: "tracking unavailable" })
+    });
     expect((await ensureWeeklyMissions(client)).error.message).toBe("tracking unavailable");
     expect(client.rpc).not.toHaveBeenCalled();
 });
 it("TEST equipment uses private validated ownership and a failed save never writes production", async () => {
-    vi.stubGlobal("window", { COB_NETWORK_STATS_API_URL: "https://tracking.example", COB_STATS_ENVIRONMENT: "TEST" });
+    vi.stubGlobal("window", {
+        COB_NETWORK_STATS_API_URL: "https://tracking.example",
+        COB_STATS_ENVIRONMENT: "TEST"
+    });
     const client = {
         rpc: vi.fn(),
-        auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: "token" } } }) }
+        auth: {
+            getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: "token" } } })
+        }
     };
-    const fetcher = vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: "Cosmetic not owned" }) });
+    const fetcher = vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: "Cosmetic not owned" })
+    });
     vi.stubGlobal("fetch", fetcher);
     const prefs = { displayName: "One", selectedBadges: ["perfect_week"] };
     expect((await saveProfileCustomization(client, prefs)).error.message).toBe("Cosmetic not owned");
     expect(fetcher.mock.calls[0][0].pathname).toBe("/account/customization");
-    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ preferences: prefs });
+    expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({
+        preferences: prefs
+    });
     expect(client.rpc).not.toHaveBeenCalled();
     const next = applyNetworkAccountProjection(
         { id: "one", selected_badges: ["perfect_week", "purchased"] },
@@ -103,6 +150,7 @@ it("saving TEST preferences preserves Discord, role and link metadata without re
         id: "one",
         user_id: "one",
         environment: "TEST",
+        player_uuid: "90000000-0000-4000-8000-000000000001",
         xp: 500,
         entitlements: [{ type: "badge", id: "kept" }],
         customization: { display_name: "After", selected_badges: ["kept"] }
@@ -118,6 +166,7 @@ it("saving TEST preferences preserves Discord, role and link metadata without re
         selected_badges: ["kept"],
         network_stats_environment: "TEST"
     });
+    expect(merged.minecraft_player_uuid).toBe(saved.player_uuid);
     expect(profile.display_name).toBe("Before");
     expect(() => mergeSavedAccountProfile(profile, { ...saved, id: "other" })).toThrow("does not match");
     expect(() => mergeSavedAccountProfile(profile, { ...saved, user_id: "other" })).toThrow("missing");

@@ -3,6 +3,7 @@ import { captureFormDraft, restoreFormDraft } from "./core/form-draft.js";
 import { PLAYTEST_ADMIN_STATUSES, validatePlaytestDraft, playtestRoster, rosterCsv } from "./core/playtest-admin.js";
 import { weeklyMissionProgress } from "./core/weekly-mission-progress.js";
 import { renderWeeklyMissionPanel } from "./core/weekly-mission-view.js";
+import { renderMinecraftAccountLink } from "./features/minecraft-account-link.js";
 import { createNotificationApi } from "./api/notifications.js";
 import {
     deleteOwnAccount,
@@ -4662,6 +4663,13 @@ function renderAccountPage() {
         ${renderAccountDeletionPanel()}
     `;
     const refreshedForm = body.querySelector("[data-account-form]");
+    renderMinecraftAccountLink(body.querySelector("[data-minecraft-account-link]"), {
+        client: state.authClient, accountId: account.id,
+        onLinked: async () => {
+            await loadAccountProfiles({ force: true });
+            await syncWeeklyMissions();
+        }
+    });
     restoreFormDraft(refreshedForm, draft);
     if (draft) {
         refreshedForm.dataset.dirty = "true";
@@ -8137,6 +8145,9 @@ function renderAccountSignedDate(account) {
 }
 
 function renderAccountLinkPanel(account, linkedProfile) {
+    if (networkTrackerConfigured()) {
+        return '<section class="account-panel"><p class="panel-kicker">Minecraft Link</p><div data-minecraft-account-link></div></section>';
+    }
     return `
         <section class="account-panel">
             <div>
@@ -8155,7 +8166,7 @@ function renderAccountLinkPanel(account, linkedProfile) {
                 </div>
             `
                     : `
-                <p class="mode-empty">Run <code>/linkminecraft</code> in Discord's <strong>#minecraft-verification</strong> channel, then run the shown <code>/discordlink &lt;code&gt;</code> command in Minecraft while the bot and server are online.</p>
+                <p class="mode-empty">Run <code>/linkminecraft</code> in Discord's <strong>#minecraft-verification</strong> channel, then run the shown <code>/cob discord link &lt;code&gt;</code> command in Minecraft while the bot and server are online.</p>
             `
             }
         </section>

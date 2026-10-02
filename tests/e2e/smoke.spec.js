@@ -2710,6 +2710,17 @@ test("TEST customization persists across pages without losing identity or unsave
         })
     );
     await page.route("**/network-stats/account/**", async (route) => {
+        if (new URL(route.request().url()).pathname.endsWith("/account/link")) {
+            return route.fulfill({
+                contentType: "application/json",
+                body: JSON.stringify({
+                    environment: "TEST",
+                    user_id: row().user_id,
+                    linked: true,
+                    player_uuid: "90000000-0000-4000-8000-000000000001"
+                })
+            });
+        }
         if (route.request().method() === "POST") {
             saves++;
             if (rejectSave)
@@ -2798,6 +2809,82 @@ test("drawer refresh retains its animated shell, scroll and focus without reopen
         focus: true,
         closed: true
     });
+});
+
+test("Minecraft account link preserves its code across redraws and rejects stale cross-account responses", async ({
+    page
+}) => {
+    await openApp(page);
+    const account = "90000000-0000-4000-8000-000000000001";
+    let linked = false,
+        requests = 0;
+    await page.route("**/network-stats/account/link**", async (route) => {
+        requests++;
+        const issue = route.request().method() === "POST";
+        expect(route.request().headers().authorization).toBe("Bearer fixture-token");
+        if (issue) expect(route.request().postDataJSON()).toEqual({});
+        return route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({
+                environment: "TEST",
+                user_id: account,
+                linked,
+                player_uuid: linked ? account : null,
+                ...(issue
+                    ? {
+                          code: "ABCDEF123456",
+                          expires_at: new Date(Date.now() + 600000).toISOString()
+                      }
+                    : {})
+            })
+        });
+    });
+    await page.evaluate(async (accountId) => {
+        window.COB_STATS_ENVIRONMENT = "TEST";
+        window.COB_NETWORK_STATS_API_URL = location.origin + "/functions/v1/network-stats";
+        const module = await import("/src/features/minecraft-account-link.js");
+        const host = document.createElement("section");
+        host.id = "link-test";
+        document.querySelector("main").append(host);
+        window.linkOptions = {
+            accountId,
+            client: {
+                auth: {
+                    getSession: async () => ({
+                        data: { session: { access_token: "fixture-token" } }
+                    })
+                }
+            },
+            onLinked: () => {
+                window.linkNotifications = (window.linkNotifications || 0) + 1;
+            }
+        };
+        module.renderMinecraftAccountLink(host, window.linkOptions);
+    }, account);
+    const host = page.locator("#link-test");
+    await expect(host.locator("[data-minecraft-link-code]")).toBeEnabled();
+    await host.locator("[data-minecraft-link-code]").click();
+    await expect(host).toContainText("/cob discord link ABCDEF123456");
+    await page.evaluate(async () => {
+        const module = await import("/src/features/minecraft-account-link.js");
+        module.renderMinecraftAccountLink(document.getElementById("link-test"), window.linkOptions);
+    });
+    await expect(host).toContainText("ABCDEF123456");
+    linked = true;
+    await host.locator("[data-minecraft-link-refresh]").click();
+    await expect(host).toContainText("Minecraft account connected.");
+    await expect(host.locator("[data-minecraft-link-code]")).toHaveCount(0);
+    expect(await page.evaluate(() => window.linkNotifications)).toBe(1);
+    await page.evaluate(async () => {
+        const module = await import("/src/features/minecraft-account-link.js");
+        module.renderMinecraftAccountLink(document.getElementById("link-test"), {
+            ...window.linkOptions,
+            accountId: "90000000-0000-4000-8000-000000000002"
+        });
+    });
+    await expect(host).toContainText("Account link response is unavailable.");
+    await expect(host).not.toContainText("ABCDEF123456");
+    expect(requests).toBe(4);
 });
 
 test("completed Battle Royale telemetry opens as interactive tactical playback", async ({ page }) => {

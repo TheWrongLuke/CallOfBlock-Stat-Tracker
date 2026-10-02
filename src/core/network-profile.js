@@ -16,6 +16,8 @@ export function applyNetworkAccountProjection(profile, row) {
         hard_missions_completed: row.hard_missions_completed
     };
     if (/^p_[a-f0-9]{12}$/.test(row.player_id || "")) next.minecraft_player_id = row.player_id;
+    if (/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(row.player_uuid || ""))
+        next.minecraft_player_uuid = row.player_uuid;
     for (const [type, field] of Object.entries(fields))
         next[field] = [
             ...new Set((row.entitlements || []).filter((item) => item.type === type).map((item) => item.id))
