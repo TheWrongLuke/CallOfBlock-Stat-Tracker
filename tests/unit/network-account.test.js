@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { ensureWeeklyMissions, claimWeeklyMissionReward, swapWeeklyMission } from "../../src/api/weekly-missions.js";
-import { applyNetworkAccountProjection } from "../../src/core/network-profile.js";
+import { applyNetworkAccountProjection, mergeSavedAccountProfile } from "../../src/core/network-profile.js";
 import { saveProfileCustomization } from "../../src/api/profile.js";
 afterEach(() => vi.unstubAllGlobals());
 it("TEST with no API configured cannot mutate production missions or customization", async () => {
@@ -87,4 +87,38 @@ it("unconfigured environment fails closed and TEST reversal preserves server-pro
     expect(projected.selected_badges).toEqual(["purchased"]);
     expect(profile.unlocked_badges).toContain("perfect_week");
     expect(applyNetworkAccountProjection(profile, { ...row, user_id: "two" })).toBe(profile);
+});
+
+it("saving TEST preferences preserves Discord, role and link metadata without retaining revoked badges", () => {
+    const profile = {
+        id: "one",
+        is_admin: true,
+        discord_id: "verified",
+        avatar_url: "https://cdn.discordapp.com/avatar.gif",
+        minecraft_player_name: "Player",
+        selected_badges: ["old"],
+        display_name: "Before"
+    };
+    const saved = {
+        id: "one",
+        user_id: "one",
+        environment: "TEST",
+        xp: 500,
+        entitlements: [{ type: "badge", id: "kept" }],
+        customization: { display_name: "After", selected_badges: ["kept"] }
+    };
+    const merged = mergeSavedAccountProfile(profile, saved);
+    expect(merged).toMatchObject({
+        is_admin: true,
+        discord_id: "verified",
+        avatar_url: profile.avatar_url,
+        minecraft_player_name: "Player",
+        display_name: "After",
+        xp: 500,
+        selected_badges: ["kept"],
+        network_stats_environment: "TEST"
+    });
+    expect(profile.display_name).toBe("Before");
+    expect(() => mergeSavedAccountProfile(profile, { ...saved, id: "other" })).toThrow("does not match");
+    expect(() => mergeSavedAccountProfile(profile, { ...saved, user_id: "other" })).toThrow("missing");
 });

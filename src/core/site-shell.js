@@ -5,6 +5,7 @@ import { createRequestSignal } from "../utils/request-timeout.js";
 import { networkTrackerConfigured, fetchNetworkTracker } from "../api/network-tracker.js";
 import { networkAccountRequest } from "../api/network-account.js";
 import { applyNetworkAccountProjection } from "./network-profile.js";
+import { updateDrawerContent, renderProfileDrawerActions } from "./profile-drawer.js";
 import { discordAvatarCandidates, discordDefaultAvatarUrl, uniqueImageUrls } from "../utils/avatar-url.js";
 
 const CONTACT_EMAIL_CODES = [
@@ -493,7 +494,9 @@ function renderAccountPanel(shell, host) {
     const rarity = cleanRarity(profile.resolved_title_rarity);
     const level = accountLevel(profile.xp);
     const progressionUnavailable = networkTrackerConfigured() && profile.network_stats_unavailable;
-    host.innerHTML = `<div class="profile-drawer-backdrop" data-shell-account-backdrop>
+    updateDrawerContent(
+        host,
+        `<div class="profile-drawer-backdrop" data-shell-account-backdrop>
         <aside class="profile-drawer" role="dialog" aria-modal="true" aria-labelledby="shell-profile-drawer-title">
             <header class="profile-drawer-header">
                 <h2 id="shell-profile-drawer-title">PROFILE</h2>
@@ -507,26 +510,15 @@ function renderAccountPanel(shell, host) {
                     <div class="account-level-pill" title="${progressionUnavailable ? "TEST tracking unavailable" : escapeHtml(`${number(profile.xp).toLocaleString()} total XP`)}"><strong>${progressionUnavailable ? "LVL ?" : `LVL ${level}`}</strong><span>${progressionUnavailable ? "Unavailable" : `${number(profile.xp).toLocaleString()} XP`}</span></div>
                 </div>
             </div>
-            <div class="profile-drawer-actions ${admin ? "admin" : ""}">
-                <a class="profile-drawer-customize" href="/stats/#account">Customize profile</a>
-                <a class="profile-drawer-support" href="/feedback/">Feedback &amp; support</a>
-                ${
-                    admin
-                        ? `<a class="profile-drawer-tickets" href="/admin/matches/">Match administration</a>
-                           <a class="profile-drawer-tickets" href="/admin/tickets/">Ticket dashboard</a>
-                           <a class="profile-drawer-progression" href="/admin/progression/">Progression &amp; missions</a>
-                           <a class="profile-drawer-docs" href="/admin/docs/">Admin documentation</a>
-                           <a class="profile-drawer-store" href="/admin/catalog/">Catalog administration</a>`
-                        : ""
-                }
-            </div>
+            ${renderProfileDrawerActions(admin)}
             ${shell.accountPanelAddon?.() || ""}
         </aside>
-    </div>`;
-    host.querySelector("[data-shell-account-close]")?.addEventListener("click", () => closeAccountPanel(shell));
-    host.querySelector("[data-shell-account-backdrop]")?.addEventListener("click", (event) => {
+    </div>`
+    );
+    host.querySelector("[data-shell-account-close]").onclick = () => closeAccountPanel(shell);
+    host.querySelector("[data-shell-account-backdrop]").onclick = (event) => {
         if (event.target === event.currentTarget) closeAccountPanel(shell);
-    });
+    };
 }
 
 function renderShellAvatar(profile, avatar, name) {

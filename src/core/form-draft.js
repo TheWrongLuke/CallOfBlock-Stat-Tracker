@@ -12,7 +12,11 @@ export function captureFormDraft(form) {
 export function restoreFormDraft(form, draft) {
     if (!form || !draft) return;
     for (const saved of draft) {
-        const input = form.elements.namedItem(saved.name);
+        const input = [...form.elements].find(
+            (candidate) =>
+                candidate.name === saved.name &&
+                (!["checkbox", "radio"].includes(candidate.type) || candidate.value === saved.value)
+        );
         if (!input || !("value" in input)) continue;
         if (saved.files) {
             const transfer = new DataTransfer();

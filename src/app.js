@@ -13,7 +13,8 @@ import {
 import { createProgressionAdminApi } from "./api/progression.js?v=weekly-missions-3";
 import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "./api/weekly-missions.js";
 import { PLAYTEST_MODE_OPTIONS, labelToDbModePreference, dbModePreferenceToLabel } from "./core/playtest-modes.js";
-import { applyNetworkAccountProjection } from "./core/network-profile.js";
+import { applyNetworkAccountProjection, mergeSavedAccountProfile } from "./core/network-profile.js";
+import { updateDrawerContent, renderProfileDrawerActions } from "./core/profile-drawer.js";
 import { networkTrackerConfigured, networkTrackerUrl, fetchNetworkTracker } from "./api/network-tracker.js";
 import { ADMIN_ROUTES, ADMIN_VIEWS, adminRedirect } from "./core/admin-routes.js";
 import { canOpenAdminRoute, isAdminProfile } from "./auth/permissions.js";
@@ -2365,6 +2366,11 @@ function applyRoute() {
     }
     const params = new URLSearchParams(hash);
     const route = params.get("view") || hash;
+    if (route === "account" && document.body?.dataset.publicRoute !== "account") {
+        routeRedirectPending = true;
+        window.location.replace("/account/");
+        return;
+    }
     const adminDestination = adminRedirect(route, window.location.pathname, window.location.hash);
     if (adminDestination) {
         routeRedirectPending = true;
@@ -2563,6 +2569,11 @@ function applyPublicPageRoute() {
         return;
     }
 
+    if (route === "account") {
+        state.view = "account";
+        return;
+    }
+
     if (route === "stats") {
         state.view = "leaderboard";
         const board = params.get("view") || params.get("board") || "players";
@@ -2705,6 +2716,10 @@ function enforceProtectedAdminRoute() {
 
 function routeTo(route) {
     state.accountPanelOpen = false;
+    if (route === "home" && document.body?.dataset.publicRoute === "account") {
+        window.location.assign("/");
+        return;
+    }
     const adminDestination = adminRedirect(route, window.location.pathname);
     if (adminDestination) {
         window.location.assign(adminDestination);
@@ -2799,6 +2814,10 @@ function routeTo(route) {
         return;
     }
     if (route === "account") {
+        if (document.body?.dataset.publicRoute !== "account") {
+            window.location.assign("/account/");
+            return;
+        }
         state.view = "account";
         state.selectedId = null;
         state.profilePreviewOpen = false;
@@ -4498,7 +4517,7 @@ function renderAccountSidePanel() {
     const avatarUrl = accountAvatarUrl(account, profile, 72);
     const notificationsOpen = state.accountPanelView === "notifications";
     const previousScrollTop = host.querySelector(".profile-drawer")?.scrollTop || 0;
-    host.innerHTML = `
+    updateDrawerContent(host, `
         <div class="profile-drawer-backdrop" data-account-panel-backdrop>
             <aside class="profile-drawer ${notificationsOpen ? "notification-drawer" : ""}" role="dialog" aria-modal="true" aria-labelledby="profile-drawer-title">
                 <header class="profile-drawer-header">
@@ -4528,26 +4547,13 @@ function renderAccountSidePanel() {
                             ${renderAccountLevelPill(account)}
                         </div>
                     </div>
-                    <div class="profile-drawer-actions ${isPlaytestAdmin() ? "admin" : ""}">
-                        <button class="profile-drawer-customize" type="button" data-route="account">Customize profile</button>
-                        <button class="profile-drawer-support" type="button" data-route="feedback">Feedback &amp; support</button>
-                        ${
-                            isPlaytestAdmin()
-                                ? `
-                            <button class="profile-drawer-tickets" type="button" data-route="admin-tickets">Ticket dashboard</button>
-                            <button class="profile-drawer-progression" type="button" data-route="admin-progression">Progression &amp; missions</button>
-                            <a class="profile-drawer-docs" href="/admin/docs/">Admin documentation</a>
-                            <button class="profile-drawer-store" type="button" data-route="store">Open store admin</button>
-                        `
-                                : ""
-                        }
-                    </div>
+                    ${renderProfileDrawerActions(isPlaytestAdmin())}
                     ${renderWeeklyMissions(profile)}
                 `
                 }
             </aside>
         </div>
-    `;
+    `);
     const drawer = host.querySelector(".profile-drawer");
     if (drawer) drawer.scrollTop = previousScrollTop;
 }
@@ -4592,6 +4598,8 @@ function renderAccountPage() {
 
     const account = state.authProfile || {};
     const linkedProfile = linkedStatsProfile();
+    const currentForm = body.querySelector("[data-account-form]");
+    const draft = currentForm && account.id && currentForm.dataset.accountId === account.id ? captureFormDraft(currentForm) : null;
     const badgeState = accountBadgeState(account, linkedProfile);
     const selectedBadges = selectedAccountBadges(account, badgeState);
     const avatarUrl = accountAvatarUrl(account, linkedProfile, 128);
@@ -4641,6 +4649,9 @@ function renderAccountPage() {
         ${renderAccountEmailPreferences(account)}
         ${renderAccountDeletionPanel()}
     `;
+    const refreshedForm = body.querySelector("[data-account-form]");
+    restoreFormDraft(refreshedForm, draft);
+    if (draft) updateAccountCustomizePreview(refreshedForm);
 }
 
 function resetStoreSessionState({ resetCatalog = false } = {}) {
@@ -8171,7 +8182,7 @@ function renderAccountCustomizeForm(account, badgeState) {
     const avatarUrl = accountAvatarUrl(account, linkedProfile, 180);
 
     return `
-        <form class="account-panel account-form" data-account-form>
+        <form class="account-panel account-form" data-account-form data-account-id="${escapeHtml(account.id)}">
             <div>
                 <p class="panel-kicker">Personalization</p>
                 <h3>Customize profile</h3>
@@ -8972,7 +8983,6 @@ async function syncWeeklyMissions() {
     const cycle = weeklyMissionCycle();
     missionState.syncing = true;
     missionState.loading = true;
-    missionState.statsProfile = null;
     renderAccountMissionViews();
 
     try {
@@ -10840,7 +10850,7 @@ function renderNotificationToggle(playtestId, slotId, dateKeyValue, disabled, di
     const helperText = authPending
         ? "Checking Discord login..."
         : loginRequired
-          ? "Login with Discord required for notification to be toggled."
+          ? "Sign in with Discord to create your account, vote and enable confirmation notifications."
           : disabledReason || `${count} Discord notification opt-in${count === 1 ? "" : "s"}`;
     return `
         <div class="notify-row">
@@ -13506,7 +13516,9 @@ function renderPagination(totalRows, totalPages) {
 
 async function submitAccountForm(form) {
     if (!state.authClient || !state.authSession?.user || !state.authProfileExtended) return;
-
+    const accountId = state.authSession.user.id;
+    const formDraft = captureFormDraft(form);
+    let saved = false;
     try {
         const draft = readAccountFormDraft(form);
         const linkedProfile = linkedStatsProfile();
@@ -13549,20 +13561,27 @@ async function submitAccountForm(form) {
             selectedBadges: payload.selected_badges
         });
         if (error) throw error;
+        if (state.authSession?.user?.id !== accountId) return;
         verifySavedProfile(data, payload);
-        applyPlaytestProfile(data);
+        applyPlaytestProfile(mergeSavedAccountProfile(state.authProfile, data));
         await loadAccountProfiles({ force: true });
         if (data.environment === "TEST") {
             state.authProfile = applyNetworkAccountProjection(state.authProfile,data);
             state.accountProfiles = state.accountProfiles.map(profile=>applyNetworkAccountProjection(profile,data));
         }
         state.accountMessage = "Profile saved.";
+        saved = true;
+        delete document.querySelector("[data-account-form]")?.dataset.accountId;
     } catch (error) {
         console.error("Failed to save account profile", error);
         state.accountMessage = error?.message || "Could not save profile right now.";
     } finally {
         state.accountSaving = false;
         render();
+        if (!saved && state.authSession?.user?.id === accountId) {
+            restoreFormDraft(document.querySelector("[data-account-form]"), formDraft);
+            updateAccountCustomizePreview(document.querySelector("[data-account-form]"));
+        }
     }
 }
 
@@ -13661,16 +13680,16 @@ function verifySavedProfile(saved, payload) {
         ["profile picture", cleanAvatarSource(saved.avatar_source), cleanAvatarSource(payload.avatar_source)],
         [
             "background",
-            cleanProfileBackground(saved.profile_background, saved),
-            cleanProfileBackground(payload.profile_background, saved)
+            saved.profile_background,
+            payload.profile_background
         ],
-        ["PFP border", cleanPfpBorder(saved.pfp_border, saved), cleanPfpBorder(payload.pfp_border, saved)]
+        ["PFP border", saved.pfp_border, payload.pfp_border]
     ];
     if (Object.hasOwn(payload, "profile_title")) {
         checks.push([
             "title",
-            cleanProfileTitle(saved.profile_title, saved),
-            cleanProfileTitle(payload.profile_title, saved)
+            saved.profile_title,
+            payload.profile_title
         ]);
     }
 
@@ -14138,6 +14157,9 @@ function accountBadgeState(account, profile) {
     const stats = normalizeStats(overall?.stats);
     const derived = normalizeDerived(overall?.derived, stats);
     const context = { account, linked, profile: linkedProfile, overall, br, dm, stats, derived };
+    if (account?.network_stats_environment === "TEST") {
+        return { unlockedIds: new Set(arrayField(account.unlocked_badges)), context };
+    }
     const awardedIds = profileAwardedBadgeIds(linkedProfile);
     if (
         account?.id &&
@@ -14697,6 +14719,10 @@ function managedCosmeticOwnership(type, id, account) {
     if (!managed) return null;
     if (!managed.active) return false;
     if (managed.acquisitionType === "default") return true;
+    if (account?.network_stats_environment === "TEST") {
+        const field = { icon: "unlocked_icons", background: "unlocked_backgrounds", border: "unlocked_pfp_borders", title: "unlocked_titles", badge: "unlocked_badges" }[type];
+        return arrayField(account[field]).includes(id);
+    }
     return profileCosmeticInventoryHas(account, type, id);
 }
 
@@ -15310,8 +15336,8 @@ function renderMatchHistoryRow(match, { expandable, playerId = "" }) {
                 <time datetime="${escapeHtml(match.endedAt || "")}" title="${escapeHtml(formatFullLocalDate(match.endedAt))}">${escapeHtml(formatShortDate(match.endedAt))}</time>
             </${closeTag}>
             <div class="history-card-actions">
-                <span>${match.hasTelemetry ? `Tactical playback v${escapeHtml(String(match.telemetryVersion || 1))}` : "Summary only"}</span>
-                <a href="${escapeHtml(matchHref)}">View details</a>
+                <span>${match.hasTelemetry ? `Tactical replay v${escapeHtml(String(match.telemetryVersion || 1))}` : "Match summary"}</span>
+                <a href="${escapeHtml(matchHref)}">${match.hasTelemetry ? "View replay" : "Replays &amp; details"}</a>
             </div>
             ${expanded ? renderMatchParticipants(match) : ""}
         </article>
@@ -15345,8 +15371,8 @@ function renderDuelHistoryRow(match, { expandable, playerId = "" }) {
                 <time datetime="${escapeHtml(match.endedAt || "")}" title="${escapeHtml(formatFullLocalDate(match.endedAt))}">${escapeHtml(formatShortDate(match.endedAt))}</time>
             </${closeTag}>
             <div class="history-card-actions">
-                <span>${match.hasTelemetry ? `Tactical playback v${escapeHtml(String(match.telemetryVersion || 1))}` : "Summary only"}</span>
-                <a href="${escapeHtml(matchRouteHash(match.matchId, playerId))}">View details</a>
+                <span>${match.hasTelemetry ? `Tactical replay v${escapeHtml(String(match.telemetryVersion || 1))}` : "Match summary"}</span>
+                <a href="${escapeHtml(matchRouteHash(match.matchId, playerId))}">${match.hasTelemetry ? "View replay" : "Replays &amp; details"}</a>
             </div>
             ${expanded ? renderMatchParticipants(match) : ""}
         </article>
@@ -15385,8 +15411,8 @@ function renderZombieSurvivalHistoryRow(match, { expandable, playerId = "" }) {
                 <time datetime="${escapeHtml(match.endedAt || "")}" title="${escapeHtml(formatFullLocalDate(match.endedAt))}">${escapeHtml(formatShortDate(match.endedAt))}</time>
             </${closeTag}>
             <div class="history-card-actions">
-                <span>${match.hasTelemetry ? `Tactical playback v${escapeHtml(String(match.telemetryVersion || 1))}` : "Summary only"}</span>
-                <a href="${escapeHtml(matchRouteHash(match.matchId, playerId))}">View details</a>
+                <span>${match.hasTelemetry ? `Tactical replay v${escapeHtml(String(match.telemetryVersion || 1))}` : "Match summary"}</span>
+                <a href="${escapeHtml(matchRouteHash(match.matchId, playerId))}">${match.hasTelemetry ? "View replay" : "Replays &amp; details"}</a>
             </div>
             ${expanded ? renderMatchParticipants(match) : ""}
         </article>

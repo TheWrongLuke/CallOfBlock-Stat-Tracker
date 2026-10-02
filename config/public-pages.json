@@ -17,6 +17,15 @@
             "Open a player profile for mode records, weapons, maps and match history. Detailed tactical telemetry loads only when a replay is opened."
         ]
     },
+    "account": {
+        "directory": "account",
+        "path": "/account/",
+        "private": true,
+        "entry": "stats",
+        "title": "Call of Block Account",
+        "description": "Manage your Call of Block profile and account preferences.",
+        "heading": "Account"
+    },
     "playtests": {
         "directory": "playtests",
         "path": "/playtests/",

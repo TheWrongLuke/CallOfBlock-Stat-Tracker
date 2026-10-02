@@ -308,7 +308,7 @@ function renderPreferences(state) {
         if (host) host.innerHTML = "";
         return;
     }
-    host.innerHTML = `<section class="playtest-side-block"><p class="panel-kicker">Session Preference</p><fieldset class="preference-field"><legend>Mode</legend>${MODE_OPTIONS.map((mode) => `<label><input type="radio" name="playtest-mode" value="${escapeHtml(mode)}" ${state.modePreference === mode ? "checked" : ""}><span>${escapeHtml(mode)}</span></label>`).join("")}</fieldset></section>`;
+    host.innerHTML = `<section class="playtest-side-block"><p class="panel-kicker">Session Preference</p><fieldset class="preference-field"><legend>Mode</legend>${MODE_OPTIONS.map((mode) => `<label><input type="radio" name="playtest-mode" value="${escapeHtml(mode)}" ${state.modePreference === mode ? "checked" : ""}><span>${escapeHtml(mode)}</span></label>`).join("")}</fieldset>${state.profile?.is_admin ? '<div class="identity-actions"><a href="/admin/community/">Playtest administration</a></div>' : ""}</section>`;
 }
 
 function renderBoard(state) {
@@ -410,7 +410,7 @@ function renderNotification(state, playtest, slot, ownVote) {
         );
     const disabled = !loggedIn || !slot || !ownVote;
     const helper = !loggedIn
-        ? "Login with Discord required for notification to be toggled."
+        ? "Sign in with Discord to create your account, vote and enable confirmation notifications."
         : !ownVote
           ? "Set availability first to enable confirmation notifications."
           : "Discord confirmation notification";

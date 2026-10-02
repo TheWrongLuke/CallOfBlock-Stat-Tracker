@@ -42,7 +42,7 @@ export function initializeHomeWeeklyMissions(shell) {
     if (shell.accountPanelOpen) void loadWeeklyMissions(shell, state);
 }
 
-async function loadWeeklyMissions(shell, state, force = true) {
+async function loadWeeklyMissions(shell, state, force = false) {
     resetIdentity(shell, state);
     if (
         state.loading ||
@@ -53,7 +53,6 @@ async function loadWeeklyMissions(shell, state, force = true) {
         return;
     const generation = state.generation;
     state.loading = true;
-    state.statsProfile = null;
     state.message = "";
     shell.refreshAccountPanel();
     try {

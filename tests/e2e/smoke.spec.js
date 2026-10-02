@@ -868,7 +868,7 @@ test("the signed-in homepage account pill opens the profile drawer and reveals a
     const drawer = page.locator("#account-side-panel-host .profile-drawer");
     await expect(drawer).toBeVisible();
     await expect(drawer.getByRole("heading", { name: "PROFILE" })).toBeVisible();
-    await expect(drawer.getByRole("link", { name: "Customize profile" })).toHaveAttribute("href", "/stats/#account");
+    await expect(drawer.getByRole("link", { name: "Customize profile" })).toHaveAttribute("href", "/account/");
     await expect(drawer.getByRole("link", { name: "Catalog administration" })).toHaveAttribute(
         "href",
         "/admin/catalog/"
@@ -2371,23 +2371,30 @@ for (const route of ["/", "/stats/#account", "/playtests/", "/feedback/", "/help
 }
 
 test("account privacy controls require DELETE and invoke the server-side deletion function", async ({ page }) => {
-    await openAdminApp(page, "#account");
+    const calls = [];
+    await page.exposeFunction("recordAccountDelete", (call) => calls.push(call));
+    await installPageStubs(
+        page,
+        adminSupabaseStub.replace(
+            "window.__edgeFunctionCalls.push({ name, options });",
+            "window.__edgeFunctionCalls.push({ name, options }); await window.recordAccountDelete({name,options});"
+        )
+    );
+    await page.goto("/account/");
     await expect(page.locator("[data-notification-preferences-form]")).toContainText("Email Notifications");
     const deletion = page.locator("[data-account-delete-form]");
     await page.locator(".account-danger-zone summary").click();
     await deletion.locator("input[name='confirmation']").fill("DELETE");
     await deletion.getByRole("button", { name: "Permanently delete account" }).click();
     await expect
-        .poll(() =>
-            page.evaluate(() => (window.__edgeFunctionCalls || []).filter((call) => call.name === "delete-account"))
-        )
+        .poll(() => calls.filter((call) => call.name === "delete-account"))
         .toEqual([
             {
                 name: "delete-account",
                 options: { body: { confirmation: "DELETE" } }
             }
         ]);
-    await expect(page).toHaveURL(/\/stats\/$/);
+    await expect(page).toHaveURL("http://127.0.0.1:4175/");
     await expect(page.locator("[data-account-delete-form]")).toHaveCount(0);
 });
 
@@ -2530,6 +2537,138 @@ test("profile editing preview reflects the complete unsaved cosmetic draft", asy
     await page.locator('[data-cosmetic-option="admin"]').click();
     await page.locator("[data-cosmetic-picker-close]").click();
     await expect(preview.locator("[data-account-preview-badges] .badge-admin")).toBeVisible();
+});
+
+test("TEST customization persists across pages without losing identity or unsaved drafts", async ({ page }) => {
+    await installPageStubs(page, adminSupabaseStub.replace("session: {", 'session: { access_token: "fixture-token",'));
+    await page.route("**/api-config.js*", (route) =>
+        route.fulfill({
+            contentType: "text/javascript",
+            body:
+                configStub +
+                '\nwindow.COB_STATS_ENVIRONMENT="TEST";window.COB_NETWORK_STATS_API_URL=location.origin+"/functions/v1/network-stats";'
+        })
+    );
+    let customization = null,
+        rejectSave = true,
+        saves = 0;
+    const cycle = new Date();
+    cycle.setHours(0, 0, 0, 0);
+    cycle.setDate(cycle.getDate() - ((cycle.getDay() + 6) % 7));
+    const cycleKey = [
+        cycle.getFullYear(),
+        String(cycle.getMonth() + 1).padStart(2, "0"),
+        String(cycle.getDate()).padStart(2, "0")
+    ].join("-");
+    const row = () => ({
+        id: "123e4567-e89b-42d3-a456-426614174000",
+        user_id: "123e4567-e89b-42d3-a456-426614174000",
+        environment: "TEST",
+        xp: 12500,
+        weekly_missions_completed: 0,
+        hard_missions_completed: 0,
+        player_id: "p_123456abcdef",
+        cycle_key: cycleKey,
+        cycle_ends_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+        missions: [],
+        claimed_ids: [],
+        stats_profile: {},
+        entitlements: [
+            { type: "icon", id: "minecraft" },
+            { type: "icon", id: "discord" },
+            { type: "background", id: "default" },
+            { type: "border", id: "none" },
+            { type: "title", id: "none" },
+            { type: "badge", id: "owner" }
+        ],
+        customization
+    });
+    await page.route("**/network-stats/network/**", (route) =>
+        route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({ ...statsExportFixture, environment: "TEST" })
+        })
+    );
+    await page.route("**/network-stats/account/**", async (route) => {
+        if (route.request().method() === "POST") {
+            saves++;
+            if (rejectSave)
+                return route.fulfill({
+                    status: 503,
+                    contentType: "application/json",
+                    body: '{"error":"Save temporarily unavailable"}'
+                });
+            const p = route.request().postDataJSON().preferences;
+            customization = {
+                display_name: p.displayName,
+                avatar_source: p.avatarSource,
+                profile_background: p.profileBackground,
+                pfp_border: p.pfpBorder,
+                profile_title: p.profileTitle,
+                selected_badges: p.selectedBadges
+            };
+        }
+        return route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...row(), ...customization }) });
+    });
+    await page.goto("/stats/#account");
+    await expect(page).toHaveURL(/\/account\/$/);
+    const form = page.locator("[data-account-form]");
+    await expect(form).toBeVisible();
+    await form.locator("[name='displayName']").fill("Saved Operator");
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(form.locator("[name='displayName']")).toHaveValue("Saved Operator");
+    await form.locator("button[type='submit']").click();
+    await expect(page.getByText("Save temporarily unavailable", { exact: true })).toBeVisible();
+    await expect(form.locator("[name='displayName']")).toHaveValue("Saved Operator");
+    rejectSave = false;
+    await form.locator("button[type='submit']").click();
+    await expect(page.getByText("Profile saved.", { exact: true })).toBeVisible();
+    expect(saves).toBe(2);
+    await page.locator("[data-account-panel-open]").click();
+    await expect(page.locator(".profile-drawer")).toContainText("Saved Operator");
+    await expect(page.locator(".profile-drawer-tickets[href='/admin/matches/']")).toBeVisible();
+    for (const path of ["/", "/playtests/", "/feedback/"]) {
+        await page.goto(path);
+        await page.locator("[data-shell-account-open]").click();
+        await expect(page.locator(".profile-drawer")).toContainText("Saved Operator");
+        await expect(page.locator(".profile-drawer-tickets[href='/admin/matches/']")).toBeVisible();
+    }
+    await page.goto("/account/");
+    await expect(form.locator("[name='displayName']")).toHaveValue("Saved Operator");
+    await page.goto("/stats/");
+    await expect(page.locator("#account-view")).toHaveCount(0);
+});
+
+test("drawer refresh retains its animated shell, scroll and focus without reopening a closed panel", async ({
+    page
+}) => {
+    await openAdminApp(page, "");
+    await page.locator("[data-shell-account-open]").click();
+    await expect(page.locator(".weekly-missions-panel")).toBeVisible();
+    const result = await page.evaluate(async () => {
+        const { updateDrawerContent } = await import("/src/core/profile-drawer.js");
+        const host = document.getElementById("account-side-panel-host"),
+            drawer = host.querySelector(".profile-drawer"),
+            backdrop = host.firstElementChild;
+        const close = drawer.querySelector("[data-shell-account-close]");
+        drawer.scrollTop = 300;
+        close.focus({ preventScroll: true });
+        const markup = host.innerHTML.replace("Test Admin", "Updated Admin");
+        const before = drawer.scrollTop;
+        updateDrawerContent(host, markup);
+        const retained = {
+            dialog: host.querySelector(".profile-drawer") === drawer,
+            backdrop: host.firstElementChild === backdrop,
+            scroll: drawer.scrollTop === before,
+            focus: document.activeElement.hasAttribute("data-shell-account-close")
+        };
+        const { getDrawerController } = await import("/src/core/drawer-controller.js");
+        const controller = getDrawerController();
+        controller.close();
+        controller.refresh("profile");
+        return { ...retained, closed: !host.firstElementChild };
+    });
+    expect(result).toEqual({ dialog: true, backdrop: true, scroll: true, focus: true, closed: true });
 });
 
 test("completed Battle Royale telemetry opens as interactive tactical playback", async ({ page }) => {

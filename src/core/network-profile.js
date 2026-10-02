@@ -10,6 +10,7 @@ export function applyNetworkAccountProjection(profile, row) {
     };
     const next = {
         ...profile,
+        network_stats_environment: "TEST",
         xp: row.xp,
         weekly_missions_completed: row.weekly_missions_completed,
         hard_missions_completed: row.hard_missions_completed
@@ -39,4 +40,12 @@ export function applyNetworkAccountProjection(profile, row) {
         if (next[selection] !== profile[selection]) for (const field of cached) delete next[field];
     }
     return next;
+}
+
+export function mergeSavedAccountProfile(profile, saved) {
+    if (!profile?.id || saved?.id !== profile.id) throw new Error("Saved profile account does not match.");
+    if (saved.environment !== "TEST") return saved;
+    if (saved.user_id !== profile.id || !saved.customization)
+        throw new Error("Saved network customization is missing.");
+    return applyNetworkAccountProjection(profile, saved);
 }

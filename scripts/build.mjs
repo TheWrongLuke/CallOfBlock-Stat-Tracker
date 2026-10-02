@@ -65,7 +65,8 @@ const routeViewTags = new Map([
 
 const routeViewAllowlist = {
     home: new Set(["home-view"]),
-    stats: new Set(["leaderboard-view", "player-view", "match-view", "account-view"]),
+    stats: new Set(["leaderboard-view", "player-view", "match-view"]),
+    account: new Set(["account-view"]),
     playtests: new Set(["playtests-view"]),
     feedback: new Set(["feedback-view", "ticket-view"]),
     help: new Set(["home-view"]),
@@ -171,6 +172,7 @@ function renderPageHero(html, routeId, page) {
 
 function pruneSharedPageShell(html, routeId) {
     let output = html;
+    if (routeId === "account") output = output.replace(/\s*<header class="hero">[\s\S]*?<\/header>/i, "");
     if (routeId === "admin" || routeId.startsWith("admin-")) {
         output = output.replace(/\s*<header class="hero">[\s\S]*?<\/header>/i, "");
         output = output.replace(

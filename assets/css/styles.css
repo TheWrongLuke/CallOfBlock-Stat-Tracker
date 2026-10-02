@@ -7203,6 +7203,8 @@ body[data-public-route="admin-docs"] .admin-help-hero h1 {
 .playtests-hero-actions button,
 .identity-block a,
 .identity-block button,
+.identity-actions a,
+[data-playtest-reload],
 .admin-action-grid button,
 .admin-playtest-roster button,
 .playtest-create-form button,
@@ -7223,6 +7225,8 @@ body[data-public-route="admin-docs"] .admin-help-hero h1 {
 .playtests-hero-actions button,
 .identity-block a,
 .identity-block button,
+.identity-actions a,
+[data-playtest-reload],
 .admin-action-grid button,
 .admin-playtest-roster button,
 .playtest-create-form button {
@@ -7237,6 +7241,8 @@ body[data-public-route="admin-docs"] .admin-help-hero h1 {
 .playtests-hero-actions button:hover,
 .identity-block a:hover,
 .identity-block button:hover:not(:disabled),
+.identity-actions a:hover,
+[data-playtest-reload]:hover:not(:disabled),
 .admin-action-grid button:hover,
 .playtest-create-form button:hover,
 .slot-expand:hover,
@@ -7318,7 +7324,8 @@ body[data-public-route="admin-docs"] .admin-help-hero h1 {
     margin-top: 12px;
 }
 
-.identity-block button:disabled {
+.identity-block button:disabled,
+[data-playtest-reload]:disabled {
     cursor: not-allowed;
     opacity: 0.52;
 }
