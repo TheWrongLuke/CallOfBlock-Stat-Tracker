@@ -1,7 +1,8 @@
 import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "../api/weekly-missions.js";
 import { weeklyMissionProgress } from "../core/weekly-mission-progress.js";
+import { renderWeeklyMissionPanel } from "../core/weekly-mission-view.js";
 export { weeklyMissionProgress } from "../core/weekly-mission-progress.js";
-import { escapeHtml, formatDate, number } from "../core/site-shell.js";
+import { escapeHtml, number } from "../core/site-shell.js";
 import { applyNetworkAccountProjection } from "../core/network-profile.js";
 
 const MISSION_LIMIT = 7;
@@ -24,7 +25,13 @@ export function initializeHomeWeeklyMissions(shell) {
         loadedAt: 0
     };
 
-    shell.setAccountPanelAddon(() => renderWeeklyMissions(state));
+    shell.setAccountPanelAddon(() =>
+        renderWeeklyMissionPanel({
+            ...state,
+            actionsEnabled: !shell.profile?.banned_from_voting,
+            actionPrefix: "home-weekly"
+        })
+    );
     document.addEventListener("cob:account-panel-open", () => void loadWeeklyMissions(shell, state));
     document.addEventListener("click", (event) => void handleMissionClick(event, shell, state));
     document.addEventListener("submit", (event) => void handleMissionSubmit(event, shell, state));
@@ -201,54 +208,6 @@ async function claimMission(shell, state, missionId) {
     }
 }
 
-function renderWeeklyMissions(state) {
-    if (state.loading && !state.row) return missionState("Preparing weekly rotation...");
-    const missions = state.row?.missions || [];
-    if (!missions.length) {
-        return missionState(
-            state.message || (state.loaded ? "Weekly rotation unavailable" : "Open this panel to load missions.")
-        );
-    }
-    const claimed = new Set(state.row.claimed_ids);
-    const completed = state.statsProfile
-        ? missions.filter((mission) => weeklyMissionProgress(state.statsProfile, mission).complete).length
-        : "-";
-    const resetDate = state.row.cycle_ends_at ? formatDate(state.row.cycle_ends_at, { month: "long" }) : "next Monday";
-    return `<section class="profile-drawer-missions weekly-missions-panel">
-        <div class="mission-head"><div><p class="panel-kicker">Renewable Missions</p><h3>Weekly rotation</h3><span>Resets ${escapeHtml(resetDate)}</span></div><strong>${completed} / ${missions.length}</strong></div>
-        <div class="weekly-mission-summary"><span><b>${missions.filter((mission) => mission.difficulty === "easy").length}</b> easy</span><span><b>${missions.filter((mission) => mission.difficulty === "hard").length}</b> hard</span><span><b>${formatNumber(missions.reduce((total, mission) => total + number(mission.xp), 0))}</b> XP available</span></div>
-        <p class="weekly-mission-rule">Untouched missions rotate every week. Started missions carry over and can be swapped once after the rotation.</p>
-        <div class="mission-list">${missions.map((mission) => renderMission(mission, state, claimed)).join("")}</div>
-        ${state.message ? `<p class="mode-empty">${escapeHtml(state.message)}</p>` : ""}
-    </section>`;
-}
-
-function missionState(message) {
-    return `<section class="profile-drawer-missions"><div class="mission-head"><div><p class="panel-kicker">Renewable Missions</p><h3>${escapeHtml(message)}</h3></div></div></section>`;
-}
-
-function renderMission(mission, state, claimedIds) {
-    const progress = state.statsProfile
-        ? weeklyMissionProgress(state.statsProfile, mission)
-        : { complete: false, status: "Progress unavailable" };
-    const claimed = claimedIds.has(mission.id);
-    const busy = state.busyId === mission.id;
-    const rewarding = state.rewardingId === mission.id;
-    const canSwap = Boolean(state.statsProfile && mission.carried) && !mission.swapUsed && !claimed;
-    const action = claimed
-        ? '<span class="mission-xp claimed">Claimed</span>'
-        : progress.complete
-          ? `<button class="mission-claim-button" type="button" data-home-weekly-claim="${escapeHtml(mission.id)}" ${busy ? "disabled" : ""}>${busy ? "Claiming..." : `Claim ${formatNumber(mission.xp)} XP`}</button>`
-          : canSwap
-            ? `<button class="mission-swap-button" type="button" data-home-weekly-swap="${escapeHtml(mission.id)}">Swap</button>`
-            : `<span class="mission-xp">+${formatNumber(mission.xp)} XP</span>`;
-    return `<article class="mission-row weekly-mission-row ${progress.complete ? "complete" : ""} ${mission.carried ? "carried" : ""} ${rewarding ? "rewarding" : ""}">
-        <div><span class="mission-difficulty ${escapeHtml(mission.difficulty)}">${escapeHtml(mission.difficulty)}</span><strong>${escapeHtml(mission.label)}</strong><span>${escapeHtml(mission.description)}</span>${mission.carried ? '<small class="mission-carried-note">Carried over - progress preserved</small>' : ""}</div>
-        ${state.statsProfile ? `<div class="mission-progress"><i style="width: ${Math.min(100, Math.round(progress.progress * 100))}%"></i></div>` : ""}<small>${escapeHtml(progress.status)}</small>
-        <div class="mission-actions">${action}${rewarding ? `<span class="mission-claim-burst">+${formatNumber(mission.xp)} XP</span>` : ""}</div>
-    </article>`;
-}
-
 function renderSwapDialog(state) {
     let host = document.getElementById("home-weekly-mission-dialog-host");
     if (!host) {
@@ -270,12 +229,6 @@ function normalizeMissionRow(row) {
         missions: (Array.isArray(row?.missions) ? row.missions : []).slice(0, MISSION_LIMIT),
         claimed_ids: stringArray(row?.claimed_ids)
     };
-}
-
-function formatNumber(value) {
-    return Number(value || 0)
-        .toFixed(2)
-        .replace(/\.00$/, "");
 }
 
 function stringArray(value) {

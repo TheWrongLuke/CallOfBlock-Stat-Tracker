@@ -2,6 +2,7 @@ import { createFeedbackApi } from "./api/feedback.js";
 import { captureFormDraft, restoreFormDraft } from "./core/form-draft.js";
 import { PLAYTEST_ADMIN_STATUSES, validatePlaytestDraft, playtestRoster, rosterCsv } from "./core/playtest-admin.js";
 import { weeklyMissionProgress } from "./core/weekly-mission-progress.js";
+import { renderWeeklyMissionPanel } from "./core/weekly-mission-view.js";
 import { createNotificationApi } from "./api/notifications.js";
 import {
     deleteOwnAccount,
@@ -8862,103 +8863,15 @@ function replaceClassPrefix(element, prefix, nextClass) {
     if (nextClass) element.classList.add(nextClass);
 }
 
-function renderWeeklyMissions(profile) {
-    const missionState = state.weeklyMissions;
-    profile = missionState.statsProfile || null;
-    if (missionState.row && !profile) {
-        return `<section class="profile-drawer-missions"><p class="mode-empty">${escapeHtml(missionState.loading
-            ? "Loading mission statistics..."
-            : "Mission statistics are unavailable. Link Minecraft or reopen the panel to retry.")}</p></section>`;
-    }
-    if (missionState.loading && !missionState.row) {
-        return `
-            <section class="profile-drawer-missions">
-                <div class="mission-head">
-                    <div>
-                        <p class="panel-kicker">Renewable Missions</p>
-                        <h3>Preparing weekly rotation...</h3>
-                    </div>
-                </div>
-            </section>
-        `;
-    }
-
-    const row = missionState.row;
-    const missions = Array.isArray(row?.missions) ? row.missions : [];
-    if (!missions.length) {
-        return `
-            <section class="profile-drawer-missions">
-                <div class="mission-head">
-                    <div>
-                        <p class="panel-kicker">Renewable Missions</p>
-                        <h3>Weekly rotation unavailable</h3>
-                    </div>
-                </div>
-                <p class="mode-empty">${escapeHtml(missionState.message || (profile ? "Missions will appear when the current stats finish loading." : "Your starter missions are being created. Link Minecraft to begin tracking progress."))}</p>
-            </section>
-        `;
-    }
-
-    const claimedIds = new Set(arrayField(row.claimed_ids));
-    const completed = missions.filter((mission) => weeklyMissionProgress(profile, mission).complete).length;
-    const cycle = weeklyMissionCycle();
-    return `
-        <section class="profile-drawer-missions weekly-missions-panel">
-            <div class="mission-head">
-                <div>
-                    <p class="panel-kicker">Renewable Missions</p>
-                    <h3>Weekly rotation</h3>
-                    <span>Resets ${escapeHtml(formatFullLocalDate(cycle.endsAt))}</span>
-                </div>
-                <strong>${completed} / ${missions.length}</strong>
-            </div>
-            <div class="weekly-mission-summary">
-                <span><b>${missions.filter((mission) => mission.difficulty === "easy").length}</b> easy</span>
-                <span><b>${missions.filter((mission) => mission.difficulty === "hard").length}</b> hard</span>
-                <span><b>${formatNumber(missions.reduce((sum, mission) => sum + number(mission.xp), 0))}</b> XP available</span>
-            </div>
-            ${profile ? "" : `<p class="weekly-mission-link-note">Link Minecraft to begin tracking mission progress. Your mission baselines will be set when the account is linked.</p>`}
-            <p class="weekly-mission-rule">Untouched missions rotate every week. If you cannot finish a mission by the end of the week, it will not change once you have started it. You can manually swap that mission once. This balances the fact that the server is not online 24/7 yet.</p>
-            <div class="mission-list">
-                ${missions.map((mission) => renderWeeklyMissionRow(profile, mission, claimedIds)).join("")}
-            </div>
-            ${missionState.message ? `<p class="mode-empty">${escapeHtml(missionState.message)}</p>` : ""}
-        </section>
-    `;
-}
-
-function renderWeeklyMissionRow(profile, mission, claimedIds) {
-    const progress = weeklyMissionProgress(profile, mission);
-    const claimed = claimedIds.has(mission.id);
-    const claiming = state.weeklyMissions.claimingId === mission.id;
-    const animating = state.weeklyMissions.animatingId === mission.id;
-    const communityBanned = isCurrentAccountCommunityBanned();
-    const canSwap = Boolean(mission.carried) && !mission.swapUsed && !claimed && !communityBanned;
-    const action = claimed
-        ? `<span class="mission-xp claimed">Claimed</span>`
-        : progress.complete
-          ? `<button class="mission-claim-button" type="button" data-weekly-claim="${escapeHtml(mission.id)}" ${claiming || communityBanned || state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>${claiming ? "Claiming..." : `Claim ${formatNumber(mission.xp)} XP`}</button>`
-          : canSwap
-            ? `<button class="mission-swap-button" type="button" data-weekly-swap="${escapeHtml(mission.id)}" ${state.weeklyMissions.source !== "supabase" ? "disabled" : ""}>Swap</button>`
-            : `<span class="mission-xp">+${formatNumber(mission.xp)} XP</span>`;
-    return `
-        <article class="mission-row weekly-mission-row ${progress.complete ? "complete" : ""} ${mission.carried ? "carried" : ""} ${animating ? "rewarding" : ""}">
-            <div>
-                <span class="mission-difficulty ${escapeHtml(mission.difficulty)}">${escapeHtml(mission.difficulty)}</span>
-                <strong>${escapeHtml(mission.label)}</strong>
-                <span>${escapeHtml(mission.description)}</span>
-                ${mission.carried ? `<small class="mission-carried-note">Carried over - progress preserved</small>` : ""}
-            </div>
-            <div class="mission-progress">
-                <i style="width: ${Math.min(100, Math.round(progress.progress * 100))}%"></i>
-            </div>
-            <small>${escapeHtml(progress.status)}</small>
-            <div class="mission-actions">
-                ${action}
-                ${animating ? `<span class="mission-claim-burst">+${formatNumber(mission.xp)} XP</span>` : ""}
-            </div>
-        </article>
-    `;
+function renderWeeklyMissions() {
+    const mission = state.weeklyMissions;
+    return renderWeeklyMissionPanel({
+        row: mission.row, statsProfile: mission.statsProfile, loading: mission.loading,
+        loaded: Boolean(mission.row), message: mission.message,
+        busyId: mission.claimingId || (mission.swapping ? mission.swapMissionId : ""),
+        rewardingId: mission.animatingId,
+        actionsEnabled: !isCurrentAccountCommunityBanned() && mission.source === "supabase"
+    });
 }
 
 function resetWeeklyMissionState() {
