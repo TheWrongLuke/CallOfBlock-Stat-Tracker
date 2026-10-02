@@ -4,6 +4,7 @@ import { PLAYTEST_ADMIN_STATUSES, validatePlaytestDraft, playtestRoster, rosterC
 import { weeklyMissionProgress } from "./core/weekly-mission-progress.js";
 import { renderWeeklyMissionPanel } from "./core/weekly-mission-view.js";
 import { renderMinecraftAccountLink } from "./features/minecraft-account-link.js";
+import { renderAccountProgress, renderAccountAccessLinks, renderAccountAccessChoices, accountAccessIntent } from "./core/account-view.js";
 import { createNotificationApi } from "./api/notifications.js";
 import {
     deleteOwnAccount,
@@ -222,8 +223,6 @@ const PLAYTEST_AUTH_RETURN_KEY = "cob_playtest_auth_return";
 const NOTIFICATION_POPUP_SESSION_KEY = "cob_notification_popup_seen_v1";
 const BADGE_SEEN_STORAGE_KEY = "cob_seen_badges_v1";
 const WEEKLY_MISSION_STORAGE_KEY = "cob_weekly_missions_v1";
-const ACCOUNT_MAX_LEVEL = 1000;
-const ACCOUNT_XP_PER_LEVEL = 10000;
 const WEEKLY_MISSION_COUNT = 7;
 const WEEKLY_EASY_MISSION_COUNT = 4;
 const MISSION_MODES = [
@@ -1138,7 +1137,7 @@ async function signInWithDiscord() {
 
 async function signOutDiscord() {
     if (!state.authClient) return;
-    const { error } = await state.authClient.auth.signOut();
+    const { error } = await state.authClient.auth.signOut({ scope: "local" });
     if (error) {
         console.error("Discord sign out failed", error);
         state.authMessage = "Could not sign out right now.";
@@ -1716,6 +1715,12 @@ function bindStaticEvents() {
             return;
         }
 
+        const accountSection = event.target.closest("[data-account-section]");
+        if (accountSection) {
+            event.preventDefault();
+            document.getElementById(accountSection.dataset.accountSection)?.scrollIntoView({ block: "start" });
+            return;
+        }
         const internalHashLink = event.target.closest("a[href^='#']");
         if (internalHashLink) {
             const href = internalHashLink.getAttribute("href") || "";
@@ -1747,7 +1752,7 @@ function bindStaticEvents() {
             return;
         }
 
-        const authSignOutButton = event.target.closest("[data-auth-sign-out]");
+        const authSignOutButton = event.target.closest("[data-auth-sign-out], [data-account-logout]");
         if (authSignOutButton) {
             event.preventDefault();
             void signOutDiscord();
@@ -4447,7 +4452,7 @@ function renderAccountWidget() {
     }
 
     if (!isDiscordLoggedIn()) {
-        container.innerHTML = `<button type="button" data-auth-login>Login</button>`;
+        container.innerHTML = renderAccountAccessLinks();
         return;
     }
 
@@ -4605,9 +4610,7 @@ function renderAccountPage() {
     }
 
     if (!isDiscordLoggedIn()) {
-        body.innerHTML = renderAccountLoginPanel(
-            "Login with Discord to connect your profile, notifications, and cosmetics."
-        );
+        body.innerHTML = renderAccountLoginPanel("Continue with your Discord account. First-time users get a Call of Block profile automatically.");
         return;
     }
 
@@ -4654,18 +4657,36 @@ function renderAccountPage() {
             </div>
             <div class="account-actions">
                             ${linkedProfile ? `<a href="${statsHref(`player=${encodeURIComponent(linkedProfile.playerId)}&tab=overview`)}">Open stats profile</a>` : ""}
-                <button type="button" data-auth-sign-out>Sign out</button>
+                <button type="button" data-auth-sign-out>Log out</button>
             </div>
         </section>
 
         ${schemaNote}
         ${cosmeticSchemaNote}
         ${state.accountMessage ? `<p class="identity-status account-message">${escapeHtml(state.accountMessage)}</p>` : ""}
-        ${renderAccountLinkPanel(account, linkedProfile)}
-        ${linkedProfile ? renderAccountStatsPanel(linkedProfile) : ""}
-        ${renderAccountCustomizeForm(account, badgeState)}
-        ${renderAccountEmailPreferences(account)}
-        ${renderAccountDeletionPanel()}
+        <nav class="account-section-nav" aria-label="Account sections">
+            <a href="#account-details" data-account-section="account-details">Account details</a><a href="#account-minecraft" data-account-section="account-minecraft">Minecraft</a>
+            <a href="#account-personalization" data-account-section="account-personalization">Personalization</a><a href="#account-notifications" data-account-section="account-notifications">Notifications</a>
+            <a href="#account-security" data-account-section="account-security">Security &amp; privacy</a>
+        </nav>
+        <section class="account-section" id="account-details" aria-labelledby="account-details-title">
+            <h2 id="account-details-title">Account details</h2>
+            <dl class="account-details-list">
+                <div><dt>Email</dt><dd>${escapeHtml(state.authSession?.user?.email || "Not provided")}</dd></div>
+                <div><dt>Account ID</dt><dd>${escapeHtml(account.id || "Unavailable")}</dd></div>
+                <div><dt>Joined</dt><dd>${escapeHtml(account.created_at ? formatFullLocalDate(account.created_at) : "Unavailable")}</dd></div>
+            </dl>
+            ${linkedProfile ? renderAccountStatsPanel(linkedProfile) : ""}
+        </section>
+        <section class="account-section" id="account-minecraft" aria-labelledby="account-minecraft-title"><h2 id="account-minecraft-title">Minecraft account</h2>${renderAccountLinkPanel(account, linkedProfile)}</section>
+        <section class="account-section" id="account-personalization" aria-labelledby="account-personalization-title"><h2 id="account-personalization-title">Personalization</h2>${renderAccountCustomizeForm(account, badgeState)}</section>
+        <section class="account-section" id="account-notifications" aria-labelledby="account-notifications-title"><h2 id="account-notifications-title">Notifications</h2>${renderAccountEmailPreferences(account)}</section>
+        <section class="account-section" id="account-security" aria-labelledby="account-security-title">
+            <h2 id="account-security-title">Security &amp; privacy</h2>
+            <p>Signed in with Discord. Your password and two-factor authentication are managed by Discord.</p>
+            <div class="account-actions"><button type="button" data-auth-sign-out>Log out on this browser</button></div>
+            ${renderAccountDeletionPanel()}
+        </section>
     `;
     const refreshedForm = body.querySelector("[data-account-form]");
     renderMinecraftAccountLink(body.querySelector("[data-minecraft-account-link]"), {
@@ -8131,9 +8152,9 @@ function renderAccountLoginPanel(message) {
     return `
         <section class="account-login-panel">
             <p class="panel-kicker">Account</p>
-            <h2>Login with Discord</h2>
+            ${renderAccountAccessChoices(accountAccessIntent(window.location.search))}
             <p>${escapeHtml(message)}</p>
-            <button type="button" data-auth-login ${state.authReady ? "" : "disabled"}>Login with Discord</button>
+            <button type="button" data-auth-login ${state.authClient && state.authReady ? "" : "disabled"}>Continue with Discord</button>
             ${state.authMessage ? `<p class="identity-status">${escapeHtml(state.authMessage)}</p>` : ""}
         </section>
     `;
@@ -14538,30 +14559,7 @@ function markBadgeSeen(account, badgeId) {
 }
 
 function renderAccountLevelPill(account) {
-    const progress = accountProgress(account);
-    return `
-        <div class="account-level-pill" title="${escapeHtml(`${formatNumber(progress.totalXp)} total XP`)}">
-            <strong>LVL ${progress.level}</strong>
-            <span>${formatNumber(progress.totalXp)} XP</span>
-        </div>
-    `;
-}
-
-function accountProgress(account) {
-    const storedXp = number(account?.xp);
-    const totalXp = Math.min(ACCOUNT_MAX_LEVEL * ACCOUNT_XP_PER_LEVEL, storedXp);
-    const level = Math.min(ACCOUNT_MAX_LEVEL, Math.floor(totalXp / ACCOUNT_XP_PER_LEVEL) + 1);
-    const levelBaseXp = (level - 1) * ACCOUNT_XP_PER_LEVEL;
-    const currentLevelXp = level >= ACCOUNT_MAX_LEVEL ? ACCOUNT_XP_PER_LEVEL : Math.max(0, totalXp - levelBaseXp);
-    const xpRemaining = level >= ACCOUNT_MAX_LEVEL ? 0 : Math.max(0, ACCOUNT_XP_PER_LEVEL - currentLevelXp);
-    return {
-        level,
-        totalXp,
-        storedXp,
-        currentLevelXp,
-        xpRemaining,
-        levelProgress: level >= ACCOUNT_MAX_LEVEL ? 1 : currentLevelXp / ACCOUNT_XP_PER_LEVEL
-    };
+    return renderAccountProgress(account?.xp, { unavailable: networkTrackerConfigured() && account?.network_stats_unavailable });
 }
 
 function arrayField(value) {

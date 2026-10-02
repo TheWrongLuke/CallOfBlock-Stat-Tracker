@@ -6,6 +6,7 @@ import { networkTrackerConfigured, fetchNetworkTracker } from "../api/network-tr
 import { networkAccountRequest } from "../api/network-account.js";
 import { applyNetworkAccountProjection } from "./network-profile.js";
 import { updateDrawerContent, renderProfileDrawerActions } from "./profile-drawer.js";
+import { renderAccountProgress, renderAccountAccessLinks } from "./account-view.js";
 import { discordAvatarCandidates, discordDefaultAvatarUrl, uniqueImageUrls } from "../utils/avatar-url.js";
 
 const CONTACT_EMAIL_CODES = [
@@ -50,7 +51,7 @@ async function initializeSiteShellOnce() {
             return client ? signIn(client) : Promise.resolve();
         },
         signOut() {
-            return client?.auth?.signOut ? client.auth.signOut() : Promise.resolve();
+            return signOut(shell);
         },
         async loadStatsSlice(id, options = {}) {
             return loadStatsSlice(id, options);
@@ -441,8 +442,7 @@ function renderAccountWidget(shell, ready = true) {
     }
     if (!shell.session?.user) {
         updateAdminStoreLinks(null);
-        container.innerHTML = '<button type="button" data-shell-login>Login</button>';
-        container.querySelector("[data-shell-login]")?.addEventListener("click", () => signIn(shell.client));
+        container.innerHTML = renderAccountAccessLinks();
         return;
     }
 
@@ -519,7 +519,6 @@ function renderAccountPanel(shell, host) {
     const admin = Boolean(profile.is_admin);
     const title = String(profile.resolved_title_text || "").trim();
     const rarity = cleanRarity(profile.resolved_title_rarity);
-    const level = accountLevel(profile.xp);
     const progressionUnavailable = networkTrackerConfigured() && profile.network_stats_unavailable;
     updateDrawerContent(
         host,
@@ -534,7 +533,7 @@ function renderAccountPanel(shell, host) {
                 <div>
                     <strong>${escapeHtml(name)}</strong>
                     ${title ? `<span class="profile-title-cosmetic rarity-${rarity} compact">${escapeHtml(title)}</span>` : ""}
-                    <div class="account-level-pill" title="${progressionUnavailable ? "TEST tracking unavailable" : escapeHtml(`${number(profile.xp).toLocaleString()} total XP`)}"><strong>${progressionUnavailable ? "LVL ?" : `LVL ${level}`}</strong><span>${progressionUnavailable ? "Unavailable" : `${number(profile.xp).toLocaleString()} XP`}</span></div>
+                    ${renderAccountProgress(profile.xp, { unavailable: progressionUnavailable })}
                 </div>
             </div>
             ${renderProfileDrawerActions(admin)}
@@ -545,6 +544,19 @@ function renderAccountPanel(shell, host) {
     host.querySelector("[data-shell-account-close]").onclick = () => closeAccountPanel(shell);
     host.querySelector("[data-shell-account-backdrop]").onclick = (event) => {
         if (event.target === event.currentTarget) closeAccountPanel(shell);
+    };
+    host.querySelector("[data-account-logout]").onclick = async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = "Logging out...";
+        try {
+            const result = await shell.signOut();
+            if (result?.error) throw result.error;
+        } catch (error) {
+            console.warn("Could not log out", error);
+            button.disabled = false;
+            button.textContent = "Logout failed. Retry";
+        }
     };
 }
 
@@ -574,8 +586,15 @@ function updateAdminStoreLinks(profile) {
     });
 }
 
-function accountLevel(value) {
-    return Math.min(1000, Math.floor(Math.max(0, number(value)) / 10000) + 1);
+async function signOut(shell) {
+    if (!shell.client?.auth?.signOut) return { error: new Error("Account service unavailable.") };
+    const result = await shell.client.auth.signOut({ scope: "local" });
+    if (result?.error) return result;
+    shell.session = null;
+    shell.accountExperienceUserId = "";
+    shell.accountExperiencePromise = null;
+    shell.setProfile(null);
+    return result;
 }
 
 async function signIn(client) {

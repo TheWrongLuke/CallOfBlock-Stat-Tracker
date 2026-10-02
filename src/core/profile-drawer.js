@@ -40,5 +40,6 @@ export function renderProfileDrawerActions(admin) {
         <a class="profile-drawer-store" href="/admin/catalog/">Catalog administration</a>`
                 : ""
         }
+        <button class="profile-drawer-logout" type="button" data-account-logout>Log out</button>
     </div>`;
 }

@@ -1172,7 +1172,7 @@ test("signing out discards an in-flight mission load", async ({ page }) => {
         window.__missionShell = shell;
     });
     release();
-    await expect(page.locator("[data-shell-login]")).toBeVisible();
+    await expect(page.locator('[data-account-access="login"]')).toBeVisible();
     await expect
         .poll(() => page.evaluate(() => window.__missionShell.accountPanelAddon()))
         .not.toContain("On the Board");
