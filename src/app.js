@@ -1121,7 +1121,7 @@ async function signInWithDiscord() {
 
     state.authMessage = "";
     resetNotificationState();
-    if (["playtests", "store", "feedback", "ticket"].includes(state.view)) rememberAuthReturn();
+    if (["account", "playtests", "store", "feedback", "ticket"].includes(state.view)) rememberAuthReturn();
     const { error } = await state.authClient.auth.signInWithOAuth({
         provider: "discord",
         options: {
@@ -1180,7 +1180,7 @@ function playtestAuthRedirectUrl() {
 
 function rememberAuthReturn() {
     const route = window.location.hash.replace(/^#/, "") || document.body?.dataset.publicRoute || "";
-    const allowed = new Set(["playtests", "store", "feedback"]);
+    const allowed = new Set(["account", "playtests", "store", "feedback"]);
     if (!allowed.has(route) && !/^ticket=[0-9a-f-]{36}$/i.test(route)) return;
     try {
         window.localStorage?.setItem(PLAYTEST_AUTH_RETURN_KEY, route);
@@ -1192,7 +1192,7 @@ function rememberAuthReturn() {
 function consumeAuthReturn() {
     try {
         const route = window.localStorage?.getItem(PLAYTEST_AUTH_RETURN_KEY) || "";
-        const allowed = new Set(["playtests", "store", "feedback"]);
+        const allowed = new Set(["account", "playtests", "store", "feedback"]);
         if (!allowed.has(route) && !/^ticket=[0-9a-f-]{36}$/i.test(route)) return;
         window.localStorage.removeItem(PLAYTEST_AUTH_RETURN_KEY);
         if (window.location.hash.replace(/^#/, "") !== route) window.location.hash = route;
