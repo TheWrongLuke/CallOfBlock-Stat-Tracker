@@ -99,11 +99,18 @@ async function initializeSiteShellOnce() {
 
 export function renderHeroStatus(data) {
     const live = data?.liveStatus || {};
-    setText("online-player-count", live.onlinePlayers > 0 ? String(live.onlinePlayers) : "Offline");
+    setText(
+        "online-player-count",
+        live.state === "offline"
+            ? "Offline"
+            : live.onlinePlayers != null && Number.isFinite(Number(live.onlinePlayers))
+              ? String(live.onlinePlayers)
+              : "Unavailable"
+    );
     setText("server-status", live.label || titleCase(live.state) || "Idle");
     setText(
         "server-status-detail",
-        live.mapName || live.mode || (live.onlinePlayers > 0 ? "Server online" : "Waiting for live feed")
+        live.detail || live.mapName || live.mode || (live.onlinePlayers > 0 ? "Server online" : "Waiting for live feed")
     );
     setText("hero-player-count", String(number(data?.totalTrackedPlayers)));
 
@@ -153,13 +160,17 @@ function createSupabaseClient() {
     const key = String(window.COB_SUPABASE_KEY || "").trim();
     if (!url || !key || !window.supabase?.createClient) return null;
     return window.supabase.createClient(url, key, {
-        auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true },
+        auth: {
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: true
+        },
         global: { headers: { "x-client-info": "call-of-block-public-shell" } }
     });
 }
 
 async function loadStatsSlice(id, { force = false, fallback = id !== "status" } = {}) {
-    if (id !== "status" && networkTrackerConfigured()) {
+    if (networkTrackerConfigured()) {
         const request = createRequestSignal(null, STATS_FETCH_TIMEOUT_MS);
         try {
             // Never reuse a production/local cached export or sample when TEST tracking is enabled.
@@ -177,7 +188,10 @@ async function loadStatsSlice(id, { force = false, fallback = id !== "status" } 
     const maxAge = id === "status" ? 15_000 : 300_000;
     let cached = statsSliceCache.get(id);
     if (!cached) {
-        const persisted = readPublicStatsCache(id, { maxAgeMs: maxAge, allowStale: true });
+        const persisted = readPublicStatsCache(id, {
+            maxAgeMs: maxAge,
+            allowStale: true
+        });
         if (persisted) {
             cached = persisted;
             statsSliceCache.set(id, persisted);
@@ -200,7 +214,11 @@ function requestStatsSlice(id, { baseUrl, key, fallback }) {
             const storedAt = Date.now();
             statsSliceCache.set(id, { payload, storedAt });
             writePublicStatsCache(id, payload);
-            window.dispatchEvent(new CustomEvent(STATS_SLICE_UPDATED_EVENT, { detail: { id, payload, storedAt } }));
+            window.dispatchEvent(
+                new CustomEvent(STATS_SLICE_UPDATED_EVENT, {
+                    detail: { id, payload, storedAt }
+                })
+            );
             return payload;
         })
         .finally(() => {
@@ -225,7 +243,11 @@ async function fetchStatsSlice(id, { baseUrl, key, fallback }) {
             const response = await fetch(url, {
                 ...(rowId === "status" ? { cache: "no-store" } : {}),
                 signal: request.signal,
-                headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" }
+                headers: {
+                    apikey: key,
+                    Authorization: `Bearer ${key}`,
+                    Accept: "application/json"
+                }
             });
             const text = await response.text();
             recordPublicDataRequest(rowId, startedAt, response.status, text.length);
@@ -261,7 +283,9 @@ function mergeHomeStatus(home, status) {
 }
 
 function recordPublicDataRequest(rowId, startedAt, status, responseSize, error = null) {
-    const diagnostics = (globalThis.__cobPublicDataDiagnostics ||= { requests: [] });
+    const diagnostics = (globalThis.__cobPublicDataDiagnostics ||= {
+        requests: []
+    });
     diagnostics.requests.push({
         timestamp: new Date().toISOString(),
         page: document.body?.dataset.publicRoute || "home",
@@ -331,7 +355,10 @@ async function initializeAuthenticatedAccountOnce(shell, userId) {
             const projection = await networkAccountRequest(shell.client, "read");
             source = projection?.error
                 ? { ...source, network_stats_unavailable: true }
-                : { ...applyNetworkAccountProjection(source, projection?.data), network_stats_unavailable: false };
+                : {
+                      ...applyNetworkAccountProjection(source, projection?.data),
+                      network_stats_unavailable: false
+                  };
         }
         const profile = await resolveShellProfile(shell.client, source);
         if (String(shell.session?.user?.id || "") !== userId) return;
@@ -553,7 +580,10 @@ function accountLevel(value) {
 
 async function signIn(client) {
     const redirectTo = new URL(window.location.pathname + window.location.search, window.location.origin).toString();
-    const result = await client.auth.signInWithOAuth({ provider: "discord", options: { redirectTo } });
+    const result = await client.auth.signInWithOAuth({
+        provider: "discord",
+        options: { redirectTo }
+    });
     if (result.error) console.error("Discord login failed", result.error);
 }
 

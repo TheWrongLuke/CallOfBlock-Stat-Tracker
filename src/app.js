@@ -1990,6 +1990,7 @@ function bindStaticEvents() {
         }
 
         const accountForm = event.target.closest("[data-account-form]");
+        if (accountForm) accountForm.dataset.dirty = "true";
         if (
             accountForm &&
             event.target.matches(
@@ -2136,6 +2137,7 @@ function bindStaticEvents() {
         }
 
         const accountForm = event.target.closest("[data-account-form]");
+        if (accountForm) accountForm.dataset.dirty = "true";
         if (accountForm && event.target.matches("[name='displayName']")) {
             updateAccountCustomizePreview(accountForm);
         }
@@ -3017,11 +3019,17 @@ async function refreshData({ initial, signal = null, sliceId = desiredStatsSlice
     if (networkTrackerConfigured()) {
         const request = createRequestSignal(signal, STATS_REQUEST_TIMEOUT_MS);
         try {
-            const data = await fetchNetworkTracker(sliceId, { signal: request.signal });
-            const status = await fetchSupabaseExport({ signal, rowId: "status" });
-            applyData(mergeCurrentLiveStatus(data, status.payload), false, "TEST Network API", { fullRender: initial, sliceId });
+            const data = await fetchNetworkTracker(sliceId, {
+                signal: request.signal
+            });
+            applyData(data, false, "TEST Network API", {
+                fullRender: initial,
+                sliceId
+            });
             return true;
-        } finally { request.cleanup(); }
+        } finally {
+            request.cleanup();
+        }
     }
     let loadedSliceId = sliceId;
     const [initialSupabaseResult, statusResult] = await Promise.all([
@@ -4599,7 +4607,10 @@ function renderAccountPage() {
     const account = state.authProfile || {};
     const linkedProfile = linkedStatsProfile();
     const currentForm = body.querySelector("[data-account-form]");
-    const draft = currentForm && account.id && currentForm.dataset.accountId === account.id ? captureFormDraft(currentForm) : null;
+    const draft =
+        currentForm && currentForm.dataset.dirty === "true" && account.id && currentForm.dataset.accountId === account.id
+            ? captureFormDraft(currentForm)
+            : null;
     const badgeState = accountBadgeState(account, linkedProfile);
     const selectedBadges = selectedAccountBadges(account, badgeState);
     const avatarUrl = accountAvatarUrl(account, linkedProfile, 128);
@@ -4651,7 +4662,10 @@ function renderAccountPage() {
     `;
     const refreshedForm = body.querySelector("[data-account-form]");
     restoreFormDraft(refreshedForm, draft);
-    if (draft) updateAccountCustomizePreview(refreshedForm);
+    if (draft) {
+        refreshedForm.dataset.dirty = "true";
+        updateAccountCustomizePreview(refreshedForm);
+    }
 }
 
 function resetStoreSessionState({ resetCatalog = false } = {}) {
@@ -8723,6 +8737,7 @@ function selectCosmeticOption(type, id) {
     const badgeState = accountBadgeState(account, profile);
     const item = cosmeticPickerItems(type, account).find((entry) => entry.id === id);
     if (!item || !cosmeticItemOwned(type, item, account, badgeState)) return;
+    form.dataset.dirty = "true";
 
     if (type === "badges") {
         const inputs = [...form.querySelectorAll("input[name='selectedBadges']")];
@@ -12958,7 +12973,12 @@ function renderLiveStatus() {
         return;
     }
 
-    online.textContent = String(number(status.onlinePlayers));
+    online.textContent =
+        status.state === "offline"
+            ? "Offline"
+            : status.onlinePlayers == null
+              ? "Unavailable"
+              : String(number(status.onlinePlayers));
     serverStatus.textContent = liveStatusHeadline(status);
     if (detail) detail.textContent = liveStatusText(status);
 }
@@ -12978,6 +12998,7 @@ function liveStatusHeadline(status) {
 }
 
 function liveStatusText(status) {
+    if (status?.detail) return status.detail;
     if (!status || status.state === "idle") return "Waiting for the next match";
     if (status.mode === "deathmatch") {
         const map = status.mapName || status.mapId || "Unknown map";

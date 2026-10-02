@@ -24,6 +24,17 @@ describe("isolated TEST tracker", () => {
         globalThis.window.COB_STATS_ENVIRONMENT = "PRODUCTION";
         expect(() => networkTrackerUrl()).toThrow("TEST");
     });
+    it("reads lightweight network presence without accepting production status", async () => {
+        configure();
+        expect(networkTrackerUrl("status")).toBe("https://tracker.callofblock.com/network/status");
+        const payload = {
+            environment: "TEST",
+            liveStatus: { state: "online", onlinePlayers: 0 }
+        };
+        const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => payload });
+        expect(await fetchNetworkTracker("status", { fetchImpl })).toEqual(payload);
+        await expect(fetchNetworkTracker("home", { fetchImpl })).rejects.toThrow("Invalid TEST");
+    });
     it("does not accept production data or silently fallback after failed network reads", async () => {
         configure();
         const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 503 });
@@ -31,7 +42,11 @@ describe("isolated TEST tracker", () => {
         expect(fetchImpl).toHaveBeenCalledTimes(1);
         fetchImpl.mockResolvedValue({
             ok: true,
-            json: async () => ({ environment: "PRODUCTION", modes: {}, profiles: [] })
+            json: async () => ({
+                environment: "PRODUCTION",
+                modes: {},
+                profiles: []
+            })
         });
         await expect(fetchNetworkTracker("home", { fetchImpl })).rejects.toThrow("Invalid TEST");
     });
@@ -39,7 +54,11 @@ describe("isolated TEST tracker", () => {
         configure();
         const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: 404 });
         const supabaseClient = { from: vi.fn() };
-        const api = createMatchDetailApi({ fetchImpl, supabaseClient, apiUrl: "https://legacy.invalid/stats" });
+        const api = createMatchDetailApi({
+            fetchImpl,
+            supabaseClient,
+            apiUrl: "https://legacy.invalid/stats"
+        });
         await expect(api.load("50000000-0000-4000-8000-000000000002")).rejects.toThrow("not available");
         expect(supabaseClient.from).not.toHaveBeenCalled();
         expect(fetchImpl).toHaveBeenCalledTimes(1);

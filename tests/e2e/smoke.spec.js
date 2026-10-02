@@ -539,7 +539,11 @@ async function installPageStubs(page, supabaseBody, statsPayload = statsExportFi
         });
     });
     await page.route("https://mc-heads.net/**", (route) =>
-        route.fulfill({ status: 502, contentType: "application/json", body: '{"error":"unavailable"}' })
+        route.fulfill({
+            status: 502,
+            contentType: "application/json",
+            body: '{"error":"unavailable"}'
+        })
     );
     await page.route("https://api.mcheads.org/**", (route) =>
         route.fulfill({ contentType: "image/png", body: transparentPng })
@@ -807,7 +811,9 @@ test("the homepage initializes only the public resources it needs", async ({ pag
     await expect(page.getByRole("heading", { level: 1, name: "Call of Block" })).toBeVisible();
 
     await expect.poll(() => page.evaluate(() => window.__supabaseTableRequests?.public_profiles || 0)).toBe(1);
-    const counts = await page.evaluate(() => ({ ...window.__supabaseTableRequests }));
+    const counts = await page.evaluate(() => ({
+        ...window.__supabaseTableRequests
+    }));
     expect(counts.public_profiles).toBe(1);
     expect(counts.public_cosmetic_catalog).toBe(1);
     expect(counts.playtest_slots).toBe(1);
@@ -991,8 +997,12 @@ test("private account statistics load the linked player slice", async ({ page })
     });
     await page.goto("/stats/#account");
 
-    const wins = page.locator(".account-stat-grid .detail-stat", { hasText: "BR Wins" });
-    const kills = page.locator(".account-stat-grid .detail-stat", { hasText: "BR Kills" });
+    const wins = page.locator(".account-stat-grid .detail-stat", {
+        hasText: "BR Wins"
+    });
+    const kills = page.locator(".account-stat-grid .detail-stat", {
+        hasText: "BR Kills"
+    });
     await expect(wins.locator("strong")).toHaveText("5");
     await expect(kills.locator("strong")).toHaveText("33");
     expect(requestedRows).toContain("eq.profile:sample-rtxluke");
@@ -1061,8 +1071,12 @@ for (const route of ["/", "/stats/", "/playtests/", "/feedback/", "/help/", "/ab
         await page.goto(route);
         await page.locator(route === "/stats/" ? "[data-account-panel-open]" : "[data-shell-account-open]").click();
         const br = page.locator(".weekly-mission-row", { hasText: "BR progress" });
-        const weapon = page.locator(".weekly-mission-row", { hasText: "Weapon progress" });
-        const map = page.locator(".weekly-mission-row", { hasText: "Map progress" });
+        const weapon = page.locator(".weekly-mission-row", {
+            hasText: "Weapon progress"
+        });
+        const map = page.locator(".weekly-mission-row", {
+            hasText: "Map progress"
+        });
         await expect(br).toContainText("23 / 100");
         await expect(br.locator(".mission-progress i")).toHaveAttribute("style", /width: 23%/);
         await expect(weapon).toContainText("5 / 10");
@@ -1070,7 +1084,9 @@ for (const route of ["/", "/stats/", "/playtests/", "/feedback/", "/help/", "/ab
         expect(errors).toEqual([]);
         if (route === "/stats/" || route === "/help/") {
             await br.scrollIntoViewIfNeeded();
-            await page.screenshot({ path: testInfo.outputPath("mission-progress.png") });
+            await page.screenshot({
+                path: testInfo.outputPath("mission-progress.png")
+            });
         }
         if (route === "/help/") {
             await page.evaluate(() => {
@@ -1115,7 +1131,9 @@ test("missing mission statistics stay unknown and retry on reopening", async ({ 
     );
     await page.goto("/help/");
     await page.locator("[data-shell-account-open]").click();
-    const mission = page.locator(".weekly-mission-row", { hasText: "On the Board" });
+    const mission = page.locator(".weekly-mission-row", {
+        hasText: "On the Board"
+    });
     await expect(mission).toContainText("Progress unavailable");
     await expect(mission.locator(".mission-progress")).toHaveCount(0);
     await expect(mission.locator("[data-home-weekly-claim]")).toHaveCount(0);
@@ -1266,9 +1284,15 @@ test("canonical public pages load directly with unique indexable metadata", asyn
         if (entry.route === "home") {
             const website = structuredData["@graph"].find((item) => item["@type"] === "WebSite");
             const organization = structuredData["@graph"].find((item) => item["@type"] === "Organization");
-            expect(website).toMatchObject({ name: "Call of Block", url: "https://callofblock.com/" });
+            expect(website).toMatchObject({
+                name: "Call of Block",
+                url: "https://callofblock.com/"
+            });
             expect(website.alternateName).toEqual(expect.arrayContaining(["Call of Block 2", "CallOfBlock", "COB"]));
-            expect(organization).toMatchObject({ name: "Call of Block", url: "https://callofblock.com/" });
+            expect(organization).toMatchObject({
+                name: "Call of Block",
+                url: "https://callofblock.com/"
+            });
         } else {
             expect(structuredData["@graph"].some((item) => item["@type"] === "BreadcrumbList")).toBe(true);
         }
@@ -1364,7 +1388,11 @@ test("creator trust section and footer trust links are visible to public visitor
 
     const creatorSection = page.locator("#about-the-creator");
     await expect(creatorSection).toBeVisible();
-    await expect(creatorSection.getByRole("heading", { name: "Who is behind Call of Block?" })).toBeVisible();
+    await expect(
+        creatorSection.getByRole("heading", {
+            name: "Who is behind Call of Block?"
+        })
+    ).toBeVisible();
     await expect(creatorSection).toContainText("Lukas / TheWrongLuke");
     await expect(creatorSection.getByRole("link", { name: "Portfolio" })).toHaveAttribute("target", "_blank");
     await expect(creatorSection.getByRole("link", { name: "GitHub" })).toHaveAttribute("rel", /noopener/);
@@ -1514,17 +1542,35 @@ test("player profile sections filter TDM and FFA independently and paginate weap
         details: {
             weapons: Array.from({ length: 14 }, (_, index) => weapon(index + 1)),
             maps: [
-                { id: "hijacked", label: "Hijacked", stats: { games: 2, wins: 1, kills: 24 } },
+                {
+                    id: "hijacked",
+                    label: "Hijacked",
+                    stats: { games: 2, wins: 1, kills: 24 }
+                },
                 { id: "raid", label: "Raid", stats: { games: 3, wins: 2, kills: 18 } },
-                { id: "duel_a", label: "Arena A", stats: { games: 4, wins: 1, kills: 12 } },
-                { id: "duel_b", label: "Arena B", stats: { games: 1, wins: 1, kills: 8 } }
+                {
+                    id: "duel_a",
+                    label: "Arena A",
+                    stats: { games: 4, wins: 1, kills: 12 }
+                },
+                {
+                    id: "duel_b",
+                    label: "Arena B",
+                    stats: { games: 1, wins: 1, kills: 8 }
+                }
             ]
         }
     };
     profile.freeForAll = {
         stats: { games: 1, wins: 1, kills: 8, deaths: 2, hits: 20, headshots: 4 },
         details: {
-            weapons: [{ id: "tacz:ffa_weapon", label: "FFA Weapon", stats: { games: 1, kills: 8, hits: 20 } }],
+            weapons: [
+                {
+                    id: "tacz:ffa_weapon",
+                    label: "FFA Weapon",
+                    stats: { games: 1, kills: 8, hits: 20 }
+                }
+            ],
             maps: [{ id: "raid", label: "Raid", stats: { games: 1, wins: 1, kills: 8 } }]
         }
     };
@@ -1841,7 +1887,10 @@ test("complete admin command documentation stays readable without page overflow"
             dimensions.commandWidths.every((entry) => entry.scroll <= entry.client + 1),
             `command overflow at ${width}px`
         ).toBe(true);
-        if (width === 320) await page.screenshot({ path: testInfo.outputPath("admin-docs-320.png") });
+        if (width === 320)
+            await page.screenshot({
+                path: testInfo.outputPath("admin-docs-320.png")
+            });
     }
 });
 
@@ -2019,7 +2068,10 @@ test("playtest admin edits, freezes, finishes, archives and restores without los
     await expect(page.locator("#playtest-list")).toContainText("No playtests match");
     await page.locator("[data-admin-playtest-search]").fill("");
     await page.locator("[data-admin-playtest-search]").press("Tab");
-    await page.screenshot({ path: testInfo.outputPath("playtest-admin.png"), fullPage: true });
+    await page.screenshot({
+        path: testInfo.outputPath("playtest-admin.png"),
+        fullPage: true
+    });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
 
@@ -2079,7 +2131,10 @@ test("community availability works without an admin event and stays saved when p
     });
     await page.locator("[data-playtest-reload]").click();
     await expect(page.locator('.selected-date-card [data-playtest-vote="available"]')).toBeEnabled();
-    await page.screenshot({ path: testInfo.outputPath("community-calendar.png"), fullPage: true });
+    await page.screenshot({
+        path: testInfo.outputPath("community-calendar.png"),
+        fullPage: true
+    });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
 
@@ -2115,7 +2170,10 @@ test("Admin can pause and resume community planning independently of a featured 
     await page.locator('[data-playtest-admin="community-open"]').click();
     await expect(page.locator('[data-playtest-select][aria-pressed="true"]')).toContainText("Community calendar");
     await expect(page.locator('[data-playtest-admin="finish"]')).toHaveCount(0);
-    await page.screenshot({ path: testInfo.outputPath("community-calendar-admin.png"), fullPage: true });
+    await page.screenshot({
+        path: testInfo.outputPath("community-calendar-admin.png"),
+        fullPage: true
+    });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
 
@@ -2365,7 +2423,10 @@ for (const route of ["/", "/stats/#account", "/playtests/", "/feedback/", "/help
             await expect(page.locator("[data-account-preview-img]")).toHaveAttribute("src", refreshedAvatar);
             await page.locator('[data-cosmetic-picker-open="icon"]').click();
             await expect(page.locator('[data-cosmetic-option="discord"] img')).toHaveAttribute("src", refreshedAvatar);
-            await testInfo.attach("discord-avatar-picker", { body: await page.screenshot(), contentType: "image/png" });
+            await testInfo.attach("discord-avatar-picker", {
+                body: await page.screenshot(),
+                contentType: "image/png"
+            });
         }
     });
 }
@@ -2539,6 +2600,57 @@ test("profile editing preview reflects the complete unsaved cosmetic draft", asy
     await expect(preview.locator("[data-account-preview-badges] .badge-admin")).toBeVisible();
 });
 
+test("TEST network status counts an empty online network without using legacy production presence", async ({
+    page
+}) => {
+    await installPageStubs(page);
+    await page.route("**/api-config.js*", (route) =>
+        route.fulfill({
+            contentType: "text/javascript",
+            body:
+                configStub +
+                '\nwindow.COB_STATS_ENVIRONMENT="TEST";window.COB_NETWORK_STATS_API_URL=location.origin+"/functions/v1/network-stats";'
+        })
+    );
+    let legacyReads = 0;
+    await page.route("**/rest/v1/cob_stats_exports*", (route) => {
+        legacyReads++;
+        return route.fulfill({ contentType: "application/json", body: "[]" });
+    });
+    let live = {
+        state: "online",
+        onlinePlayers: 0,
+        label: "Network online",
+        detail: "Waiting for the next match"
+    };
+    await page.route("**/network-stats/network/**", (route) =>
+        route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({
+                ...statsExportFixture,
+                environment: "TEST",
+                generatedAt: new Date().toISOString(),
+                liveStatus: live
+            })
+        })
+    );
+    for (const path of ["/", "/stats/"]) {
+        await page.goto(path);
+        await expect(page.locator("#online-player-count")).toHaveText("0");
+        await expect(page.locator("#server-status")).toHaveText("Network online");
+    }
+    live = {
+        state: "unknown",
+        onlinePlayers: null,
+        label: "Status unavailable",
+        detail: "Waiting for live network status"
+    };
+    await page.reload();
+    await expect(page.locator("#online-player-count")).toHaveText("Unavailable");
+    await expect(page.locator("#server-status")).toHaveText("Status unavailable");
+    expect(legacyReads).toBe(0);
+});
+
 test("TEST customization persists across pages without losing identity or unsaved drafts", async ({ page }) => {
     await installPageStubs(page, adminSupabaseStub.replace("session: {", 'session: { access_token: "fixture-token",'));
     await page.route("**/api-config.js*", (route) =>
@@ -2586,7 +2698,15 @@ test("TEST customization persists across pages without losing identity or unsave
     await page.route("**/network-stats/network/**", (route) =>
         route.fulfill({
             contentType: "application/json",
-            body: JSON.stringify({ ...statsExportFixture, environment: "TEST" })
+            body: JSON.stringify({
+                ...statsExportFixture,
+                environment: "TEST",
+                liveStatus: {
+                    state: "online",
+                    onlinePlayers: 0,
+                    label: "Network online"
+                }
+            })
         })
     );
     await page.route("**/network-stats/account/**", async (route) => {
@@ -2608,7 +2728,10 @@ test("TEST customization persists across pages without losing identity or unsave
                 selected_badges: p.selectedBadges
             };
         }
-        return route.fulfill({ contentType: "application/json", body: JSON.stringify({ ...row(), ...customization }) });
+        return route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({ ...row(), ...customization })
+        });
     });
     await page.goto("/stats/#account");
     await expect(page).toHaveURL(/\/account\/$/);
@@ -2668,7 +2791,13 @@ test("drawer refresh retains its animated shell, scroll and focus without reopen
         controller.refresh("profile");
         return { ...retained, closed: !host.firstElementChild };
     });
-    expect(result).toEqual({ dialog: true, backdrop: true, scroll: true, focus: true, closed: true });
+    expect(result).toEqual({
+        dialog: true,
+        backdrop: true,
+        scroll: true,
+        focus: true,
+        closed: true
+    });
 });
 
 test("completed Battle Royale telemetry opens as interactive tactical playback", async ({ page }) => {
@@ -2756,8 +2885,14 @@ test("completed Battle Royale telemetry opens as interactive tactical playback",
     const fullscreenLayout = matchView.locator(".match-playback-layout");
     const fullscreenButton = matchView.locator("[data-match-fullscreen]");
     await fullscreenLayout.evaluate((element) => {
-        Object.defineProperty(element, "requestFullscreen", { configurable: true, value: undefined });
-        Object.defineProperty(element, "webkitRequestFullscreen", { configurable: true, value: undefined });
+        Object.defineProperty(element, "requestFullscreen", {
+            configurable: true,
+            value: undefined
+        });
+        Object.defineProperty(element, "webkitRequestFullscreen", {
+            configurable: true,
+            value: undefined
+        });
     });
     await fullscreenButton.click();
     await expect(fullscreenLayout).toHaveClass(/is-replay-fullscreen/);
@@ -2965,7 +3100,10 @@ test("configured Zombie Survival horde sizes reuse lightweight markers responsiv
     for (const count of [25, 50, 100]) {
         const fixture = zombieTelemetryWithCount(count);
         await page.route(`**/data/match-telemetry/fixture-zombie-${count}.json`, (route) =>
-            route.fulfill({ contentType: "application/json", body: JSON.stringify(fixture) })
+            route.fulfill({
+                contentType: "application/json",
+                body: JSON.stringify(fixture)
+            })
         );
         await openApp(page, `#view=match&match=fixture-zombie-${count}`);
 
@@ -3093,7 +3231,11 @@ test("TEST match administration previews without mutation and requires confirmat
         })
     );
     await page.route("**/network/**", (route) =>
-        route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"Unlinked fixture account"}' })
+        route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: '{"error":"Unlinked fixture account"}'
+        })
     );
     const id = "123e4567-e89b-42d3-a456-426614174099",
         player = "123e4567-e89b-42d3-a456-426614174000";
@@ -3124,7 +3266,10 @@ test("TEST match administration previews without mutation and requires confirmat
                 impact: {
                     matchId: id,
                     targetState: target,
-                    history: { beforeVisible: state === "COMPLETED", afterVisible: target === "COMPLETED" },
+                    history: {
+                        beforeVisible: state === "COMPLETED",
+                        afterVisible: target === "COMPLETED"
+                    },
                     replay: {
                         artifactCount: 0,
                         beforeVisible: state === "COMPLETED",
@@ -3170,7 +3315,14 @@ test("TEST match administration previews without mutation and requires confirmat
         } else if (url.pathname.endsWith("/" + id)) {
             body = {
                 match: row(),
-                players: [{ name: "AdminMC", playerUuid: player, raw: { kills: 3 }, contribution: { kills: 3 } }],
+                players: [
+                    {
+                        name: "AdminMC",
+                        playerUuid: player,
+                        raw: { kills: 3 },
+                        contribution: { kills: 3 }
+                    }
+                ],
                 replays: [],
                 recordings: [],
                 incidents: [],
@@ -3178,7 +3330,10 @@ test("TEST match administration previews without mutation and requires confirmat
                 operations: []
             };
         } else body = { matches: [row()] };
-        return route.fulfill({ contentType: "application/json", body: JSON.stringify(body) });
+        return route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify(body)
+        });
     });
     await page.goto("/admin/matches/");
     await page.locator("[data-match-open]").click();
