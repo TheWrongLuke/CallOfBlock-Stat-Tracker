@@ -1,10 +1,15 @@
 import { escapeHtml, formatDate, initializeSiteShell } from "../core/site-shell.js";
 import { discordAvatarCandidates, uniqueImageUrls } from "../utils/avatar-url.js";
+import {
+    PLAYTEST_MODE_OPTIONS as MODE_OPTIONS,
+    labelToDbModePreference as dbModeValue,
+    dbModePreferenceToLabel as dbModeLabel
+} from "../core/playtest-modes.js";
 
 const CALL_OF_BLOCK_ICON_URL = "/assets/branding/icon-256.webp";
 
 const PLAYTEST_COLUMNS =
-    "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
+    "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, is_community_calendar, created_at, updated_at";
 const SLOT_COLUMNS =
     "id, playtest_id, start_datetime, end_datetime, label, is_main, source, confirmed_at, confirmed_by, created_at";
 const AVAILABILITY_COLUMNS =
@@ -17,7 +22,6 @@ const STATUS_OPTIONS = [
     { id: "preferred", label: "Preferred", score: 5 }
 ];
 const STATUS_ORDER = ["available", "preferred", "maybe", "unavailable"];
-const MODE_OPTIONS = ["Battle Royale", "Deathmatch", "Either"];
 const ACTIVE_STATUSES = new Set(["available", "preferred", "maybe"]);
 const STORAGE_KEY = "cob_playtest_page_state_v1";
 
@@ -180,14 +184,15 @@ async function loadPlaytests(state, force = false) {
             }
         }
         const names = await loadVoterNames(state, availability);
-        state.playtests = mapPlaytests(playtestsResult.data || [], slots, availability, subscriptions, names);
+        state.playtests = mapPlaytests(playtestsResult.data || [], slots, availability, subscriptions, names).sort(
+            (a, b) => Number(b.communityCalendar) - Number(a.communityCalendar)
+        );
         if (!state.playtests.some((playtest) => playtest.id === state.activeId)) {
             state.activeId = state.playtests[0]?.id || "";
         }
         state.message = force ? "Calendar refreshed." : "";
     } catch (error) {
         console.error("Could not load playtests", error);
-        state.playtests = [];
         state.error = playtestError(error);
     } finally {
         state.loading = false;
@@ -215,6 +220,7 @@ function mapPlaytests(playtestRows, slotRows, availabilityRows, subscriptionRows
         description: String(row.description || ""),
         status: String(row.status || "voting"),
         frozen: Boolean(row.votes_frozen),
+        communityCalendar: Boolean(row.is_community_calendar),
         mainSlotId: row.main_slot_id || "",
         slots: (slots.get(row.id) || []).map(mapSlot).sort((a, b) => dateValue(a.startAt) - dateValue(b.startAt)),
         votes: (availability.get(row.id) || []).map((vote) => mapVote(vote, names)),
@@ -264,12 +270,14 @@ function renderList(state) {
         host.innerHTML = `<section class="playtest-side-block"><p class="mode-empty">${escapeHtml(state.loading ? "Loading public playtests..." : state.error || "No active playtests.")}</p></section>`;
         return;
     }
-    host.innerHTML = `<section class="playtest-side-block"><p class="panel-kicker">Featured Plans</p><div class="playtest-list">${state.playtests
+    host.innerHTML = `<section class="playtest-side-block"><p class="panel-kicker">Calendar & Events</p><div class="playtest-list">${state.playtests
         .map((playtest) => {
             const best = rankSummaries(summarize(playtest))[0];
-            return `<button class="playtest-list-item ${playtest.id === state.activeId ? "active" : ""}" type="button" data-playtest-select="${escapeHtml(playtest.id)}" aria-pressed="${playtest.id === state.activeId}"><span>${escapeHtml(statusLabel(playtest.status))}</span><strong>${escapeHtml(playtest.title)}</strong><small>${best ? `${escapeHtml(formatSlotShort(best.slot))} - Score ${best.score}` : "No dates"}</small></button>`;
+            return `<button class="playtest-list-item ${playtest.id === state.activeId ? "active" : ""}" type="button" data-playtest-select="${escapeHtml(playtest.id)}" aria-pressed="${playtest.id === state.activeId}"><span>${playtest.communityCalendar ? (playtest.frozen ? "Paused" : "Open") : escapeHtml(statusLabel(playtest.status))}</span><strong>${escapeHtml(playtest.title)}</strong><small>${best ? `${escapeHtml(formatSlotShort(best.slot))} - Score ${best.score}` : playtest.communityCalendar ? "Community availability" : "No dates"}</small></button>`;
         })
-        .join("")}</div></section>`;
+        .join(
+            ""
+        )}</div><button type="button" data-playtest-reload ${state.loading ? "disabled" : ""}>Refresh calendar</button></section>`;
 }
 
 function renderIdentity(state) {
@@ -319,7 +327,17 @@ function renderBoard(state) {
     const confirmed = summaries
         .filter((summary) => summary.slot.confirmedAt && dateValue(summary.slot.endAt) >= Date.now())
         .sort((a, b) => dateValue(a.slot.startAt) - dateValue(b.slot.startAt))[0];
-    host.innerHTML = `<section class="playtest-detail-head"><div><p class="panel-kicker">${escapeHtml(statusLabel(playtest.status))}</p><h3>${escapeHtml(playtest.title)}</h3><p>${escapeHtml(playtest.description || "Community playtest")}</p></div><div class="playtest-meta-strip"><span>${uniqueVoters(playtest)} voters</span><span>${featured.length} featured dates</span><span>${summaries.length - featured.length} community dates</span></div></section>${state.error ? `<div class="playtest-lock-note">${escapeHtml(state.error)}</div>` : ""}<section class="playtest-summary-grid">${confirmed ? renderNextEvent(confirmed) : ""}${best ? renderBestDate(best, ranked[1]) : ""}${best ? renderInterest(best) : ""}</section>${playtestLock(playtest) ? `<div class="playtest-lock-note">${escapeHtml(playtestLock(playtest))}</div>` : ""}<section class="featured-slot-section"><div class="featured-slot-head"><p class="panel-kicker">Featured Dates</p><span>Planned dates stay together here. Community dates remain in the calendar.</span></div><div class="playtest-slot-grid">${featured.map((summary) => renderSlot(state, playtest, summary)).join("")}</div></section><section class="calendar-vote-grid">${renderCalendar(state, playtest, summaries)}${renderSelectedDate(state, playtest, selected)}</section><section class="playtest-analytics-grid">${renderHeatmap(state, ranked)}${renderResults(best, ranked[1])}</section>`;
+    const calendarStatus = playtest.communityCalendar
+        ? playtest.frozen
+            ? "Paused"
+            : "Open"
+        : statusLabel(playtest.status);
+    host.innerHTML = `<section class="playtest-detail-head"><div><p class="panel-kicker">${escapeHtml(calendarStatus)}</p><h3>${escapeHtml(playtest.title)}</h3><p>${escapeHtml(playtest.description || "Community playtest")}</p></div><div class="playtest-meta-strip"><span>${uniqueVoters(playtest)} voters</span><span>${featured.length} featured dates</span><span>${summaries.length - featured.length} community dates</span></div></section>
+        ${state.error ? `<div class="playtest-lock-note">${escapeHtml(state.error)}</div>` : ""}
+        <section class="playtest-summary-grid">${confirmed ? renderNextEvent(confirmed) : ""}${best ? renderBestDate(best, ranked[1]) : ""}${best ? renderInterest(best) : ""}</section>
+        ${playtestLock(playtest) ? `<div class="playtest-lock-note">${escapeHtml(playtestLock(playtest))}</div>` : ""}
+        ${playtest.communityCalendar ? "" : `<section class="featured-slot-section"><div class="featured-slot-head"><p class="panel-kicker">Featured Dates</p><span>Planned dates stay together here. Community dates remain in the calendar.</span></div><div class="playtest-slot-grid">${featured.map((summary) => renderSlot(state, playtest, summary)).join("")}</div></section>`}
+        <section class="calendar-vote-grid">${renderCalendar(state, playtest, summaries)}${renderSelectedDate(state, playtest, selected)}</section><section class="playtest-analytics-grid">${renderHeatmap(state, ranked)}${renderResults(best, ranked[1])}</section>`;
 }
 
 function renderNextEvent(summary) {
@@ -434,7 +452,7 @@ function renderBestTime(summary) {
 }
 
 function renderEmptyCalendar() {
-    return `<section class="calendar-vote-grid public-tools-empty"><article class="calendar-card"><div class="calendar-head"><div><p class="panel-kicker">Public Calendar</p><h4>${escapeHtml(monthLabel(new Date()))}</h4></div></div><div class="calendar-grid"><span class="calendar-empty-message">Community date voting opens after an administrator creates a public playtest.</span></div></article><article class="main-date-card selected-date-card"><span class="main-date-label">Community tools</span><strong>No public event yet</strong></article></section>`;
+    return `<section class="calendar-vote-grid public-tools-empty"><article class="calendar-card"><div class="calendar-head"><div><p class="panel-kicker">Public Calendar</p><h4>${escapeHtml(monthLabel(new Date()))}</h4></div></div><div class="calendar-grid"><span class="calendar-empty-message">Community calendar unavailable. Reload to try again.</span></div></article><article class="main-date-card selected-date-card"><span class="main-date-label">Community tools</span><button type="button" data-playtest-reload>Reload calendar</button></article></section>`;
 }
 
 function confirmationBadge(slot) {
@@ -444,7 +462,7 @@ function confirmationBadge(slot) {
 async function saveVote(state, button) {
     const playtest = activePlaytest(state);
     const userId = state.shell.session?.user?.id;
-    if (!playtest || !userId || state.profile?.banned_from_voting) return;
+    if (!playtest || !userId || state.profile?.banned_from_voting || playtestLock(playtest)) return;
     let slot = button.dataset.slotId ? playtest.slots.find((entry) => entry.id === button.dataset.slotId) : null;
     const dateKey = button.dataset.calendarDate || (slot ? localDateKey(slot.startAt) : "");
     const range = readTimeRange(button.closest("article") || document);
@@ -523,7 +541,7 @@ async function toggleNotification(state, input) {
 async function syncModePreference(state) {
     const playtest = activePlaytest(state);
     const userId = state.shell.session?.user?.id;
-    if (!playtest || !userId) return;
+    if (!playtest || !userId || playtestLock(playtest)) return;
     const result = await state.shell.client
         .from("availability")
         .update({ mode_preference: dbModeValue(state.modePreference) })
@@ -749,13 +767,15 @@ function uniqueVoters(playtest) {
 }
 
 function playtestLock(playtest) {
+    if (playtest.communityCalendar && playtest.frozen)
+        return "Community calendar is paused. Existing availability is saved.";
     if (["closed", "finished"].includes(playtest.status)) return "Voting is closed for this event.";
     if (playtest.frozen) return "Voting is temporarily frozen by an administrator.";
     return "";
 }
 
 function calendarBase(playtest) {
-    const future = playtest.slots.find((slot) => dateValue(slot.endAt) >= Date.now());
+    const future = !playtest.communityCalendar && playtest.slots.find((slot) => dateValue(slot.endAt) >= Date.now());
     const date = future ? new Date(future.startAt) : new Date();
     return new Date(date.getFullYear(), date.getMonth(), 1, 12);
 }
@@ -846,14 +866,6 @@ function statusLabel(value) {
     if (value === "closed") return "Closed";
     if (value === "finished") return "Finished";
     return STATUS_OPTIONS.find((option) => option.id === value)?.label || String(value || "");
-}
-
-function dbModeValue(value) {
-    return value === "Battle Royale" ? "battle_royale" : value === "Deathmatch" ? "deathmatch" : "either";
-}
-
-function dbModeLabel(value) {
-    return value === "battle_royale" ? "Battle Royale" : value === "deathmatch" ? "Deathmatch" : "Either";
 }
 
 function groupBy(rows, key) {

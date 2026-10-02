@@ -425,6 +425,33 @@ const playtestAdminSupabaseStub = adminSupabaseStub
 `
     );
 
+const communityCalendarSupabaseStub = playtestAdminSupabaseStub
+    .replace(
+        /window\.__playtestEvents = \[\{id: eventId[^\n]+/,
+        `window.__playtestEvents = [{id: eventId, title: "Community calendar", description: "Plan matches with the community", status: "voting", is_community_calendar: true, votes_frozen: false, archived_at: null}];`
+    )
+    .replace(/window\.__playtestSlots = \[\{id: slotId[^\n]+/, "window.__playtestSlots = [];")
+    .replace(/window\.__playtestVotes = \[[\s\S]+?\n {4}\];/, "window.__playtestVotes = [];")
+    .replace(
+        'if (table === "playtest_slots") return',
+        `if (table === "playtest_slots" && calls.some(([method]) => method === "insert")) {
+        if (window.__playtestEvents[0].votes_frozen) return {data: null, error: {message: "Community calendar is paused"}};
+        const value = calls.find(([method]) => method === "insert")[1][0];
+        const slot = {...value, id: "community-slot-" + window.__playtestSlots.length};
+        window.__playtestSlots.push(slot);
+        return {data: {...slot}, error: null};
+    }
+    if (table === "availability" && calls.some(([method]) => method === "upsert")) {
+        if (window.__playtestEvents[0].votes_frozen) return {data: null, error: {message: "Community calendar is paused"}};
+        const value = calls.find(([method]) => method === "upsert")[1][0];
+        const index = window.__playtestVotes.findIndex(row => row.slot_id === value.slot_id && row.user_id === value.user_id);
+        if (index < 0) window.__playtestVotes.push({...value, id: "community-vote"});
+        else Object.assign(window.__playtestVotes[index], value);
+        return {data: null, error: null};
+    }
+    if (table === "playtest_slots") return`
+    );
+
 const accountStatsSupabaseStub = adminSupabaseStub.replace(
     'minecraft_player_name: "AdminMC",',
     'minecraft_player_name: "RTXLuke",\n        minecraft_player_id: "sample-rtxluke",'
@@ -2014,6 +2041,82 @@ test("duplicate playtests remain drafts, status filters work, and reload retains
     await expect(page.locator(".admin-playtest-roster")).toContainText("Community Player");
     await expect(page.locator(".admin-playtest-roster")).toContainText("Busy Friend");
     expect(await page.evaluate(() => window.__playtestCreateCalls || [])).toHaveLength(0);
+});
+
+test("community availability works without an admin event and stays saved when paused", async ({ page }, testInfo) => {
+    await installPageStubs(page, communityCalendarSupabaseStub);
+    await page.goto("/playtests/");
+    await expect(page.locator("#playtest-board h3")).toHaveText("Community calendar");
+    for (const mode of ["Battle Royale", "Zombie Survival", "Team Deathmatch", "Free For All", "Duels"]) {
+        await expect(page.getByRole("radio", { name: mode, exact: true })).toBeVisible();
+    }
+    await expect(page.getByRole("radio", { name: "Deathmatch", exact: true })).toHaveCount(0);
+    await page.getByRole("radio", { name: "Free For All", exact: true }).check();
+    await expect(page.locator(".calendar-cell[data-calendar-date]")).not.toHaveCount(0);
+    await page.locator(".calendar-cell[data-calendar-date]").last().click();
+    await page.locator('.selected-date-card [data-playtest-calendar-vote="available"]').click();
+    await expect(page.locator('.selected-date-card [data-playtest-vote="available"]')).toHaveAttribute(
+        "aria-pressed",
+        "true"
+    );
+    expect(await page.evaluate(() => window.__playtestEvents)).toHaveLength(1);
+    expect(await page.evaluate(() => window.__playtestVotes)).toHaveLength(1);
+    expect(await page.evaluate(() => window.__playtestVotes[0].mode_preference)).toBe("free_for_all");
+    await page.locator("[data-playtest-reload]").click();
+    await expect(page.locator('.selected-date-card [data-playtest-vote="available"]')).toHaveAttribute(
+        "aria-pressed",
+        "true"
+    );
+    await page.evaluate(() => {
+        window.__playtestEvents[0].votes_frozen = true;
+    });
+    await page.locator("[data-playtest-reload]").click();
+    await expect(page.locator(".playtest-lock-note")).toContainText("Community calendar is paused");
+    await expect(page.locator('.selected-date-card [data-playtest-vote="available"]')).toBeDisabled();
+    expect(await page.evaluate(() => window.__playtestVotes)).toHaveLength(1);
+    await page.evaluate(() => {
+        window.__playtestEvents[0].votes_frozen = false;
+    });
+    await page.locator("[data-playtest-reload]").click();
+    await expect(page.locator('.selected-date-card [data-playtest-vote="available"]')).toBeEnabled();
+    await page.screenshot({ path: testInfo.outputPath("community-calendar.png"), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});
+
+test("Admin can pause and resume community planning independently of a featured event", async ({ page }, testInfo) => {
+    await installPageStubs(page, communityCalendarSupabaseStub);
+    await page.goto("/admin/community/");
+    await expect(page.locator('[data-playtest-admin="community-pause"]')).toBeVisible();
+    await expect(page.locator('[data-playtest-admin="archive"]')).toHaveCount(0);
+    await page.evaluate(() => {
+        window.__playtestVotes.push({
+            id: "vote",
+            playtest_id: window.__playtestEvents[0].id,
+            user_id: "tester",
+            status: "maybe"
+        });
+        window.__playtestEvents.push({
+            id: "event",
+            title: "Admin event",
+            status: "voting",
+            votes_frozen: false,
+            archived_at: null
+        });
+    });
+    await page.locator('[data-playtest-admin="reload"]').click();
+    await page.locator('[data-playtest-select="event"]').click();
+    await page.locator('[data-playtest-admin="community-pause"]').click();
+    await expect(page.locator('[data-playtest-admin="community-resume"]')).toBeVisible();
+    expect(await page.evaluate(() => window.__playtestEvents[0].votes_frozen)).toBe(true);
+    expect(await page.evaluate(() => window.__playtestEvents[1].votes_frozen)).toBe(false);
+    expect(await page.evaluate(() => window.__playtestVotes)).toHaveLength(1);
+    await page.locator('[data-playtest-admin="community-resume"]').click();
+    await expect(page.locator('[data-playtest-admin="community-pause"]')).toBeVisible();
+    await page.locator('[data-playtest-admin="community-open"]').click();
+    await expect(page.locator('[data-playtest-select][aria-pressed="true"]')).toContainText("Community calendar");
+    await expect(page.locator('[data-playtest-admin="finish"]')).toHaveCount(0);
+    await page.screenshot({ path: testInfo.outputPath("community-calendar-admin.png"), fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
 
 test("an administrator can edit badge levels and animated icons in one persistent modal", async ({ page }) => {

@@ -12,6 +12,7 @@ import {
 } from "./api/profile.js";
 import { createProgressionAdminApi } from "./api/progression.js?v=weekly-missions-3";
 import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "./api/weekly-missions.js";
+import { PLAYTEST_MODE_OPTIONS, labelToDbModePreference, dbModePreferenceToLabel } from "./core/playtest-modes.js";
 import { applyNetworkAccountProjection } from "./core/network-profile.js";
 import { networkTrackerConfigured, networkTrackerUrl, fetchNetworkTracker } from "./api/network-tracker.js";
 import { ADMIN_ROUTES, ADMIN_VIEWS, adminRedirect } from "./core/admin-routes.js";
@@ -280,7 +281,7 @@ const PUBLIC_PROFILE_SELECT_COLUMNS = [
 const PUBLIC_PROFILE_PROGRESSION_COLUMNS = `${PUBLIC_PROFILE_SELECT_COLUMNS}, weekly_missions_completed, hard_missions_completed`;
 const PUBLIC_PROFILE_SELECT_COLUMNS_LEGACY = PUBLIC_PROFILE_COLUMNS_LEGACY.join(", ");
 const PLAYTEST_SELECT_COLUMNS =
-    "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, created_at, updated_at";
+    "id, title, description, main_slot_id, status, created_by, votes_frozen, archived_at, is_community_calendar, created_at, updated_at";
 const PLAYTEST_SLOT_SELECT_COLUMNS =
     "id, playtest_id, start_datetime, end_datetime, label, is_main, source, confirmed_at, confirmed_by, created_at";
 const AVAILABILITY_SELECT_COLUMNS =
@@ -538,7 +539,6 @@ const PLAYTEST_STATUS_OPTIONS = [
 ];
 
 const PLAYTEST_COUNT_ORDER = ["available", "preferred", "maybe", "unavailable"];
-const PLAYTEST_MODE_OPTIONS = ["Battle Royale", "Deathmatch", "Either"];
 const PLAYTEST_INTEREST_MIN_SCALE = 10;
 const COMMUNITY_SLOT_ACTIVE_STATUSES = new Set(["available", "preferred", "maybe"]);
 const CONFIRMATION_STATUS_HELP =
@@ -3793,6 +3793,7 @@ function mapRemotePlaytests(playtestRows, slotRows, availabilityRows, profileMap
                 createdAt: row.created_at || new Date().toISOString(),
                 mainSlotId: mainSlot?.id || "",
                 frozen: Boolean(row.votes_frozen),
+                communityCalendar: Boolean(row.is_community_calendar),
                 archived: Boolean(row.archived_at),
                 remote: true,
                 slots,
@@ -10463,19 +10464,23 @@ function renderPlaytestAdmin(playtest) {
     const busy = state.playtests.adminBusy;
     const draft = state.playtests.adminDraft;
     const editing = Boolean(draft?.editId);
+    const community = activePlaytests().find((entry) => entry.communityCalendar);
     container.innerHTML = `
         <section class="admin-playtest-controls">
                 ${state.playtests.adminMessage ? `<p role="status">${escapeHtml(state.playtests.adminMessage)}</p>` : ""}
                 ${state.playtests.adminError || state.playtests.remoteError ? `<p class="error" role="alert">${escapeHtml(state.playtests.adminError || state.playtests.remoteError)}</p>` : ""}
+                ${community ? `<div class="admin-action-grid"><strong>Community calendar: ${community.frozen ? "Paused" : "Open"}</strong><button type="button" data-playtest-admin="community-open">Open community calendar</button><button type="button" data-playtest-admin="${community.frozen ? "community-resume" : "community-pause"}">${community.frozen ? "Resume community calendar" : "Pause community calendar"}</button></div>` : ""}
                 <div class="admin-action-grid">
                     <button class="primary" type="button" data-playtest-admin="new">New playtest</button>
                     <button type="button" data-playtest-admin="reload">Reload calendar</button>
+                    ${playtest?.communityCalendar ? "" : `
                     <button type="button" data-playtest-admin="edit" ${noPlaytest ? "disabled" : ""}>Edit details</button>
                     <button type="button" data-playtest-admin="duplicate" ${noPlaytest ? "disabled" : ""}>Duplicate</button>
                     <button type="button" data-playtest-admin="${isClosed ? "reopen" : "close"}" ${noPlaytest || playtest.archived ? "disabled" : ""}>${isClosed ? "Reopen voting" : "Close voting"}</button>
                     <button type="button" data-playtest-admin="${isFrozen ? "unfreeze" : "freeze"}" ${noPlaytest || playtest.archived ? "disabled" : ""}>${isFrozen ? "Unfreeze votes" : "Freeze votes"}</button>
                     <button type="button" data-playtest-admin="finish" ${noPlaytest || playtest.archived || playtest.status === "finished" ? "disabled" : ""}>Mark finished</button>
                     <button type="button" data-playtest-admin="${playtest?.archived ? "restore" : "archive"}" ${noPlaytest ? "disabled" : ""}>${playtest?.archived ? "Restore playtest" : "Archive playtest"}</button>
+                    `}
                     <button type="button" data-route="admin-progression">Tester cosmetics</button>
                 </div>
                 ${noPlaytest ? `<p class="mode-empty">Create the first public playtest to enable date-specific admin actions.</p>` : ""}
@@ -11398,8 +11403,22 @@ async function handlePlaytestAdmin(action) {
         await loadRemotePlaytests({ silent: false });
         return;
     }
+    if (action.startsWith("community-")) {
+        const community = activePlaytests().find((entry) => entry.communityCalendar);
+        if (!community) return;
+        if (action === "community-open") {
+            state.playtests.activeId = community.id;
+            state.playtests.adminDraft = null;
+            savePlaytestState();
+            renderCommunityAdminPage();
+        } else if (action === "community-pause" || action === "community-resume") {
+            await handleRemotePlaytestAdmin(action === "community-pause" ? "freeze" : "unfreeze", community);
+        }
+        return;
+    }
     const playtest = activePlaytest();
     if (!playtest) return;
+    if (playtest.communityCalendar && action !== "export") return;
     if (action === "edit" || action === "duplicate") {
         const dates = playtest.slots.filter(isFeaturedSlot).map((slot) => catalogDateTimeInputValue(slot.startAt));
         state.playtests.adminDraft = { editId: action === "edit" ? playtest.id : "", title: `${playtest.title}${action === "duplicate" ? " Copy" : ""}`.slice(0, 120),
@@ -11470,7 +11489,9 @@ async function handleRemotePlaytestAdmin(action, playtest) {
                 .eq("id", playtest.id).select("id").single();
             if (error) throw error;
         }
-        state.playtests.adminMessage = "Playtest updated. Existing dates and votes are retained.";
+        state.playtests.adminMessage = playtest.communityCalendar
+            ? `Community calendar ${action === "freeze" ? "paused" : "resumed"}. Existing availability is retained.`
+            : "Playtest updated. Existing dates and votes are retained.";
         await loadRemotePlaytests({ silent: true, render: false });
         savePlaytestState();
     } catch (error) {
@@ -11765,6 +11786,7 @@ function canVoteOnPlaytest(playtest) {
 
 function playtestLockReason(playtest) {
     if (!playtest) return "";
+    if (playtest.communityCalendar && playtest.frozen) return "Community calendar is paused. Existing availability is saved.";
     if (playtest.frozen) return "Votes are frozen for this playtest.";
     if (playtest.status === "closed") return "Voting is closed.";
     if (playtest.status === "finished") return "This playtest is finished.";
@@ -11780,7 +11802,8 @@ function activePlaytests() {
     );
     const playtests = [...remotePlaytests, ...DEFAULT_PLAYTESTS, ...localPlaytests]
         .map(applyPlaytestOverride)
-        .filter((playtest) => !playtest.archived || (state.view === "communityAdmin" && isPlaytestAdmin() && state.playtests.adminShowArchived));
+        .filter((playtest) => !playtest.archived || (state.view === "communityAdmin" && isPlaytestAdmin() && state.playtests.adminShowArchived))
+        .sort((a, b) => Number(b.communityCalendar) - Number(a.communityCalendar));
 
     if (!playtests.some((playtest) => playtest.id === state.playtests.activeId)) {
         state.playtests.activeId = playtests[0]?.id || "";
@@ -11810,18 +11833,6 @@ function isRemotePlaytest(playtestOrId) {
     return Boolean(
         playtestOrId?.remote || (state.playtests.remotePlaytests || []).some((playtest) => playtest.id === id)
     );
-}
-
-function labelToDbModePreference(value) {
-    if (value === "Battle Royale") return "battle_royale";
-    if (value === "Deathmatch") return "deathmatch";
-    return "either";
-}
-
-function dbModePreferenceToLabel(value) {
-    if (value === "battle_royale") return "Battle Royale";
-    if (value === "deathmatch") return "Deathmatch";
-    return "Either";
 }
 
 function playtestAuthLabel() {
@@ -12365,6 +12376,10 @@ function recordAdminSystemEvent(playtestId, slotId, action) {
 }
 
 function baseCalendarMonthDate(playtest) {
+    if (playtest?.communityCalendar) {
+        const today = new Date();
+        return new Date(today.getFullYear(), today.getMonth(), 1, 12, 0, 0);
+    }
     const firstSlot = [...(playtest?.slots || [])].sort((a, b) => dateValue(a.startAt) - dateValue(b.startAt))[0];
     const base = new Date(firstSlot?.startAt || Date.now());
     return new Date(base.getFullYear(), base.getMonth(), 1, 12, 0, 0);
@@ -12727,6 +12742,7 @@ function statusLabel(status) {
 }
 
 function playtestStatusLabel(playtest) {
+    if (playtest?.communityCalendar) return playtest.frozen ? "Paused" : "Open";
     const status = String(playtest?.status || "upcoming");
     return status.charAt(0).toUpperCase() + status.slice(1);
 }
