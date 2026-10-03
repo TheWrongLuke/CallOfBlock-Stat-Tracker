@@ -2539,6 +2539,48 @@ test("rarity colors frame every personalization card", async ({ page }) => {
     expect(rarityBorders.common).not.toBe(rarityBorders.mythic);
 });
 
+test("approved badge artwork keeps its complete frame in the picker and equipped profile", async ({
+    page
+}, testInfo) => {
+    await openAdminApp(page, "#account");
+    await expect(page.locator("[data-account-form]")).toBeVisible();
+    await page.locator('[data-cosmetic-picker-open="badges"]').click();
+    const showUnowned = page.locator("[data-cosmetic-show-unowned]");
+    if (!(await showUnowned.isChecked())) await showUnowned.check();
+
+    for (const [id, award] of [
+        ["br_kills_counter", "br_kills_counter_common"],
+        ["point_blank", "point_blank"],
+        ["grounded", "grounded"],
+        ["anti_armor_ace", "anti_armor_ace"],
+        ["owner", "owner"]
+    ]) {
+        const icon = page.locator(`[data-badge-id="${id}"] .badge-icon`);
+        await icon.scrollIntoViewIfNeeded();
+        await expect(icon).toHaveClass(/badge-artwork/);
+        await expect(icon.locator("img")).toHaveAttribute("src", `./assets/badges/combat-v2/${award}.png`);
+        await expect.poll(() => icon.locator("img").evaluate((img) => img.complete && img.naturalWidth)).toBe(512);
+        const style = await icon.evaluate((element) => {
+            const css = getComputedStyle(element);
+            return {
+                clip: css.clipPath,
+                radius: css.borderRadius,
+                fit: getComputedStyle(element.querySelector("img")).objectFit
+            };
+        });
+        expect(style).toEqual({ clip: "none", radius: "0px", fit: "contain" });
+    }
+
+    await page.screenshot({ path: testInfo.outputPath("approved-combat-badge-picker.png") });
+    const adminBadge = page.locator('[data-cosmetic-option="admin"]');
+    await adminBadge.click();
+    await page.locator("[data-cosmetic-picker-close]").click();
+    const equipped = page.locator("[data-account-preview-badges] .badge-admin .badge-artwork");
+    await expect(equipped).toBeVisible();
+    await expect(equipped.locator("img")).toHaveAttribute("src", "./assets/badges/combat-v2/admin.png");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+});
+
 test("equipped badges remain selected after saving the profile", async ({ page }) => {
     await openAdminApp(page, "#account");
     await expect(page.locator("[data-account-form]")).toBeVisible();

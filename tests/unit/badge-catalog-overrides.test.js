@@ -107,7 +107,33 @@ describe("badge catalogue overrides", () => {
 
         expect(override.iconUrl).toBe("");
         expect(mergeBadgeCatalog(BADGE_CATALOG, [override]).find((badge) => badge.id === "owner").icon).toBe(
-            "./assets/badges/default.png"
+            "./assets/badges/combat-v2/owner.png"
         );
+    });
+
+    it("keeps custom base and tier artwork above bundled defaults", () => {
+        const badge = mergeBadgeCatalog(BADGE_CATALOG, [
+            {
+                badge_id: "br_wins_counter",
+                icon_url: "https://cdn.example.com/base.gif",
+                tiers: [{ index: 1, icon_url: "https://cdn.example.com/tier.gif" }]
+            }
+        ]).find((entry) => entry.id === "br_wins_counter");
+        expect(badge.tiers[0].icon).toBe("https://cdn.example.com/base.gif");
+        expect(badge.tiers[1].icon).toBe("https://cdn.example.com/tier.gif");
+        expect(badge.tiers[2].icon).toBe("https://cdn.example.com/base.gif");
+    });
+
+    it("replaces saved legacy placeholders without losing real custom artwork", () => {
+        const badge = mergeBadgeCatalog(BADGE_CATALOG, [
+            {
+                badge_id: "br_wins_counter",
+                icon_url: "./assets/badges/default.png",
+                tiers: [{ index: 0, icon_url: "/assets/badges/default.png" }]
+            }
+        ]).find((entry) => entry.id === "br_wins_counter");
+        expect(badge.icon).toBe("./assets/badges/combat-v2/br_wins_counter_common.png");
+        expect(badge.tiers[0].icon).toBe(badge.icon);
+        expect(badge.tiers[4].icon).toBe("./assets/badges/combat-v2/br_wins_counter_mythic.png");
     });
 });

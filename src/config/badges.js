@@ -1,5 +1,15 @@
 const DEFAULT_BADGE_ICON = "./assets/badges/default.png";
 
+export function badgeArtworkUrl(id) {
+    return /^[a-z0-9][a-z0-9_-]{0,95}$/.test(String(id || ""))
+        ? `./assets/badges/combat-v2/${id}.png`
+        : DEFAULT_BADGE_ICON;
+}
+
+export function isBundledBadgeArtwork(url) {
+    return /^\.\/assets\/badges\/combat-v2\/[a-z0-9_-]+\.png$/.test(String(url || ""));
+}
+
 export const ACE_STREAK_TIMING_SECONDS = Object.freeze([4, 4, 4, 3, 2.5, 2.5]);
 
 function tier(rarity, name, target, options = {}) {
@@ -34,10 +44,11 @@ function tieredBadge({
         description,
         label: tiers[0].name,
         rarity: tiers[0].rarity,
-        icon: DEFAULT_BADGE_ICON,
+        icon: badgeArtworkUrl(tiers[0].iconKey || `${id}_${tiers[0].rarity}`),
         tiers: tiers.map((entry) => ({
             ...entry,
             iconKey: entry.iconKey || `${id}_${entry.rarity}`,
+            icon: badgeArtworkUrl(entry.iconKey || `${id}_${entry.rarity}`),
             advancementId: entry.iconKey || `${id}_${entry.rarity}`,
             description: entry.description || `${entry.name}: ${description}`
         })),
@@ -58,7 +69,7 @@ function permanentBadge(id, label, rarity, description, personalBest = null, opt
         label,
         rarity,
         description,
-        icon: DEFAULT_BADGE_ICON,
+        icon: badgeArtworkUrl(id),
         personalBest,
         showInGame,
         announceInChat: options.announceInChat ?? showInGame,
@@ -74,7 +85,7 @@ function specialBadge(id, label, rarity, description, specialRule = "") {
         label,
         rarity,
         description,
-        icon: DEFAULT_BADGE_ICON,
+        icon: badgeArtworkUrl(id),
         specialRule,
         showInGame: false,
         announceInChat: false,

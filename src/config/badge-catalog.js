@@ -55,7 +55,7 @@ export function mergeBadgeCatalog(baseCatalog, overrideRows) {
 
         const tierOverrides = new Map(override.tiers.map((tier) => [tier.index, tier]));
         const tiers = Array.isArray(badge.tiers)
-            ? badge.tiers.map((tier, index) => mergeBadgeTier(tier, tierOverrides.get(index)))
+            ? badge.tiers.map((tier, index) => mergeBadgeTier(tier, tierOverrides.get(index), override.iconUrl))
             : badge.tiers;
         const iconUrl = override.iconUrl || badge.icon;
 
@@ -88,8 +88,8 @@ function normalizeTierOverride(tier, fallbackIndex) {
     };
 }
 
-function mergeBadgeTier(tier, override) {
-    if (!override) return tier;
+function mergeBadgeTier(tier, override, baseIconUrl = "") {
+    if (!override) return baseIconUrl ? { ...tier, icon: baseIconUrl, iconUrl: baseIconUrl } : tier;
 
     const target = override.target === null ? badgeTierEditableTarget(tier) : override.target;
     const requirement = tier.requirement ? { ...tier.requirement } : null;
@@ -100,7 +100,7 @@ function mergeBadgeTier(tier, override) {
         requirement.target = target;
     }
 
-    const iconUrl = override.iconUrl || tier.iconUrl || tier.icon || "";
+    const iconUrl = override.iconUrl || baseIconUrl || tier.iconUrl || tier.icon || "";
     return {
         ...tier,
         name: override.name || tier.name,
@@ -123,6 +123,8 @@ function cleanBadgeAssetUrl(value) {
         .trim()
         .slice(0, MAX_BADGE_ASSET_URL_LENGTH);
     if (!url) return "";
+    // Old saved placeholders must not hide the shipped badge artwork.
+    if (/^(?:\.\/|\/)?assets\/badges\/default\.png$/i.test(url)) return "";
     if (/^https:\/\//i.test(url) || /^\.\.?(?:\/|\\)/.test(url) || /^\/(?!\/)/.test(url)) return url;
     return "";
 }

@@ -41,7 +41,7 @@ import {
     mergeBadgeCatalog,
     normalizeBadgeCatalogOverride
 } from "./config/badge-catalog.js?v=badge-editor-2";
-import { BADGE_CATALOG, badgeTierLevel } from "./config/badges.js";
+import { BADGE_CATALOG, badgeTierLevel, isBundledBadgeArtwork } from "./config/badges.js";
 import { badgeTierState as sharedBadgeTierState, badgeMetricValue } from "./core/badge-progress.js";
 import {
     TICKET_SUBMIT_COOLDOWN_MS,
@@ -14083,9 +14083,10 @@ function renderBadgeIcon(badge) {
     const label = badge?.label || "Badge";
     const value = badge?.value === undefined || badge?.value === null ? "" : compactBadgeNumber(badge.value);
     const rarity = cleanRarity(badge?.rarity);
+    const iconUrl = badgeIconUrl(badge);
     return `
-        <span class="badge-icon rarity-${rarity}" aria-hidden="true">
-            <img src="${escapeHtml(badgeIconUrl(badge))}" alt="" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
+        <span class="badge-icon rarity-${rarity}${isBundledBadgeArtwork(iconUrl) ? " badge-artwork" : ""}" aria-hidden="true">
+            <img src="${escapeHtml(iconUrl)}" alt="" loading="lazy" onerror="this.hidden=true;this.nextElementSibling.hidden=false;">
             <span class="badge-icon-fallback" hidden>${escapeHtml(badgeInitials(label))}</span>
             ${value ? `<span class="badge-icon-value">${escapeHtml(value)}</span>` : ""}
         </span>

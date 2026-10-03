@@ -9310,6 +9310,20 @@ img.identity-avatar {
     object-fit: cover;
 }
 
+/* The approved frames carry their own silhouette, including crown and wing tips. */
+.badge-icon.badge-artwork {
+    width: 36px;
+    height: 36px;
+    border-radius: 0;
+    clip-path: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.badge-icon.badge-artwork img {
+    object-fit: contain;
+}
+
 .badge-icon-fallback {
     display: grid;
     place-items: center;
@@ -11509,6 +11523,10 @@ body.cosmetic-picker-open {
     width: 34px;
     height: 34px;
     border-radius: 10px;
+}
+
+.badge-picker-main .badge-icon.badge-artwork {
+    border-radius: 0;
 }
 
 .badge-picker-main strong {
