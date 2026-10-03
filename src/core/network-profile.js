@@ -1,6 +1,8 @@
 // TEST projection already includes protected legacy and independent ownership sources.
 export function applyNetworkAccountProjection(profile, row) {
     if (!profile || row?.environment !== "TEST" || row.user_id !== profile.id) return profile;
+    // A pre-link mission plan has no authority over XP, equipment or ownership.
+    if (row.awaiting_link) return profile;
     const fields = {
         badge: "unlocked_badges",
         title: "unlocked_titles",

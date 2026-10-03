@@ -2680,6 +2680,7 @@ test("TEST customization persists across pages without losing identity or unsave
         weekly_missions_completed: 0,
         hard_missions_completed: 0,
         player_id: "p_123456abcdef",
+        player_uuid: "4d8a51b6-1cfd-4cbc-8527-97eda0c4202d",
         cycle_key: cycleKey,
         cycle_ends_at: new Date(Date.now() + 7 * 86400000).toISOString(),
         missions: [],
@@ -2689,8 +2690,11 @@ test("TEST customization persists across pages without losing identity or unsave
             { type: "icon", id: "minecraft" },
             { type: "icon", id: "discord" },
             { type: "background", id: "default" },
+            { type: "background", id: "night" },
             { type: "border", id: "none" },
+            { type: "border", id: "green" },
             { type: "title", id: "none" },
+            { type: "title", id: "owner" },
             { type: "badge", id: "owner" }
         ],
         customization
@@ -2749,11 +2753,35 @@ test("TEST customization persists across pages without losing identity or unsave
     const form = page.locator("[data-account-form]");
     await expect(form).toBeVisible();
     await form.locator("[name='displayName']").fill("Saved Operator");
+    for (const [type, id] of [
+        ["icon", "discord"],
+        ["background", "night"],
+        ["border", "green"],
+        ["title", "owner"]
+    ]) {
+        await page.locator(`[data-cosmetic-picker-open="${type}"]`).click();
+        await page.locator(`[data-cosmetic-option="${id}"]`).click();
+        await page.locator("[data-cosmetic-picker-close]").click();
+    }
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await expect(form.locator("[name='displayName']")).toHaveValue("Saved Operator");
+    for (const [name, value] of [
+        ["avatarSource", "discord"],
+        ["profileBackground", "night"],
+        ["pfpBorder", "green"],
+        ["profileTitle", "owner"]
+    ])
+        await expect(form.locator(`[name='${name}']`)).toHaveValue(value);
     await form.locator("button[type='submit']").click();
     await expect(page.getByText("Save temporarily unavailable", { exact: true })).toBeVisible();
     await expect(form.locator("[name='displayName']")).toHaveValue("Saved Operator");
+    for (const [name, value] of [
+        ["avatarSource", "discord"],
+        ["profileBackground", "night"],
+        ["pfpBorder", "green"],
+        ["profileTitle", "owner"]
+    ])
+        await expect(form.locator(`[name='${name}']`)).toHaveValue(value);
     rejectSave = false;
     await form.locator("button[type='submit']").click();
     await expect(page.getByText("Profile saved.", { exact: true })).toBeVisible();
@@ -2771,6 +2799,108 @@ test("TEST customization persists across pages without losing identity or unsave
     await expect(form.locator("[name='displayName']")).toHaveValue("Saved Operator");
     await page.goto("/stats/");
     await expect(page.locator("#account-view")).toHaveCount(0);
+});
+
+test("linked Minecraft UUID drives skins while unlinked missions remain visible without fake progress", async ({
+    page
+}) => {
+    const minecraftUuid = "4d8a51b6-1cfd-4cbc-8527-97eda0c4202d";
+    const stub = adminSupabaseStub
+        .replace("session: {", 'session: { access_token: "fixture-token",')
+        .replace('display_name: "Test Admin"', 'display_name: "kiraval"')
+        .replace('minecraft_player_name: "AdminMC"', 'minecraft_player_name: ""');
+    await installPageStubs(page, stub);
+    await page.route("**/api-config.js*", (route) =>
+        route.fulfill({
+            contentType: "text/javascript",
+            body:
+                configStub +
+                '\nwindow.COB_STATS_ENVIRONMENT="TEST";window.COB_NETWORK_STATS_API_URL=location.origin+"/functions/v1/network-stats";'
+        })
+    );
+    await page.route("**/network-stats/network/**", (route) =>
+        route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({ ...statsExportFixture, environment: "TEST" })
+        })
+    );
+    let linked = false;
+    const cycle = new Date();
+    cycle.setHours(0, 0, 0, 0);
+    cycle.setDate(cycle.getDate() - ((cycle.getDay() + 6) % 7));
+    const cycleKey = [
+        cycle.getFullYear(),
+        String(cycle.getMonth() + 1).padStart(2, "0"),
+        String(cycle.getDate()).padStart(2, "0")
+    ].join("-");
+    await page.route("**/network-stats/account/**", (route) => {
+        const row = {
+            environment: "TEST",
+            user_id: "123e4567-e89b-42d3-a456-426614174000",
+            awaiting_link: !linked,
+            player_uuid: linked ? minecraftUuid : null,
+            player_id: linked ? "p_123456abcdef" : null,
+            cycle_key: cycleKey,
+            cycle_ends_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+            missions: Array.from({ length: 7 }, (_, index) => ({
+                id: `mission-${index}`,
+                label: `Mission ${index + 1}`,
+                description: "Get kills",
+                difficulty: index < 4 ? "easy" : "hard",
+                metric: "kills",
+                mode: "overall",
+                target: 10,
+                xp: 500
+            })),
+            claimed_ids: [],
+            swapped_ids: [],
+            stats_profile: linked ? {} : null,
+            ...(linked ? { xp: 12500, entitlements: [{ type: "icon", id: "minecraft" }] } : {})
+        };
+        return route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify(
+                new URL(route.request().url()).pathname.endsWith("/account/link") ? { ...row, linked } : row
+            )
+        });
+    });
+    for (const path of ["/account/", "/", "/playtests/", "/stats/"]) {
+        await page.goto(path);
+        await page
+            .locator(
+                ["/account/", "/stats/"].includes(path) ? "[data-account-panel-open]" : "[data-shell-account-open]"
+            )
+            .click();
+        const drawer = page.locator(".profile-drawer");
+        await expect(drawer.locator(".weekly-mission-row")).toHaveCount(7);
+        await expect(drawer).toContainText("Connect Minecraft to sync recorded progress and claim rewards.");
+        await expect(drawer.locator(".mission-progress")).toHaveCount(0);
+        await expect(drawer.locator(".mission-claim-button")).toHaveCount(0);
+        await expect(drawer).toContainText("LVL 2");
+        if (path === "/account/") {
+            await page.mouse.move(0, 0);
+            await page.waitForTimeout(350);
+            await page.screenshot({ path: test.info().outputPath("prelink-missions.png"), fullPage: false });
+        }
+    }
+    linked = true;
+    for (const path of ["/account/", "/", "/playtests/", "/stats/"]) {
+        await page.goto(path);
+        await page
+            .locator(
+                ["/account/", "/stats/"].includes(path) ? "[data-account-panel-open]" : "[data-shell-account-open]"
+            )
+            .click();
+        const skin = page.locator(`.profile-drawer img[src*='${minecraftUuid.replaceAll("-", "")}']`).first();
+        await expect(skin).toBeVisible();
+        await expect(skin).toHaveAttribute("src", /api\.mcheads\.org\/head\/4d8a51b61cfd4cbc852797eda0c4202d/);
+        await expect(page.locator("img[src*='kiraval']")).toHaveCount(0);
+        if (path === "/account/") {
+            await page.mouse.move(0, 0);
+            await page.waitForTimeout(350);
+            await page.screenshot({ path: test.info().outputPath("uuid-skin.png"), fullPage: false });
+        }
+    }
 });
 
 test("drawer refresh retains its animated shell, scroll and focus without reopening a closed panel", async ({

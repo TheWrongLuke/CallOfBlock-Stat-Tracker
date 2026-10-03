@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { captureFormDraft, restoreFormDraft } from "../../src/core/form-draft.js";
+import { captureFormDraft, captureAccountDraft, restoreFormDraft } from "../../src/core/form-draft.js";
 
 it("restores every badge checkbox independently after a rejected profile save", () => {
     const form = {
@@ -21,4 +21,18 @@ it("restores every badge checkbox independently after a rejected profile save", 
     expect(refreshed.elements.map((input) => input.value)).toEqual(["Draft name", "first", "second"]);
     expect(refreshed.elements.slice(1).map((input) => input.checked)).toEqual([true, false]);
     restoreFormDraft(null, draft);
+});
+
+it("preserves hidden customization selections without copying unrelated hidden identifiers", () => {
+    const names = ["avatarSource", "profileBackground", "pfpBorder", "profileTitle", "csrf"];
+    const form = { elements: names.map((name) => ({ name, type: "hidden", value: `draft-${name}` })) };
+    expect(captureFormDraft(form)).toEqual([]);
+    const draft = captureAccountDraft(form);
+    expect(draft.map((input) => input.name)).toEqual(names.slice(0, 4));
+    const refreshed = { elements: names.map((name) => ({ name, type: "hidden", value: "saved" })) };
+    restoreFormDraft(refreshed, draft);
+    expect(refreshed.elements.map((input) => input.value)).toEqual([
+        ...names.slice(0, 4).map((name) => `draft-${name}`),
+        "saved"
+    ]);
 });

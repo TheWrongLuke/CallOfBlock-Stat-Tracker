@@ -63,19 +63,18 @@ async function loadWeeklyMissions(shell, state, force = false) {
     state.message = "";
     shell.refreshAccountPanel();
     try {
-        const playerId = String(shell.profile.minecraft_player_id || "").trim();
         const missionsResult = await ensureWeeklyMissions(shell.client);
         if (generation !== state.generation || state.identity !== accountIdentity(shell)) return;
         if (missionsResult.error) throw missionsResult.error;
         applyMissionAccountProfile(shell, state, missionsResult.data);
         state.row = normalizeMissionRow(missionsResult.data);
         state.statsProfile = missionsResult.data?.stats_profile || null;
-        state.loaded = Boolean(state.statsProfile) || !playerId;
+        state.loaded = Boolean(state.statsProfile) || Boolean(missionsResult.data?.awaiting_link);
         state.loadedAt = Date.now();
         if (!state.statsProfile)
-            state.message = playerId
-                ? "Mission statistics are unavailable. Reopen the panel to retry."
-                : "Link Minecraft to begin tracking mission progress.";
+            state.message = missionsResult.data?.awaiting_link
+                ? "Connect Minecraft to sync recorded progress and claim rewards."
+                : "Mission statistics are unavailable. Reopen the panel to retry.";
     } catch (error) {
         if (generation !== state.generation) return;
         console.warn("Could not load weekly missions", error);

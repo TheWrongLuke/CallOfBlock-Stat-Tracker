@@ -1,5 +1,6 @@
 import { createFeedbackApi } from "./api/feedback.js";
-import { captureFormDraft, restoreFormDraft } from "./core/form-draft.js";
+import { captureFormDraft, captureAccountDraft, restoreFormDraft } from "./core/form-draft.js";
+import { minecraftSkinIdentity, skinHeadUrl, alternateSkinHeadUrl } from "./core/minecraft-avatar.js";
 import { PLAYTEST_ADMIN_STATUSES, validatePlaytestDraft, playtestRoster, rosterCsv } from "./core/playtest-admin.js";
 import { weeklyMissionProgress } from "./core/weekly-mission-progress.js";
 import { renderWeeklyMissionPanel } from "./core/weekly-mission-view.js";
@@ -4619,7 +4620,7 @@ function renderAccountPage() {
     const currentForm = body.querySelector("[data-account-form]");
     const draft =
         currentForm && currentForm.dataset.dirty === "true" && account.id && currentForm.dataset.accountId === account.id
-            ? captureFormDraft(currentForm)
+            ? captureAccountDraft(currentForm)
             : null;
     const badgeState = accountBadgeState(account, linkedProfile);
     const selectedBadges = selectedAccountBadges(account, badgeState);
@@ -8729,7 +8730,7 @@ function profileIconOptionUrl(item, account, profile, size) {
     if (item.id === "discord") {
         return accountDiscordAvatarUrl(account) || discordDefaultAvatarUrl(account?.discord_id);
     }
-    if (item.id === "minecraft") return skinHeadUrl(accountMinecraftName(account, profile), size);
+    if (item.id === "minecraft") return skinHeadUrl(minecraftSkinIdentity(account, profile), size);
     if (item.id === "custom") return account?.custom_avatar_url || "";
     return item.image || "";
 }
@@ -8961,7 +8962,7 @@ async function syncWeeklyMissions() {
             rebuildAccountProfileIndex();
         }
         missionState.source = "supabase";
-        missionState.message = "";
+        missionState.message = row.awaiting_link ? "Connect Minecraft to sync recorded progress and claim rewards." : "";
     } catch (error) {
         console.warn("Weekly mission persistence is not available", error);
         if (state.weeklyMissions !== missionState || state.authProfile?.id !== account.id) return;
@@ -13490,7 +13491,7 @@ function renderPagination(totalRows, totalPages) {
 async function submitAccountForm(form) {
     if (!state.authClient || !state.authSession?.user || !state.authProfileExtended) return;
     const accountId = state.authSession.user.id;
-    const formDraft = captureFormDraft(form);
+    const formDraft = captureAccountDraft(form);
     let saved = false;
     try {
         const draft = readAccountFormDraft(form);
@@ -13774,7 +13775,7 @@ function renderPlayerAvatar(player, profile, size = 64, extraClass = "") {
 }
 
 function renderAvatarImage(url, account, profile, size, loading = "lazy", extraAttributes = "") {
-    const currentUrl = String(url || skinHeadUrl(accountMinecraftName(account, profile), size));
+    const currentUrl = String(url || skinHeadUrl(minecraftSkinIdentity(account, profile), size));
     const fallbacks = avatarFallbackUrls(currentUrl, account, profile, size);
     const fallbackAttr = escapeHtml(JSON.stringify(fallbacks));
     const fallbackLabel = initialsForName(
@@ -13785,15 +13786,17 @@ function renderAvatarImage(url, account, profile, size, loading = "lazy", extraA
 }
 
 function avatarFallbackUrls(currentUrl, account, profile, size) {
-    const name = accountMinecraftName(account, profile);
+    const identity = minecraftSkinIdentity(account, profile);
+    const name = account?.minecraft_player_name || profile?.name;
     const discordFallbacks =
         cleanAvatarSource(account?.avatar_source) === "discord"
             ? discordAvatarCandidates(accountDiscordAvatarUrl(account), account?.discord_id)
             : [];
     const urls = uniqueImageUrls([
         ...discordFallbacks,
-        skinHeadUrl(name, size),
-        alternateSkinHeadUrl(name, size),
+        skinHeadUrl(identity, size),
+        alternateSkinHeadUrl(identity, size),
+        ...(name ? [skinHeadUrl(name, size), alternateSkinHeadUrl(name, size)] : []),
         String(account?.avatar_url || "").trim(),
         CALL_OF_BLOCK_ICON_URL,
         skinHeadUrl(DEFAULT_SKIN_NAME, size),
@@ -13838,11 +13841,11 @@ function accountAvatarUrl(account, profile, size = 64) {
     const source = cleanAvatarSource(account?.avatar_source);
     if (source === "custom" && account?.custom_avatar_url) return account.custom_avatar_url;
     if (source === "discord") return accountDiscordAvatarUrl(account) || discordDefaultAvatarUrl(account?.discord_id);
-    if (source === "minecraft") return skinHeadUrl(accountMinecraftName(account, profile), size);
+    if (source === "minecraft") return skinHeadUrl(minecraftSkinIdentity(account, profile), size);
     if (source === "default") return CALL_OF_BLOCK_ICON_URL;
     const option = cosmeticCatalogItem("icon", source);
     if (option?.image) return safeCssUrl(option.image);
-    return skinHeadUrl(accountMinecraftName(account, profile), size);
+    return skinHeadUrl(minecraftSkinIdentity(account, profile), size);
 }
 
 function accountDiscordAvatarUrl(account) {
@@ -16669,18 +16672,6 @@ function compactModeLabel(value) {
 
 function viewerTimeZoneLabel() {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "your timezone";
-}
-
-function skinHeadUrl(name, size) {
-    const safeName = String(name || DEFAULT_SKIN_NAME).trim() || DEFAULT_SKIN_NAME;
-    const safeSize = Math.max(16, Math.min(256, Math.round(number(size) || 96)));
-    return `https://mc-heads.net/avatar/${encodeURIComponent(safeName)}/${safeSize}`;
-}
-
-function alternateSkinHeadUrl(name, size) {
-    const safeName = String(name || DEFAULT_SKIN_NAME).trim() || DEFAULT_SKIN_NAME;
-    const safeSize = Math.max(16, Math.min(256, Math.round(number(size) || 96)));
-    return `https://api.mcheads.org/head/${encodeURIComponent(safeName)}/${safeSize}`;
 }
 
 function openContactEmail() {

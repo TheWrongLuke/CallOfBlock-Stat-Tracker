@@ -1,12 +1,21 @@
-export function captureFormDraft(form) {
+export function captureFormDraft(form, { hiddenNames = [] } = {}) {
     return [...form.elements]
-        .filter((input) => input.name && !["submit", "button", "hidden"].includes(input.type))
+        .filter(
+            (input) =>
+                input.name &&
+                !["submit", "button"].includes(input.type) &&
+                (input.type !== "hidden" || hiddenNames.includes(input.name))
+        )
         .map((input) => ({
             name: input.name,
             value: input.value,
             checked: input.checked,
             files: input.files ? [...input.files] : null
         }));
+}
+
+export function captureAccountDraft(form) {
+    return captureFormDraft(form, { hiddenNames: ["avatarSource", "profileBackground", "pfpBorder", "profileTitle"] });
 }
 
 export function restoreFormDraft(form, draft) {

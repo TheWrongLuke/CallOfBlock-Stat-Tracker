@@ -1,6 +1,18 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { ensureWeeklyMissions, claimWeeklyMissionReward, swapWeeklyMission } from "../../src/api/weekly-missions.js";
 import { applyNetworkAccountProjection, mergeSavedAccountProfile } from "../../src/core/network-profile.js";
+
+it("pre-link mission plans cannot clear XP or independent cosmetic ownership", () => {
+    const profile = { id: "one", xp: 9000, unlocked_titles: ["purchased"], profile_title: "purchased" };
+    expect(
+        applyNetworkAccountProjection(profile, {
+            environment: "TEST",
+            user_id: "one",
+            awaiting_link: true,
+            stats_profile: null
+        })
+    ).toBe(profile);
+});
 import { saveProfileCustomization } from "../../src/api/profile.js";
 import { networkAccountRequest } from "../../src/api/network-account.js";
 afterEach(() => vi.unstubAllGlobals());

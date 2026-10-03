@@ -7,6 +7,7 @@ import {
     skinHeadUrl
 } from "../core/site-shell.js";
 import { discordAvatarCandidates, uniqueImageUrls } from "../utils/avatar-url.js";
+import { minecraftSkinIdentity } from "../core/minecraft-avatar.js";
 import { adminRedirect } from "../core/admin-routes.js";
 import { gameModeLabel, matchGameMode, modernizeModeText } from "../core/game-modes.js";
 
@@ -243,7 +244,7 @@ function profileAvatar(profile, player, catalog, size) {
 
 function profileAvatarCandidates(profile, player, catalog, size) {
     const source = String(profile?.avatar_source || "minecraft");
-    const minecraftAvatar = skinHeadUrl(profile?.minecraft_player_name || player?.name || "Steve", size);
+    const minecraftAvatar = skinHeadUrl(minecraftSkinIdentity(profile, player), size);
     if (source === "discord") {
         return uniqueImageUrls([
             ...discordAvatarCandidates(profile?.avatar_url, profile?.discord_id),

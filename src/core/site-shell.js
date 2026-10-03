@@ -1,4 +1,5 @@
 import { getDrawerController } from "./drawer-controller.js";
+import { minecraftSkinIdentity, skinHeadUrl, alternateSkinHeadUrl } from "./minecraft-avatar.js";
 import { syncDiscordProfile } from "../api/profile.js";
 import { readPublicStatsCache, writePublicStatsCache } from "../utils/public-data-cache.js";
 import { createRequestSignal } from "../utils/request-timeout.js";
@@ -146,11 +147,7 @@ export function formatDate(value, options = {}) {
     }).format(date);
 }
 
-export function skinHeadUrl(name, size = 96) {
-    const safeName = String(name || "Steve").trim() || "Steve";
-    const safeSize = Math.max(16, Math.min(256, Math.round(number(size) || 96)));
-    return `https://mc-heads.net/avatar/${encodeURIComponent(safeName)}/${safeSize}`;
-}
+export { skinHeadUrl } from "./minecraft-avatar.js";
 
 export function number(value) {
     return Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -425,7 +422,7 @@ function resolveShellAvatarUrl(profile, avatarSource, icon) {
     }
     if (avatarSource === "custom") return profile.custom_avatar_url || "";
     if (avatarSource === "default") return "/assets/branding/icon-256.webp";
-    if (avatarSource === "minecraft") return skinHeadUrl(profile.minecraft_player_name || "Steve", 96);
+    if (avatarSource === "minecraft") return skinHeadUrl(minecraftSkinIdentity(profile), 96);
     return icon?.image_url || "";
 }
 
@@ -570,7 +567,9 @@ function renderShellAvatar(profile, avatar, name) {
     const source = String(profile.avatar_source || "minecraft");
     const fallbacks = uniqueImageUrls([
         ...(source === "discord" ? discordAvatarCandidates(profile.avatar_url, profile.discord_id) : []),
-        skinHeadUrl(profile.minecraft_player_name || "Steve", 96),
+        skinHeadUrl(minecraftSkinIdentity(profile), 96),
+        alternateSkinHeadUrl(minecraftSkinIdentity(profile), 96),
+        ...(profile.minecraft_player_name ? [skinHeadUrl(profile.minecraft_player_name, 96)] : []),
         "/assets/branding/icon-256.webp"
     ]).filter((candidate) => candidate !== avatar);
     const fallbackData = escapeHtml(JSON.stringify(fallbacks));
