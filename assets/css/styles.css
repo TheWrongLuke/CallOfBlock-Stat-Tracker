@@ -9153,6 +9153,34 @@ img.identity-avatar {
         0 0 0 2px color-mix(in srgb, var(--rarity-color) 24%, transparent);
 }
 
+.profile-badge.equipped-badge {
+    flex: 0 0 44px;
+    width: 44px;
+    height: 44px;
+    min-height: 0;
+    padding: 0;
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.profile-badge.equipped-badge .badge-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 0;
+    clip-path: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.profile-badge.equipped-badge:focus-visible {
+    outline: 2px solid var(--rarity-color);
+    outline-offset: 3px;
+    box-shadow: none;
+}
+
 .badge-progress-tooltip {
     position: fixed;
     z-index: 10000;
@@ -9327,6 +9355,11 @@ img.identity-avatar {
 .badge-icon-fallback {
     display: grid;
     place-items: center;
+}
+
+.badge-icon img[hidden],
+.badge-icon-fallback[hidden] {
+    display: none;
 }
 
 .badge-icon-value {

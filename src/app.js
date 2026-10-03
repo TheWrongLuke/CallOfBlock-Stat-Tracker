@@ -14076,12 +14076,12 @@ function renderTitleCosmetic(
 
 function renderProfileBadge(badge) {
     const rarity = cleanRarity(badge?.rarity);
-    return `<span class="profile-badge badge-${escapeHtml(badge.id)} rarity-${rarity}" tabindex="0" aria-label="${escapeHtml(badgeProgressAriaLabel(badge))}" ${badgeProgressDataAttributes(badge)} ${cosmeticOwnershipDataAttributes("badges", badge.id, badge.label, badge.description || "Profile badge")}>${renderBadgeIcon(badge)}<span>${escapeHtml(badge.label)}</span>${renderBadgeTierLevel(badge)}</span>`;
+    return `<span class="profile-badge equipped-badge badge-${escapeHtml(badge.id)} rarity-${rarity}" tabindex="0" aria-label="${escapeHtml(badgeProgressAriaLabel(badge))}" ${badgeProgressDataAttributes(badge)} ${cosmeticOwnershipDataAttributes("badges", badge.id, badge.label, badge.description || "Profile badge")}>${renderBadgeIcon(badge, { showValue: false })}</span>`;
 }
 
-function renderBadgeIcon(badge) {
+function renderBadgeIcon(badge, { showValue = true } = {}) {
     const label = badge?.label || "Badge";
-    const value = badge?.value === undefined || badge?.value === null ? "" : compactBadgeNumber(badge.value);
+    const value = !showValue || badge?.value === undefined || badge?.value === null ? "" : compactBadgeNumber(badge.value);
     const rarity = cleanRarity(badge?.rarity);
     const iconUrl = badgeIconUrl(badge);
     return `

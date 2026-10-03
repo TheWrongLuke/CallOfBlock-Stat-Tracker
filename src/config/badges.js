@@ -2,12 +2,12 @@ const DEFAULT_BADGE_ICON = "./assets/badges/default.png";
 
 export function badgeArtworkUrl(id) {
     return /^[a-z0-9][a-z0-9_-]{0,95}$/.test(String(id || ""))
-        ? `./assets/badges/combat-v2/${id}.png`
+        ? `./assets/badges/combat-v2/${id}.png?v=3`
         : DEFAULT_BADGE_ICON;
 }
 
 export function isBundledBadgeArtwork(url) {
-    return /^\.\/assets\/badges\/combat-v2\/[a-z0-9_-]+\.png$/.test(String(url || ""));
+    return /^\.\/assets\/badges\/combat-v2\/[a-z0-9_-]+\.png(?:\?v=\d+)?$/.test(String(url || ""));
 }
 
 export const ACE_STREAK_TIMING_SECONDS = Object.freeze([4, 4, 4, 3, 2.5, 2.5]);

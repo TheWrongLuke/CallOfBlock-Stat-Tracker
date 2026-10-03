@@ -2558,7 +2558,7 @@ test("approved badge artwork keeps its complete frame in the picker and equipped
         const icon = page.locator(`[data-badge-id="${id}"] .badge-icon`);
         await icon.scrollIntoViewIfNeeded();
         await expect(icon).toHaveClass(/badge-artwork/);
-        await expect(icon.locator("img")).toHaveAttribute("src", `./assets/badges/combat-v2/${award}.png`);
+        await expect(icon.locator("img")).toHaveAttribute("src", `./assets/badges/combat-v2/${award}.png?v=3`);
         await expect.poll(() => icon.locator("img").evaluate((img) => img.complete && img.naturalWidth)).toBe(512);
         const style = await icon.evaluate((element) => {
             const css = getComputedStyle(element);
@@ -2577,7 +2577,27 @@ test("approved badge artwork keeps its complete frame in the picker and equipped
     await page.locator("[data-cosmetic-picker-close]").click();
     const equipped = page.locator("[data-account-preview-badges] .badge-admin .badge-artwork");
     await expect(equipped).toBeVisible();
-    await expect(equipped.locator("img")).toHaveAttribute("src", "./assets/badges/combat-v2/admin.png");
+    await expect(equipped.locator("img")).toHaveAttribute("src", "./assets/badges/combat-v2/admin.png?v=3");
+    const badge = equipped.locator("..");
+    await expect(badge).toHaveClass(/equipped-badge/);
+    await expect(badge).toHaveAttribute("aria-label", /Admin/);
+    await expect(badge.locator(".badge-tier-level, .badge-icon-value")).toHaveCount(0);
+    expect(
+        await badge.evaluate((element) => {
+            const css = getComputedStyle(element);
+            return {
+                border: css.borderWidth,
+                background: css.backgroundColor,
+                shadow: css.boxShadow,
+                text: element.innerText.trim(),
+                width: element.getBoundingClientRect().width,
+                height: element.getBoundingClientRect().height
+            };
+        })
+    ).toEqual({ border: "0px", background: "rgba(0, 0, 0, 0)", shadow: "none", text: "", width: 44, height: 44 });
+    await badge.focus();
+    await expect(page.locator(".badge-progress-tooltip")).toContainText("Admin");
+    await page.screenshot({ path: testInfo.outputPath("artwork-only-equipped-profile.png") });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
 });
 

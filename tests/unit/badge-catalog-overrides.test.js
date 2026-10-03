@@ -107,7 +107,7 @@ describe("badge catalogue overrides", () => {
 
         expect(override.iconUrl).toBe("");
         expect(mergeBadgeCatalog(BADGE_CATALOG, [override]).find((badge) => badge.id === "owner").icon).toBe(
-            "./assets/badges/combat-v2/owner.png"
+            "./assets/badges/combat-v2/owner.png?v=3"
         );
     });
 
@@ -132,8 +132,8 @@ describe("badge catalogue overrides", () => {
                 tiers: [{ index: 0, icon_url: "/assets/badges/default.png" }]
             }
         ]).find((entry) => entry.id === "br_wins_counter");
-        expect(badge.icon).toBe("./assets/badges/combat-v2/br_wins_counter_common.png");
+        expect(badge.icon).toBe("./assets/badges/combat-v2/br_wins_counter_common.png?v=3");
         expect(badge.tiers[0].icon).toBe(badge.icon);
-        expect(badge.tiers[4].icon).toBe("./assets/badges/combat-v2/br_wins_counter_mythic.png");
+        expect(badge.tiers[4].icon).toBe("./assets/badges/combat-v2/br_wins_counter_mythic.png?v=3");
     });
 });
