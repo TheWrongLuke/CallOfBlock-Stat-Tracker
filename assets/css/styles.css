@@ -1616,6 +1616,10 @@ body.replay-fullscreen-open {
     object-fit: contain;
 }
 
+.tactical-map-image.is-pixel-art {
+    image-rendering: pixelated;
+}
+
 .tactical-map-calibration-status {
     position: absolute;
     z-index: 8;

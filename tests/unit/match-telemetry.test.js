@@ -15,6 +15,17 @@ async function fixture(id) {
 }
 
 describe("match telemetry normalization", () => {
+    it("repairs pre-update arena metadata from captured positions without changing raw recordings", async () => {
+        const source = await fixture("fixture-dm");
+        source.map = { ...source.map, worldMinX: -368, worldMaxX: -177, worldMinZ: -1232, worldMaxZ: -993 };
+        for (const snapshot of source.snapshots) {
+            for (const player of snapshot.players) Object.assign(player, { x: 1000, z: -100 });
+        }
+        const telemetry = normalizeMatchTelemetry(source);
+        expect(telemetry.map.worldMinX).toBe(915);
+        expect(telemetry.map.imageUrl).toBe("./assets/maps/raid.png");
+        expect(source.map.worldMinX).toBe(-368);
+    });
     it("opens telemetry for all five modes and resolves older arena formats", async () => {
         const source = await fixture("fixture-dm");
         for (const mode of ["battleRoyale", "zombieSurvival", "teamDeathmatch", "freeForAll", "duel"]) {

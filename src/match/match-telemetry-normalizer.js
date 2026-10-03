@@ -99,7 +99,11 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
         ...events.map((event) => event.timeMs)
     );
     const durationMs = finiteNonNegative(raw.durationMs) ?? highestTime;
-    const map = normalizeMap(raw.map, mode);
+    const map = normalizeMap(
+        raw.map,
+        mode,
+        snapshots.slice(0, 8).flatMap((snapshot) => snapshot.players)
+    );
     if (!map.calibrated || !map.imageUrl) {
         warnings.push("Map calibration is unavailable; marker positions use the approximate coordinate grid.");
     }
@@ -442,7 +446,7 @@ function normalizeEngagement(value, index, participantIds, eventIds, warnings) {
     };
 }
 
-function normalizeMap(value, mode) {
+function normalizeMap(value, mode, referencePositions) {
     return applyKnownTacticalMap(
         {
             mapId: text(value?.mapId) || "unknown",
@@ -461,7 +465,8 @@ function normalizeMap(value, mode) {
             calibrated: value?.calibrated === true,
             calibrationSource: text(value?.calibrationSource)
         },
-        mode
+        mode,
+        referencePositions
     );
 }
 

@@ -147,6 +147,7 @@ export class MatchMapRenderer {
         if (this.telemetry.map.imageUrl) {
             const image = document.createElement("img");
             image.className = "tactical-map-image";
+            image.classList.toggle("is-pixel-art", this.telemetry.map.pixelArt === true);
             image.src = this.telemetry.map.imageUrl;
             image.alt = `${this.telemetry.map.label} tactical map`;
             image.decoding = "async";

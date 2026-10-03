@@ -2887,6 +2887,85 @@ test("Minecraft account link preserves its code across redraws and rejects stale
     expect(requests).toBe(4);
 });
 
+test("updated arena maps fit playback with aligned markers and crisp small-map pixels", async ({ page }, testInfo) => {
+    const base = JSON.parse(
+        readFileSync(new URL("../fixtures/match-telemetry/fixture-dm.json", import.meta.url), "utf8")
+    );
+    const maps = [
+        ["raid", "Raid", "teamDeathmatch", 915, 1116, -232, 13, 200, 246],
+        ["hijacked", "Hijacked", "freeForAll", -16, 159, 960, 1039, 192, 80],
+        ["shoothouse", "Shoot House", "teamDeathmatch", 951, 1049, 903, 1064, 99, 162],
+        ["A", "Map A", "duel", -1018, -988, 968, 1003, 31, 36],
+        ["B", "Map B", "duel", 988, 1013, -1002, -957, 26, 46]
+    ];
+    for (const [id, label, mode, minX, maxX, minZ, maxZ] of maps) {
+        const source = structuredClone(base);
+        source.matchId = `fixture-map-${id}`;
+        source.mode = mode;
+        source.map = { mapId: id, label, mapVersion: "arena-2026-10" };
+        for (const snapshot of source.snapshots) {
+            snapshot.vehicles = [];
+            for (const [index, player] of snapshot.players.entries()) {
+                player.x = minX + ((maxX - minX) * (index + 1)) / 4;
+                player.z = minZ + (maxZ - minZ) / 2;
+            }
+        }
+        await page.route(`**/data/match-telemetry/${source.matchId}.json`, (route) =>
+            route.fulfill({ contentType: "application/json", body: JSON.stringify(source) })
+        );
+    }
+    await openApp(page, "#view=match&match=fixture-map-raid");
+    for (const [id, label, , , , , , width, height] of maps) {
+        await page.goto(`/#view=match&match=fixture-map-${id}`);
+        await expect(page.locator(".match-detail-header h2")).toHaveText(label);
+        const image = page.locator(".tactical-map-image");
+        await expect(image).toBeVisible();
+        await expect
+            .poll(() => image.evaluate((element) => [element.naturalWidth, element.naturalHeight]))
+            .toEqual([width, height]);
+        const pixelArt = id === "A" || id === "B";
+        if (pixelArt) await expect(image).toHaveCSS("image-rendering", "pixelated");
+        const stage = page.locator(".tactical-map-stage");
+        await expect
+            .poll(() =>
+                stage.evaluate((element) => {
+                    const rect = element.getBoundingClientRect();
+                    return (
+                        rect.height <= innerHeight - 50 &&
+                        Math.abs(
+                            rect.width / rect.height -
+                                Number(element.style.aspectRatio.split("/")[0]) /
+                                    Number(element.style.aspectRatio.split("/")[1])
+                        ) < 0.01
+                    );
+                })
+            )
+            .toBe(true);
+        await expect(page.locator(".tactical-player-marker")).toHaveCount(3);
+        expect(
+            await page
+                .locator(".tactical-player-marker")
+                .evaluateAll((elements) =>
+                    elements.map((element) => [
+                        element.style.getPropertyValue("--map-x"),
+                        element.style.getPropertyValue("--map-y"),
+                        element.hidden
+                    ])
+                )
+        ).toEqual([
+            ["25%", "50%", false],
+            ["50%", "50%", false],
+            ["75%", "50%", false]
+        ]);
+        await page.locator("[data-match-play]").click();
+        await expect(page.locator("[data-match-play]")).toContainText("Pause");
+        await page.locator("[data-match-play]").click();
+        await stage.scrollIntoViewIfNeeded();
+        await page.screenshot({ path: testInfo.outputPath(`map-${id}.png`) });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+});
+
 test("Shmar fits short and tall viewports including fullscreen without distorting overlays", async ({
     page
 }, testInfo) => {
