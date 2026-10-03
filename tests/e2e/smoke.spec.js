@@ -1948,6 +1948,10 @@ test("new cosmetic fields follow type, ownership, and store limits", async ({ pa
     await expect(form.locator("[data-progression-store-fields]")).toBeHidden();
     await acquisition.selectOption("progression");
     await expect(form.locator("[data-progression-mission-fields]")).toBeVisible();
+    for (const mode of ["battle_royale", "zombie_survival", "team_deathmatch", "free_for_all", "duels"]) {
+        await form.locator('select[name="mode"]').selectOption(mode);
+        await expect(form.locator('select[name="mode"]')).toHaveValue(mode);
+    }
     await expect(form.locator("[data-progression-store-fields]")).toBeHidden();
 
     await acquisition.selectOption("store");

@@ -167,7 +167,7 @@ describe("homepage weekly mission progress", () => {
         });
 
         expect(progress.complete).toBe(true);
-        expect(progress.status).toBe("BR 1 / 1 | DM 1 / 1");
+        expect(progress.status).toBe("BR 1 / 1 | TDM / FFA 1 / 1");
     });
 
     it("uses weapon-specific totals", () => {

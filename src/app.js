@@ -2,7 +2,8 @@ import { createFeedbackApi } from "./api/feedback.js";
 import { captureFormDraft, captureAccountDraft, restoreFormDraft } from "./core/form-draft.js";
 import { minecraftSkinIdentity, skinHeadUrl, alternateSkinHeadUrl } from "./core/minecraft-avatar.js";
 import { PLAYTEST_ADMIN_STATUSES, validatePlaytestDraft, playtestRoster, rosterCsv } from "./core/playtest-admin.js";
-import { weeklyMissionProgress } from "./core/weekly-mission-progress.js";
+import { weeklyMissionProgress, progressionStats } from "./core/weekly-mission-progress.js";
+import { GAMEPLAY_MODES, progressionModeKeys } from "./core/progression-modes.js";
 import { renderWeeklyMissionPanel } from "./core/weekly-mission-view.js";
 import { renderMinecraftAccountLink } from "./features/minecraft-account-link.js";
 import { renderAccountProgress, renderAccountAccessLinks, renderAccountAccessChoices, accountAccessIntent } from "./core/account-view.js";
@@ -5773,7 +5774,7 @@ function normalizeWeeklyRequirements(value) {
         return components.length ? { type, components } : { type: "stat" };
     }
     if (type === "distinct") {
-        const collection = ["weapons", "categories", "dm_maps", "vehicle_types"].includes(source.collection)
+        const collection = ["weapons", "categories", "maps", "dm_maps", "vehicle_types"].includes(source.collection)
             ? source.collection
             : "weapons";
         const metric = WEEKLY_METRIC_VALUES.has(source.metric) ? source.metric : "kills";
@@ -9271,7 +9272,7 @@ function expandWeeklyMissionTemplate(template, profile, rng) {
     const selectedMode =
         template.mode === "random"
             ? randomMode
-            : MISSION_MODES.find((entry) => entry.id === template.mode) || {
+            : [...GAMEPLAY_MODES, ...MISSION_MODES].find((entry) => entry.id === template.mode) || {
                   id: "overall",
                   label: "any mode",
                   short: "All"
@@ -9312,7 +9313,7 @@ function expandWeeklyMissionTemplate(template, profile, rng) {
     }
 
     if (template.requirements?.type === "map_stat") {
-        const map = randomChoice(weeklyEligibleMaps(profile), rng);
+        const map = randomChoice(weeklyEligibleMaps(profile, mode), rng);
         if (!map) return null;
         mapId = map.id;
         mapLabel = map.label;
@@ -9321,7 +9322,7 @@ function expandWeeklyMissionTemplate(template, profile, rng) {
     const resolvedMode =
         mode === "overall"
             ? { id: "overall", label: "any mode", short: "All" }
-            : MISSION_MODES.find((entry) => entry.id === mode) || selectedMode;
+            : [...GAMEPLAY_MODES, ...MISSION_MODES].find((entry) => entry.id === mode) || selectedMode;
     const tokens = {
         "{mode}": resolvedMode.label,
         "{mode_short}": resolvedMode.short,
@@ -9632,7 +9633,8 @@ function weeklyMission(family, difficulty, label, description, metric, target, x
         category: options.category || "",
         mapId: options.mapId || "",
         mapLabel: options.mapLabel || "",
-        requirements: normalizeWeeklyRequirements(options.requirements)
+        requirements: normalizeWeeklyRequirements(options.requirements),
+        securityVersion: 4
     };
 }
 
@@ -9672,7 +9674,7 @@ function weeklyMissionBaseline(profile, mission) {
 
 function weeklyMissionRequirementValue(profile, mission, requirement) {
     if (requirement.type === "map_stat") {
-        const entry = weeklyPlayerMapEntries(profile).find((map) => map.id === mission.mapId);
+        const entry = weeklyPlayerMapEntries(profile, mission.securityVersion >= 4 ? mission.mode : "deathmatch").find((map) => map.id === mission.mapId);
         return number(normalizeStats(entry?.stats)[requirement.metric]);
     }
     if (requirement.type === "counter") {
@@ -9696,9 +9698,9 @@ function weeklyDistinctMissionValues(profile, mission, requirement) {
                 .map(([key, value]) => [key.slice("vehicle_damage_type:".length), number(value)])
         );
     }
-    if (requirement.collection === "dm_maps") {
+    if (["maps", "dm_maps"].includes(requirement.collection)) {
         return Object.fromEntries(
-            weeklyPlayerMapEntries(profile).map((entry) => [
+            weeklyPlayerMapEntries(profile, requirement.collection === "dm_maps" ? "deathmatch" : mission.mode).map((entry) => [
                 entry.id,
                 number(normalizeStats(entry.stats)[requirement.metric])
             ])
@@ -9745,13 +9747,10 @@ function weeklyMissionMetric(profile, mission) {
 }
 
 function weeklyModePlayer(profile, mode) {
-    if (mode === "battleRoyale") return normalizePlayer(profile?.battleRoyale);
-    if (mode === "deathmatch") {
-        return normalizePlayer({
-            stats: combineStats(profile?.teamDeathmatch?.stats, profile?.freeForAll?.stats)
-        });
-    }
-    return buildProfileOverall(profile);
+    return normalizePlayer({ stats: combineStats(...progressionModeKeys(profile, mode).map(key => {
+        const row = profile?.[key];
+        return progressionStats(row?.stats ?? row, key, row?.details?.weapons ?? row?.weapons);
+    })) });
 }
 
 function weeklyEligibleWeapons(profile, mode) {
@@ -9768,14 +9767,13 @@ function weeklyWeaponEntries(profile, mode) {
     if (!profile) return [];
     if (mode === "battleRoyale") return cleanWeaponEntries(profile?.battleRoyale?.details?.weapons || []);
     if (mode === "deathmatch") return combinedWeapons(profile, ["teamDeathmatch", "freeForAll"]);
-    return combinedWeapons(profile);
+    return combinedWeapons(profile, progressionModeKeys(profile, mode));
 }
 
-function weeklyMapEntries(profile) {
+function weeklyMapEntries(profile, mode = "deathmatch") {
     const entries = [
-        ...weeklyPlayerMapEntries(profile),
-        ...cachedMaps("teamDeathmatch"),
-        ...cachedMaps("freeForAll")
+        ...weeklyPlayerMapEntries(profile, mode),
+        ...progressionModeKeys(profile, mode).flatMap(cachedMaps)
     ];
     const maps = new Map();
     for (const entry of entries) {
@@ -9790,12 +9788,12 @@ function weeklyMapEntries(profile) {
     return [...maps.values()];
 }
 
-function weeklyPlayerMapEntries(profile) {
-    return [...profileModeMaps(profile, "teamDeathmatch"), ...profileModeMaps(profile, "freeForAll")];
+function weeklyPlayerMapEntries(profile, mode = "deathmatch") {
+    return progressionModeKeys(profile, mode).flatMap(key => profileModeMaps(profile, key));
 }
 
-function weeklyEligibleMaps(profile) {
-    return weeklyMapEntries(profile).filter((entry) => entry.id && entry.id !== "unknown");
+function weeklyEligibleMaps(profile, mode = "deathmatch") {
+    return weeklyMapEntries(profile, mode).filter((entry) => entry.id && entry.id !== "unknown");
 }
 
 function weeklyWeaponCategory(entry) {
@@ -14131,9 +14129,14 @@ function accountBadgeState(account, profile) {
     const overall = linkedProfile ? buildProfileOverall(linkedProfile) : null;
     const br = linkedProfile ? normalizePlayer(linkedProfile.battleRoyale) : normalizePlayer(null);
     const dm = linkedProfile ? normalizePlayer(linkedProfile.deathmatch) : normalizePlayer(null);
-    const stats = normalizeStats(overall?.stats);
-    const derived = normalizeDerived(overall?.derived, stats);
-    const context = { account, linked, profile: linkedProfile, overall, br, dm, stats, derived };
+    const modes = Object.fromEntries(["battleRoyale", "teamDeathmatch", "freeForAll", "duel", "zombieSurvival"].map((mode) => {
+        const row = linkedProfile?.[mode];
+        return [mode, normalizePlayer(row ? { ...row, stats: progressionStats(row.stats ?? row, mode, row.details?.weapons ?? row.weapons) } : null)];
+    }));
+    const stats = account?.network_stats_environment === "TEST"
+        ? combineStats(...Object.values(modes).map(mode => mode.stats)) : normalizeStats(overall?.stats);
+    const derived = account?.network_stats_environment === "TEST" ? derivedFromStats(stats) : normalizeDerived(overall?.derived, stats);
+    const context = { account, linked, profile: linkedProfile, overall, br, dm, modes, stats, derived };
     if (account?.network_stats_environment === "TEST") {
         return { unlockedIds: new Set(arrayField(account.unlocked_badges)), context };
     }

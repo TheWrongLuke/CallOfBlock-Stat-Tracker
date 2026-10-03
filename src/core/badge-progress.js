@@ -57,11 +57,13 @@ export function badgeMetricValue(metric, context) {
             ? context?.br?.stats
             : metric.scope === "deathmatch"
               ? context?.dm?.stats
-              : metric.scope === "account"
-                ? context?.account
-                : metric.scope === "profile"
-                  ? context?.profile
-                  : context?.stats;
+              : ["teamDeathmatch", "freeForAll", "duel", "zombieSurvival"].includes(metric.scope)
+                ? context?.modes?.[metric.scope]?.stats
+                : metric.scope === "account"
+                  ? context?.account
+                  : metric.scope === "profile"
+                    ? context?.profile
+                    : context?.stats;
     const camelStat = String(metric.stat || "").replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
     let value = number(source?.[metric.stat] ?? source?.[camelStat]);
     if (metric.transform === "hours") value /= 3600;

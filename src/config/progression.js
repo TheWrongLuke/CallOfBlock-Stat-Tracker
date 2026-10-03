@@ -9,7 +9,11 @@ export const COSMETIC_ACQUISITION_TYPES = Object.freeze([
 export const PROGRESSION_MODES = Object.freeze([
     { value: "overall", label: "All modes" },
     { value: "battle_royale", label: "Battle Royale" },
-    { value: "deathmatch", label: "TDM / FFA" }
+    { value: "zombie_survival", label: "Zombie Survival" },
+    { value: "team_deathmatch", label: "Team Deathmatch" },
+    { value: "free_for_all", label: "Free For All" },
+    { value: "duels", label: "Duels" },
+    { value: "deathmatch", label: "TDM / FFA (legacy combined)" }
 ]);
 
 export const PROGRESSION_METRICS = Object.freeze([
@@ -45,8 +49,12 @@ export const WEEKLY_MISSION_DIFFICULTIES = Object.freeze([
 export const WEEKLY_MISSION_MODES = Object.freeze([
     { value: "overall", label: "All modes" },
     { value: "battleRoyale", label: "Battle Royale" },
-    { value: "deathmatch", label: "TDM / FFA" },
-    { value: "random", label: "Random BR, TDM or FFA" }
+    { value: "zombieSurvival", label: "Zombie Survival" },
+    { value: "teamDeathmatch", label: "Team Deathmatch" },
+    { value: "freeForAll", label: "Free For All" },
+    { value: "duel", label: "Duels" },
+    { value: "deathmatch", label: "TDM / FFA (legacy combined)" },
+    { value: "random", label: "Random game mode" }
 ]);
 
 export const WEEKLY_MISSION_METRICS = Object.freeze([
@@ -88,7 +96,7 @@ export const WEEKLY_MISSION_TRACKING_TYPES = Object.freeze([
     { value: "all", label: "Multiple requirements" },
     { value: "distinct", label: "Different items" },
     { value: "counter", label: "Tracked match or event counter" },
-    { value: "map_stat", label: "TDM / FFA map statistic" }
+    { value: "map_stat", label: "Selected-mode map statistic" }
 ]);
 
 export function progressionOptionLabel(options, value, fallback = "Unknown") {

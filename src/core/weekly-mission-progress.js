@@ -1,3 +1,5 @@
+import { progressionModeKeys, progressionModeLabel } from "./progression-modes.js";
+
 // Shared by every account surface; progress is derived from exported statistics and saved baselines.
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
@@ -123,16 +125,22 @@ function normalizeRequirements(value) {
 
 function requirementValue(profile, mission, requirement) {
     if (requirement.type === "map_stat") {
-        const map = mapEntries(profile).find((entry) => entry.id === mission.mapId);
+        const map = mapEntries(profile, mission.securityVersion >= 4 ? mission.mode : "deathmatch").find(
+            (entry) => entry.id === mission.mapId
+        );
         return number(normalizeStats(map?.stats)[requirement.metric]);
     }
     if (requirement.type === "counter") {
         const key = counterKey(requirement.key, mission);
         if (requirement.scope === "weapon") {
-            const weapon = weaponEntries(profile, mission.mode).find((entry) => entry.id === mission.weaponId);
+            const weapon = weaponEntries(profile, mission.mode, mission.securityVersion).find(
+                (entry) => entry.id === mission.weaponId
+            );
             return number(normalizeStats(weapon?.stats).weeklyCounters[key]);
         }
-        return number(normalizeStats(modePlayer(profile, mission.mode)?.stats).weeklyCounters[key]);
+        return number(
+            normalizeStats(modePlayer(profile, mission.mode, mission.securityVersion)?.stats).weeklyCounters[key]
+        );
     }
     return missionMetric(profile, mission);
 }
@@ -140,16 +148,21 @@ function requirementValue(profile, mission, requirement) {
 function distinctValues(profile, mission, requirement) {
     if (requirement.collection === "vehicle_types") {
         return Object.fromEntries(
-            Object.entries(normalizeStats(modePlayer(profile, mission.mode)?.stats).weeklyCounters)
+            Object.entries(
+                normalizeStats(modePlayer(profile, mission.mode, mission.securityVersion)?.stats).weeklyCounters
+            )
                 .filter(([key]) => key.startsWith("vehicle_damage_type:"))
                 .map(([key, value]) => [key.slice(20), value])
         );
     }
-    if (requirement.collection === "dm_maps")
+    if (["dm_maps", "maps"].includes(requirement.collection))
         return Object.fromEntries(
-            mapEntries(profile).map((entry) => [entry.id, number(normalizeStats(entry.stats)[requirement.metric])])
+            mapEntries(profile, requirement.collection === "dm_maps" ? "deathmatch" : mission.mode).map((entry) => [
+                entry.id,
+                number(normalizeStats(entry.stats)[requirement.metric])
+            ])
         );
-    const weapons = weaponEntries(profile, mission.mode).filter(
+    const weapons = weaponEntries(profile, mission.mode, mission.securityVersion).filter(
         (entry) => entry.id && entry.id !== "unknown" && weaponCategory(entry) !== "utility"
     );
     if (requirement.collection === "categories") {
@@ -167,30 +180,31 @@ function distinctValues(profile, mission, requirement) {
 function missionMetric(profile, mission) {
     if (!profile || !mission) return 0;
     if (mission.weaponId || mission.category)
-        return weaponEntries(profile, mission.mode).reduce((sum, weapon) => {
+        return weaponEntries(profile, mission.mode, mission.securityVersion).reduce((sum, weapon) => {
             if (mission.weaponId && weapon.id !== mission.weaponId) return sum;
             if (mission.category && weaponCategory(weapon) !== mission.category) return sum;
             return sum + number(normalizeStats(weapon.stats)[mission.metric]);
         }, 0);
-    return number(normalizeStats(modePlayer(profile, mission.mode)?.stats)[mission.metric]);
+    return number(normalizeStats(modePlayer(profile, mission.mode, mission.securityVersion)?.stats)[mission.metric]);
 }
 
-function modePlayer(profile, mode) {
-    return { stats: combineStats(...missionModes(profile, mode).map((key) => profile?.[key]?.stats)) };
+function modePlayer(profile, mode, version = 3) {
+    return {
+        stats: combineStats(
+            ...progressionModeKeys(profile, mode, version).map((key) => {
+                const row = profile?.[key];
+                return progressionStats(row?.stats ?? row, key, row?.details?.weapons ?? row?.weapons);
+            })
+        )
+    };
 }
 
-function missionModes(profile, mode) {
-    // Older mission baselines still use DM. Never count a compatibility aggregate and its split modes twice.
-    const dm = profile?.teamDeathmatch || profile?.freeForAll ? ["teamDeathmatch", "freeForAll"] : ["deathmatch"];
-    if (mode === "deathmatch") return dm;
-    if (mode && mode !== "overall") return [mode];
-    return ["battleRoyale", ...dm];
-}
-
-export function weaponEntries(profile, mode) {
+export function weaponEntries(profile, mode, version = 3) {
     if (!profile) return [];
     const merged = new Map();
-    for (const weapon of missionModes(profile, mode).flatMap((key) => profile[key]?.details?.weapons || [])) {
+    for (const weapon of progressionModeKeys(profile, mode, version).flatMap(
+        (key) => profile[key]?.details?.weapons || profile[key]?.weapons || []
+    )) {
         const id = String(weapon?.id || weapon?.label || "");
         if (!id) continue;
         const current = merged.get(id) || { ...weapon, id, stats: normalizeStats(null) };
@@ -200,19 +214,41 @@ export function weaponEntries(profile, mode) {
     return [...merged.values()];
 }
 
-function mapEntries(profile) {
+export function mapEntries(profile, mode = "overall") {
     const merged = new Map();
-    for (const key of missionModes(profile, "deathmatch")) {
+    for (const key of progressionModeKeys(profile, mode)) {
         const details = profile?.[key]?.details;
         const entries =
-            [details?.maps, details?.deathmatchMaps].find((rows) => Array.isArray(rows) && rows.length) || [];
+            [details?.maps, details?.deathmatchMaps, details?.battleRoyaleMaps].find(
+                (rows) => Array.isArray(rows) && rows.length
+            ) || [];
         for (const entry of entries) {
             if (!entry?.id) continue;
             const previous = merged.get(entry.id);
-            merged.set(entry.id, { ...entry, stats: combineStats(previous?.stats, entry.stats) });
+            merged.set(entry.id, {
+                ...entry,
+                stats: combineStats(previous?.stats, progressionStats(entry.stats, key))
+            });
         }
     }
     return [...merged.values()];
+}
+
+export function progressionStats(stats, mode, weapons = []) {
+    if (!["zombieSurvival", "duel"].includes(mode)) return stats;
+    const rows = Array.isArray(weapons) ? weapons.map((row) => row.stats ?? row) : Object.values(weapons || {});
+    const result = { ...stats };
+    if (mode === "zombieSurvival") {
+        result.kills ??= stats?.zombieKills;
+        result.playtimeSeconds ??= number(stats?.totalSurvivalMs) / 1000;
+        result.topMatchKills ??= stats?.highestMatchKills;
+        result.longestSurvivalSeconds ??= number(stats?.longestSurvivalMs) / 1000;
+        result.damageDealt ??= stats?.damageDealtToZombies;
+    } else result.damageDealt ??= stats?.damage;
+    for (const key of ["hits", "headshots", "headshotKills", "utilityKills", "vehicleKills", "playtimeSeconds"]) {
+        result[key] ??= rows.reduce((sum, row) => sum + number(row[key]), 0);
+    }
+    return result;
 }
 
 function normalizeStats(stats) {
@@ -290,7 +326,7 @@ function counterKey(key, mission) {
 }
 
 function modeShort(mode) {
-    return mode === "battleRoyale" ? "BR" : mode === "deathmatch" ? "DM" : "All";
+    return progressionModeLabel(mode, true);
 }
 
 function formatMetric(value, metric) {
