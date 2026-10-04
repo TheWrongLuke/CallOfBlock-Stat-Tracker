@@ -10,6 +10,9 @@ import { discordAvatarCandidates, uniqueImageUrls } from "../utils/avatar-url.js
 import { minecraftSkinIdentity } from "../core/minecraft-avatar.js";
 import { adminRedirect } from "../core/admin-routes.js";
 import { gameModeLabel, matchGameMode, modernizeModeText } from "../core/game-modes.js";
+import { networkTrackerConfigured } from "../api/network-tracker.js";
+import { fetchNetworkProfiles } from "../api/network-profiles.js";
+import { cosmeticArtworkUrl } from "../core/cosmetic-artwork.js";
 
 const CHAMPION_ROTATE_MS = 5000;
 const STATS_SLICE_UPDATED_EVENT = "cob:stats-slice-updated";
@@ -109,12 +112,17 @@ function renderFeaturedList(mode, data, profiles, catalog) {
             const avatarCandidates = profileAvatarCandidates(profile, player, catalog, 96);
             const avatar = avatarCandidates[0] || CALL_OF_BLOCK_ICON_URL;
             const title = profileTitle(profile, catalog);
+            const border = catalog.get(`border:${String(profile?.pfp_border || "none")}`);
+            const borderUrl = String(border?.image_url || "");
+            const frameStyle = borderUrl
+                ? ` style="--avatar-frame-image: url('${escapeHtml(borderUrl.replaceAll("'", "%27"))}'); --avatar-frame-inset: ${Math.max(0, Math.min(25, number(border?.border_inset)))}%"`
+                : "";
             const stats = player.stats || {};
             const winRate = Number(
                 player.derived?.winRate ?? (number(stats.games) ? number(stats.wins) / number(stats.games) : 0)
             );
             return `<a class="featured-player podium-rank-${index + 1}" href="/stats/#player=${encodeURIComponent(player.playerId)}&amp;tab=overview&amp;profileMode=${encodeURIComponent(mode)}">
-                <span class="player-avatar featured-avatar">${renderAvatarImage(avatar, name, mode === "battleRoyale" && index < 2 ? "eager" : "lazy", avatarCandidates.slice(1))}</span>
+                <span class="player-avatar featured-avatar${borderUrl ? " avatar-frame-image" : ""}"${frameStyle}>${renderAvatarImage(avatar, name, mode === "battleRoyale" && index < 2 ? "eager" : "lazy", avatarCandidates.slice(1))}</span>
                 <div class="featured-player-main">
                     <div><span class="rank-badge rank-${Math.min(index + 1, 3)}">${index + 1}</span><strong>${escapeHtml(name)}</strong></div>
                     ${title ? `<span class="profile-title rarity-${escapeHtml(title.rarity)}">${escapeHtml(title.text)}</span>` : ""}
@@ -183,6 +191,13 @@ async function renderUpcomingPlaytest(client) {
 }
 
 async function loadPublicProfiles(client, data) {
+    if (networkTrackerConfigured()) {
+        const playerIds = CHAMPION_MODES.flatMap(({ id }) =>
+            (data?.modes?.[id]?.players || []).map((player) => player.playerId)
+        );
+        const result = await fetchNetworkProfiles({ playerIds, includeOwner: true });
+        return result.error ? [] : result.data;
+    }
     if (!client) return [];
     const columns =
         "id, username, avatar_url, display_name, minecraft_player_name, minecraft_player_id, avatar_source, custom_avatar_url, pfp_border, profile_title, unlocked_titles";
@@ -225,7 +240,12 @@ async function loadCosmeticCatalog(client) {
         .select("cosmetic_type, cosmetic_id, rarity, image_url, title_text, border_inset")
         .order("sort_order", { ascending: true });
     if (result.error) return new Map();
-    return new Map((result.data || []).map((item) => [`${item.cosmetic_type}:${item.cosmetic_id}`, item]));
+    return new Map(
+        (result.data || []).map((item) => [
+            `${item.cosmetic_type}:${item.cosmetic_id}`,
+            { ...item, image_url: cosmeticArtworkUrl(item.image_url) }
+        ])
+    );
 }
 
 function findAccountProfile(profiles, player) {
@@ -233,7 +253,9 @@ function findAccountProfile(profiles, player) {
     const name = normalizeName(player?.name);
     return (
         profiles.find((profile) => String(profile.minecraft_player_id || "") === playerId) ||
-        profiles.find((profile) => normalizeName(profile.minecraft_player_name) === name) ||
+        (!networkTrackerConfigured()
+            ? profiles.find((profile) => normalizeName(profile.minecraft_player_name) === name)
+            : null) ||
         null
     );
 }

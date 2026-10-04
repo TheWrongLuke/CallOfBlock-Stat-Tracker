@@ -6,6 +6,7 @@ import { createRequestSignal } from "../utils/request-timeout.js";
 import { networkTrackerConfigured, fetchNetworkTracker } from "../api/network-tracker.js";
 import { networkAccountRequest } from "../api/network-account.js";
 import { applyNetworkAccountProjection } from "./network-profile.js";
+import { cosmeticArtworkUrl } from "./cosmetic-artwork.js";
 import { updateDrawerContent, renderProfileDrawerActions } from "./profile-drawer.js";
 import { renderAccountProgress, renderAccountAccessLinks } from "./account-view.js";
 import { discordAvatarCandidates, discordDefaultAvatarUrl, uniqueImageUrls } from "../utils/avatar-url.js";
@@ -406,7 +407,7 @@ async function resolveShellProfile(client, profile) {
     return {
         ...profile,
         resolved_avatar_url: avatarUrl,
-        resolved_border_url: border?.image_url || "",
+        resolved_border_url: cosmeticArtworkUrl(border?.image_url || ""),
         resolved_border_inset: border?.border_inset || 0,
         resolved_title_text: title?.title_text || (titleId === "none" ? "" : titleId.replaceAll("_", " ")),
         resolved_title_rarity: title?.rarity || "common"
@@ -557,7 +558,7 @@ function renderAccountPanel(shell, host) {
     };
 }
 
-function renderShellAvatar(profile, avatar, name) {
+export function renderShellAvatar(profile, avatar, name, className = "") {
     const border = safeCssUrl(profile.resolved_border_url);
     const inset = Math.max(0, Math.min(25, number(profile.resolved_border_inset)));
     const frameClass = border ? " avatar-frame-image" : "";
@@ -573,7 +574,7 @@ function renderShellAvatar(profile, avatar, name) {
         "/assets/branding/icon-256.webp"
     ]).filter((candidate) => candidate !== avatar);
     const fallbackData = escapeHtml(JSON.stringify(fallbacks));
-    return `<span class="account-avatar-frame${frameClass}"${frameStyle}><span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials(name))}</span>${avatar ? `<img class="avatar-image" src="${escapeHtml(avatar)}" alt="" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackData}">` : ""}</span>`;
+    return `<span class="account-avatar-frame${frameClass}${className ? ` ${escapeHtml(className)}` : ""}"${frameStyle}><span class="avatar-image-fallback" aria-hidden="true">${escapeHtml(initials(name))}</span>${avatar ? `<img class="avatar-image" src="${escapeHtml(avatar)}" alt="" decoding="async" referrerpolicy="no-referrer" data-avatar-fallbacks="${fallbackData}">` : ""}</span>`;
 }
 
 function updateAdminStoreLinks(profile) {

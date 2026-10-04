@@ -22,6 +22,7 @@ import { PLAYTEST_MODE_OPTIONS, labelToDbModePreference, dbModePreferenceToLabel
 import { applyNetworkAccountProjection, mergeSavedAccountProfile } from "./core/network-profile.js";
 import { updateDrawerContent, renderProfileDrawerActions } from "./core/profile-drawer.js";
 import { networkTrackerConfigured, networkTrackerUrl, fetchNetworkTracker } from "./api/network-tracker.js";
+import { fetchNetworkProfiles } from "./api/network-profiles.js";
 import { ADMIN_ROUTES, ADMIN_VIEWS, adminRedirect } from "./core/admin-routes.js";
 import { canOpenAdminRoute, isAdminProfile } from "./auth/permissions.js";
 import {
@@ -3331,7 +3332,7 @@ async function refreshAccountProfilesAfterAuth() {
 }
 
 async function loadAccountProfilesNow(target, generation) {
-    if (!state.authClient) {
+    if (!state.authClient && !networkTrackerConfigured()) {
         state.accountProfiles = [];
         state.accountProfilesReady = true;
         rebuildAccountProfileIndex();
@@ -3341,8 +3342,9 @@ async function loadAccountProfilesNow(target, generation) {
     try {
         const { data, error } = await fetchPublicProfiles({
             minecraftNames: target.names,
+            playerIds: target.playerIds,
             includeOwner: true,
-            limit: target.names.length + 2
+            limit: Math.max(target.names.length, target.playerIds.length) + 2
         });
         if (error) throw error;
         const profileIds = [
@@ -3375,18 +3377,22 @@ async function loadAccountProfilesNow(target, generation) {
 
 function accountProfileQueryTarget() {
     const names = new Set(["RTXLuke"]);
+    const playerIds = new Set();
     for (const profile of Array.isArray(state.data?.profiles) ? state.data.profiles : []) {
+        if (/^p_[a-f0-9]{12}$/.test(profile?.playerId || "")) playerIds.add(profile.playerId);
         const name = cleanMinecraftName(profile?.name);
         if (name) names.add(name);
     }
     for (const mode of Object.values(state.data?.modes || {})) {
         for (const player of Array.isArray(mode?.players) ? mode.players : []) {
+            if (/^p_[a-f0-9]{12}$/.test(player?.playerId || "")) playerIds.add(player.playerId);
             const name = cleanMinecraftName(player?.name);
             if (name) names.add(name);
         }
     }
     const sorted = [...names].sort((first, second) => first.localeCompare(second));
-    return { names: sorted, key: sorted.map((name) => name.toLowerCase()).join("|") };
+    const ids = [...playerIds].sort();
+    return { names: sorted, playerIds: ids, key: `${ids.join("|")}:${sorted.map((name) => name.toLowerCase()).join("|")}` };
 }
 
 function cleanMinecraftName(value) {
@@ -3776,7 +3782,8 @@ async function loadProfilesForVoteRows(availabilityRows) {
     return new Map((rows || []).map((profile) => [profile.id, profile]));
 }
 
-async function fetchPublicProfiles({ userIds = null, minecraftNames = null, includeOwner = false, limit = 0 } = {}) {
+async function fetchPublicProfiles({ userIds = null, playerIds = null, minecraftNames = null, includeOwner = false, limit = 0 } = {}) {
+    if (networkTrackerConfigured()) return fetchNetworkProfiles({ userIds, playerIds, includeOwner, limit });
     if (!state.authClient) return { data: [], error: null };
 
     const run = async (table, columns) => {

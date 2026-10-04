@@ -2990,6 +2990,83 @@ test("linked Minecraft UUID drives skins while unlinked missions remain visible 
     }
 });
 
+for (const viewer of ["guest", "another account"]) {
+    test(`public customization and UUID skins are consistent for ${viewer}`, async ({ page }) => {
+        const playerId = "p_6469f76b9499",
+            accountId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+        const data = JSON.parse(JSON.stringify(statsExportFixture).replaceAll("sample-ryukai79", playerId));
+        data.environment = "TEST";
+        await installPageStubs(page, viewer === "guest" ? supabaseStub : memberSupabaseStub);
+        await page.route("**/api-config.js*", (route) =>
+            route.fulfill({
+                contentType: "text/javascript",
+                body:
+                    configStub +
+                    '\nwindow.COB_STATS_ENVIRONMENT="TEST";window.COB_NETWORK_STATS_API_URL=location.origin+"/functions/v1/network-stats";'
+            })
+        );
+        let avatarSource = "discord",
+            requests = 0;
+        const avatar = "https://cdn.discordapp.com/avatars/123456789012345678/abcdef1234567890.png";
+        await page.route("https://cdn.discordapp.com/**", (route) =>
+            route.fulfill({ contentType: "image/png", body: transparentPng })
+        );
+        await page.route("**/network-stats/network/**", (route) => {
+            const url = new URL(route.request().url());
+            if (url.pathname.endsWith("/accounts")) {
+                requests++;
+                return route.fulfill({
+                    contentType: "application/json",
+                    body: JSON.stringify({
+                        environment: "TEST",
+                        profiles: [
+                            {
+                                id: accountId,
+                                username: "kiraval",
+                                display_name: "Public Operator",
+                                minecraft_player_name: "Ryukai79",
+                                minecraft_player_id: playerId,
+                                minecraft_player_uuid: "4d8a51b6-1cfd-4cbc-8527-97eda0c4202d",
+                                network_stats_environment: "TEST",
+                                avatar_source: avatarSource,
+                                avatar_url: avatar,
+                                profile_background: "night",
+                                pfp_border: "green",
+                                profile_title: "owner",
+                                selected_badges: ["owner"],
+                                unlocked_badges: ["owner"],
+                                unlocked_backgrounds: ["night"],
+                                unlocked_pfp_borders: ["green"],
+                                unlocked_icons: ["discord", "minecraft"],
+                                unlocked_titles: ["owner"],
+                                xp: 1550,
+                                created_at: "2026-07-01T12:00:00Z"
+                            }
+                        ]
+                    })
+                });
+            }
+            return route.fulfill({ contentType: "application/json", body: JSON.stringify(data) });
+        });
+        await page.goto(`/stats/#player=${playerId}&tab=overview`);
+        const hero = page.locator(".player-profile-hero");
+        await expect(hero).toContainText("Linked Account");
+        await expect(hero).toContainText("Public Operator");
+        await expect(hero).toContainText("1,550");
+        await expect(hero).not.toContainText("No website account linked yet");
+        await expect(hero).toHaveClass(/profile-bg-night/);
+        await expect(hero.locator(".avatar-frame-image")).toBeVisible();
+        await expect(hero.locator(".account-badge-row img")).toHaveCount(1);
+        await expect(hero.locator(`img[src*='123456789012345678']`)).toBeVisible();
+        await page.screenshot({ path: test.info().outputPath("public-customization.png"), fullPage: false });
+        avatarSource = "minecraft";
+        await page.reload();
+        await expect(hero.locator("img[src*='4d8a51b61cfd4cbc852797eda0c4202d']")).toBeVisible();
+        await expect(hero.locator("img[src*='kiraval']")).toHaveCount(0);
+        expect(requests).toBeGreaterThanOrEqual(2);
+    });
+}
+
 test("drawer refresh retains its animated shell, scroll and focus without reopening a closed panel", async ({
     page
 }) => {
