@@ -2389,7 +2389,7 @@ test("Discord avatars support animation and stale URLs fall back without breakin
     await page.locator('[data-cosmetic-picker-open="icon"]').click();
     await expect(page.locator('[data-cosmetic-option="default"] img')).toHaveAttribute(
         "src",
-        "/assets/branding/icon-256.webp"
+        "/assets/branding/icon-256.webp?v=cob2-20261004"
     );
     await expect(page.locator('[data-cosmetic-option="discord"] img')).toHaveAttribute(
         "src",

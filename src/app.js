@@ -1,6 +1,7 @@
 import { createFeedbackApi } from "./api/feedback.js";
 import { captureFormDraft, captureAccountDraft, restoreFormDraft } from "./core/form-draft.js";
 import { minecraftSkinIdentity, skinHeadUrl, alternateSkinHeadUrl } from "./core/minecraft-avatar.js";
+import { cosmeticArtworkUrl } from "./core/cosmetic-artwork.js";
 import { PLAYTEST_ADMIN_STATUSES, validatePlaytestDraft, playtestRoster, rosterCsv } from "./core/playtest-admin.js";
 import { weeklyMissionProgress, progressionStats } from "./core/weekly-mission-progress.js";
 import { GAMEPLAY_MODES, progressionModeKeys } from "./core/progression-modes.js";
@@ -84,7 +85,7 @@ window.addEventListener("focus", () => {
 globalThis.__cobPerformanceDiagnostics = performanceDiagnostics;
 const STATS_REQUEST_TIMEOUT_MS = 4_500;
 const STATUS_REQUEST_TIMEOUT_MS = 2_500;
-const CALL_OF_BLOCK_ICON_URL = "/assets/branding/icon-256.webp";
+const CALL_OF_BLOCK_ICON_URL = "/assets/branding/icon-256.webp?v=cob2-20261004";
 
 let feedbackFeatureLoadPromise = null;
 let feedbackDraftSession = createEmptyFeedbackDraftSession();
@@ -379,9 +380,13 @@ const PROFILE_BACKGROUNDS = [
         unlock: "veteran",
         image: "./assets/profile-backgrounds/night-ops.png"
     },
+    {
+        id: "private_playtester", label: "Private Playtester", category: "Exclusive", rarity: "epic",
+        unlock: "inventory", image: "./assets/profile-backgrounds/private-playtester.png"
+    },
     { id: "custom", label: "Custom image", category: "Personal", rarity: "common", unlock: "custom" },
     ...storeCatalogEntries("background")
-];
+].map((entry) => ({ ...entry, image: entry.image ? cosmeticArtworkUrl(entry.image) : entry.image }));
 const PFP_BORDERS = [
     {
         id: "none",
@@ -428,8 +433,12 @@ const PFP_BORDERS = [
         image: "./assets/pfp-borders/red.png",
         inset: 0
     },
+    {
+        id: "private_playtester", label: "Private Playtester", category: "Exclusive", rarity: "epic",
+        unlock: "inventory", image: "./assets/pfp-borders/private-playtester.png", inset: 0
+    },
     ...storeCatalogEntries("border")
-];
+].map((entry) => ({ ...entry, image: entry.image ? cosmeticArtworkUrl(entry.image) : entry.image }));
 const PROFILE_TITLES = [
     { id: "none", label: "No title", text: "", category: "Default", rarity: "common", unlock: "default" },
     { id: "owner", label: "Owner", text: "Owner", category: "Exclusive", rarity: "mythic", unlock: "inventory" },
@@ -4341,7 +4350,7 @@ function renderCreatorIdentity() {
     if (!(image instanceof HTMLImageElement)) return;
     const account = creatorAccountProfile();
     const profile = account ? accountLinkedStatsProfile(account) : null;
-    image.src = account ? accountAvatarUrl(account, profile, 160) : "./assets/branding/icon-256.webp";
+    image.src = account ? accountAvatarUrl(account, profile, 160) : CALL_OF_BLOCK_ICON_URL;
     image.alt = account ? `${accountDisplayName(account)} profile icon` : "Creator profile icon";
 }
 
@@ -7270,7 +7279,7 @@ function normalizeCosmeticCatalogRow(value) {
                 .trim()
                 .slice(0, 40) || "Store",
         rarity: cleanRarity(value?.rarity),
-        image: imageUrl,
+        image: cosmeticArtworkUrl(imageUrl),
         text: String(value?.title_text || value?.text || name)
             .trim()
             .slice(0, 48),
