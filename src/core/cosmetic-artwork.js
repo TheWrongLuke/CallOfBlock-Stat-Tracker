@@ -17,3 +17,13 @@ export function cosmeticArtworkUrl(value, origin = globalThis.location?.origin |
         return value;
     }
 }
+
+export function cosmeticBorderUrl(selection, item, base = globalThis.document?.baseURI || "https://callofblock.com/") {
+    if (!selection || selection === "none" || !item?.image_url) return "";
+    try {
+        const url = new URL(cosmeticArtworkUrl(item.image_url, new URL(base).origin), base);
+        return ["https:", "http:"].includes(url.protocol) ? url.href.replaceAll("'", "%27") : "";
+    } catch {
+        return "";
+    }
+}

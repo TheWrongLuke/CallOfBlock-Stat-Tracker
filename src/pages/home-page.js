@@ -12,7 +12,7 @@ import { adminRedirect } from "../core/admin-routes.js";
 import { gameModeLabel, matchGameMode, modernizeModeText } from "../core/game-modes.js";
 import { networkTrackerConfigured } from "../api/network-tracker.js";
 import { fetchNetworkProfiles } from "../api/network-profiles.js";
-import { cosmeticArtworkUrl } from "../core/cosmetic-artwork.js";
+import { cosmeticArtworkUrl, cosmeticBorderUrl } from "../core/cosmetic-artwork.js?v=public-profile-1";
 
 const CHAMPION_ROTATE_MS = 5000;
 const STATS_SLICE_UPDATED_EVENT = "cob:stats-slice-updated";
@@ -83,7 +83,7 @@ function resolveShellProfile(profile, catalog) {
     return {
         ...profile,
         resolved_avatar_url: profileAvatar(profile, { name: profile.minecraft_player_name }, catalog, 96),
-        resolved_border_url: border?.image_url || "",
+        resolved_border_url: cosmeticBorderUrl(profile.pfp_border, border),
         resolved_border_inset: border?.border_inset || 0,
         resolved_title_text: title?.title_text || (titleId === "none" ? "" : titleId.replaceAll("_", " ")),
         resolved_title_rarity: title?.rarity || "common"
@@ -113,7 +113,7 @@ function renderFeaturedList(mode, data, profiles, catalog) {
             const avatar = avatarCandidates[0] || CALL_OF_BLOCK_ICON_URL;
             const title = profileTitle(profile, catalog);
             const border = catalog.get(`border:${String(profile?.pfp_border || "none")}`);
-            const borderUrl = String(border?.image_url || "");
+            const borderUrl = cosmeticBorderUrl(profile?.pfp_border, border);
             const frameStyle = borderUrl
                 ? ` style="--avatar-frame-image: url('${escapeHtml(borderUrl.replaceAll("'", "%27"))}'); --avatar-frame-inset: ${Math.max(0, Math.min(25, number(border?.border_inset)))}%"`
                 : "";

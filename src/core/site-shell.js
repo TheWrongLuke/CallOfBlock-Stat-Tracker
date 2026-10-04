@@ -6,7 +6,7 @@ import { createRequestSignal } from "../utils/request-timeout.js";
 import { networkTrackerConfigured, fetchNetworkTracker } from "../api/network-tracker.js";
 import { networkAccountRequest } from "../api/network-account.js";
 import { applyNetworkAccountProjection } from "./network-profile.js";
-import { cosmeticArtworkUrl } from "./cosmetic-artwork.js";
+import { cosmeticBorderUrl } from "./cosmetic-artwork.js?v=public-profile-1";
 import { updateDrawerContent, renderProfileDrawerActions } from "./profile-drawer.js";
 import { renderAccountProgress, renderAccountAccessLinks } from "./account-view.js";
 import { discordAvatarCandidates, discordDefaultAvatarUrl, uniqueImageUrls } from "../utils/avatar-url.js";
@@ -407,7 +407,7 @@ async function resolveShellProfile(client, profile) {
     return {
         ...profile,
         resolved_avatar_url: avatarUrl,
-        resolved_border_url: cosmeticArtworkUrl(border?.image_url || ""),
+        resolved_border_url: cosmeticBorderUrl(profile.pfp_border, border),
         resolved_border_inset: border?.border_inset || 0,
         resolved_title_text: title?.title_text || (titleId === "none" ? "" : titleId.replaceAll("_", " ")),
         resolved_title_rarity: title?.rarity || "common"
