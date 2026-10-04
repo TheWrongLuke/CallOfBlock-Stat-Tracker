@@ -15043,7 +15043,8 @@ function renderHistorySidebarEntry(entry, type) {
     const derived = normalizeDerived(entry?.derived, stats);
     if (type === "maps") {
         const map = findTacticalMap({ mapId: entry?.id, label: entry?.label });
-        const background = map?.imageUrl ? ` style="--summary-map-image: url('${escapeHtml(map.imageUrl)}')"` : "";
+        const imageUrl = safeCssUrl(map?.imageUrl);
+        const background = imageUrl ? ` style="--summary-map-image: url('${escapeHtml(imageUrl)}')"` : "";
         return `
             <li class="profile-map-summary"${background}>
                 <span>${escapeHtml(entry?.label || entry?.id || "Unknown map")}</span>

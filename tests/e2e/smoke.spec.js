@@ -1439,6 +1439,27 @@ test("a player profile can be opened from existing test data", async ({ page }) 
     await expect(page.locator("#player-view")).toContainText("Collateral Headshot Kills");
 });
 
+test("history map thumbnails resolve against the page rather than the stylesheet directory", async ({ page }) => {
+    const payload = structuredClone(statsExportFixture);
+    const profile = payload.profiles.find((entry) => entry.battleRoyale);
+    profile.teamDeathmatch = {
+        stats: { games: 1, wins: 1, kills: 8 },
+        details: { maps: [{ id: "shmar", label: "Shmar", stats: { games: 1, wins: 1 } }] }
+    };
+    await installPageStubs(page, supabaseStub, payload);
+    await page.goto(`/stats/#player=${encodeURIComponent(profile.playerId)}&tab=history&profileMode=teamDeathmatch`);
+    const thumbnail = page.locator(".profile-map-summary").first();
+    await expect(thumbnail).toContainText("Shmar");
+    const url = await thumbnail.evaluate((element) => {
+        const value = element.style.getPropertyValue("--summary-map-image");
+        return value.slice(5, -2);
+    });
+    expect(new URL(url).pathname).toBe("/assets/maps/shmar.png");
+    const response = await page.request.get(url);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()["content-type"]).toContain("image/png");
+});
+
 test("profile percentile context is real, rank-first for small populations, and keyboard accessible", async ({
     page
 }) => {
