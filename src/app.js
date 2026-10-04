@@ -14145,7 +14145,8 @@ function accountBadgeState(account, profile) {
     const stats = account?.network_stats_environment === "TEST"
         ? combineStats(...Object.values(modes).map(mode => mode.stats)) : normalizeStats(overall?.stats);
     const derived = account?.network_stats_environment === "TEST" ? derivedFromStats(stats) : normalizeDerived(overall?.derived, stats);
-    const context = { account, linked, profile: linkedProfile, overall, br, dm, modes, stats, derived };
+    const pvpStats = combineStats(...["battleRoyale", "teamDeathmatch", "freeForAll", "duel"].map(mode => modes[mode].stats));
+    const context = { account, linked, profile: linkedProfile, overall, br, dm, modes, stats, pvpStats, derived };
     if (account?.network_stats_environment === "TEST") {
         return { unlockedIds: new Set(arrayField(account.unlocked_badges)), context };
     }
@@ -16257,7 +16258,7 @@ function normalizeSpecialHistoryEntry(entry, playerId) {
         normalizeSpecialParticipant(participant, mode)
     );
     const ownParticipant = participants.find((participant) => participant.playerId === playerId);
-    const telemetry = fullMatch?.telemetry || {};
+    const telemetry = fullMatch?.telemetry || entry?.telemetry || {};
     const lastSurvivor =
         mode === "zombieSurvival"
             ? participants.find(

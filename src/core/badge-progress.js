@@ -63,7 +63,7 @@ export function badgeMetricValue(metric, context) {
                   ? context?.account
                   : metric.scope === "profile"
                     ? context?.profile
-                    : context?.stats;
+                    : (context?.pvpStats ?? context?.stats);
     const camelStat = String(metric.stat || "").replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
     let value = number(source?.[metric.stat] ?? source?.[camelStat]);
     if (metric.transform === "hours") value /= 3600;

@@ -5,6 +5,15 @@ const normalize = (stats) => ({ ...stats, games: stats?.games ?? stats?.matches 
 const badge = (id) => BADGE_CATALOG.find((item) => item.id === id);
 
 describe("shared badge rule evaluation", () => {
+    it("excludes Zombie counters from overall PvP badges without hiding raw stats", () => {
+        const context = {
+            stats: { headshotKills: 60, longestKillDistance: 500 },
+            pvpStats: { headshotKills: 0, longestKillDistance: 0 }
+        };
+        expect(badgeTierState(badge("headshot_kills_counter"), context, normalize).currentIndex).toBe(-1);
+        expect(badgeMetricValue({ scope: "overall", stat: "longestKillDistance" }, context)).toBe(0);
+        expect(context.stats.headshotKills).toBe(60);
+    });
     it("uses existing counter thresholds and reevaluates tiers after a void", () => {
         const item = badge("br_wins_counter");
         expect(badgeTierState(item, { br: { stats: { wins: 10 } } }, normalize).currentIndex).toBe(1);

@@ -97,7 +97,7 @@ export function createMatchDetailPage({
             viewerSummary = getViewerSummary(id) || viewerSummary;
             return;
         }
-        if (!force && sameMatch && (telemetry || summary?.hasTelemetry === false)) return;
+        if (!force && sameMatch && telemetry) return;
         telemetryRequestController?.abort();
         telemetryRequestController = null;
         loadingMatchId = "";
@@ -111,10 +111,6 @@ export function createMatchDetailPage({
         lastEventFeedKey = "";
         replayState = { loading: false, available: null, replays: [], error: "", message: "" };
         const token = ++requestToken;
-        if (summary && summary.hasTelemetry === false) {
-            renderLegacy();
-            return;
-        }
         renderLoading();
         const controller = new AbortController();
         telemetryRequestController = controller;

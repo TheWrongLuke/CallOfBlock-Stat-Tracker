@@ -3204,6 +3204,28 @@ test("Shmar fits short and tall viewports including fullscreen without distortin
     }
 });
 
+test("stale history metadata never suppresses an available Zombie tactical replay", async ({ page }) => {
+    await openApp(page);
+    await page.evaluate(async (fixture) => {
+        const { createMatchDetailPage } = await import("/src/match/match-detail.js");
+        const { normalizeMatchTelemetry } = await import("/src/match/match-telemetry-normalizer.js");
+        const container = document.createElement("section");
+        container.id = "stale-replay-test";
+        document.querySelector("main").append(container);
+        const view = createMatchDetailPage({
+            container,
+            getSummary: () => ({ matchId: fixture.matchId, mode: "zombieSurvival", hasTelemetry: false }),
+            api: { load: async () => normalizeMatchTelemetry(fixture, fixture.matchId) },
+            replayApi: { list: async () => ({ available: true, replays: [] }) }
+        });
+        await view.open(fixture.matchId);
+    }, zombieTelemetryFixture);
+    const view = page.locator("#stale-replay-test");
+    await expect(view.locator(".tactical-map-image")).toBeVisible();
+    await expect(view.locator("[data-match-play]")).toBeEnabled();
+    await expect(view).not.toContainText("Tactical playback unavailable");
+});
+
 test("tactical playback opens every current mode with its own label", async ({ page }) => {
     const source = JSON.parse(
         readFileSync(new URL("../fixtures/match-telemetry/fixture-dm.json", import.meta.url), "utf8")
