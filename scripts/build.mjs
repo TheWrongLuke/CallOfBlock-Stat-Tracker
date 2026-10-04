@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { transform } from "lightningcss";
 import { publicNetworkRuntime } from "./network-runtime-config.mjs";
 import { isPublicBuildFile } from "./public-build-files.mjs";
+import { copyClientRelease } from "./client-updates.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptDirectory, "..");
@@ -19,6 +20,7 @@ if (path.dirname(output) !== root || path.basename(output) !== "dist") {
 
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
+await copyClientRelease(root, output);
 
 const publicFiles = ["robots.txt", "sitemap.xml", "site.webmanifest"];
 const directories = ["assets", "data", "src"];
