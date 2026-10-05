@@ -2,6 +2,7 @@ import { createFeedbackApi } from "./api/feedback.js";
 import { captureFormDraft, captureAccountDraft, restoreFormDraft } from "./core/form-draft.js";
 import { minecraftSkinIdentity, skinHeadUrl, alternateSkinHeadUrl } from "./core/minecraft-avatar.js";
 import { cosmeticArtworkUrl } from "./core/cosmetic-artwork.js";
+import { notificationKind, rewardPopupEligible } from "./core/notification-kinds.js";
 import { PLAYTEST_ADMIN_STATUSES, validatePlaytestDraft, playtestRoster, rosterCsv } from "./core/playtest-admin.js";
 import { weeklyMissionProgress, progressionStats } from "./core/weekly-mission-progress.js";
 import { GAMEPLAY_MODES, progressionModeKeys } from "./core/progression-modes.js";
@@ -79,9 +80,11 @@ const performanceDiagnostics = createPerformanceDiagnostics();
 
 window.setInterval(() => {
     if (!document.hidden && (state.accountPanelOpen || state.view === "account")) void syncWeeklyMissions();
+    if (!document.hidden && state.authSession?.user) void loadOwnNotifications({ force: true });
 }, 30_000);
 window.addEventListener("focus", () => {
     if (state.accountPanelOpen || state.view === "account") void syncWeeklyMissions();
+    if (state.authSession?.user) void loadOwnNotifications({ force: true });
 });
 globalThis.__cobPerformanceDiagnostics = performanceDiagnostics;
 const STATS_REQUEST_TIMEOUT_MS = 4_500;
@@ -3466,11 +3469,13 @@ async function loadOwnNotifications({ force = false, showPopup = true } = {}) {
     if (!notifications.api || !state.authSession?.user || notifications.loading || (notifications.loaded && !force))
         return;
     notifications.loading = true;
+    const userId = state.authSession.user.id;
     notifications.error = "";
     renderNotificationSurfaces();
 
     try {
         const result = await notifications.api.listOwn();
+        if (state.authSession?.user?.id !== userId) return;
         if (result.error) throw result.error;
         notifications.items = (Array.isArray(result.data) ? result.data : [])
             .map(normalizeAccountNotification)
@@ -3481,6 +3486,7 @@ async function loadOwnNotifications({ force = false, showPopup = true } = {}) {
         }
         if (showPopup) openNextGiftPopup();
     } catch (error) {
+        if (state.authSession?.user?.id !== userId) return;
         if (notificationSchemaMissing(error)) {
             notifications.ready = false;
             notifications.items = [];
@@ -3489,19 +3495,21 @@ async function loadOwnNotifications({ force = false, showPopup = true } = {}) {
             notifications.error = "Notifications could not be loaded right now.";
         }
     } finally {
-        notifications.loaded = true;
-        notifications.loading = false;
-        renderNotificationSurfaces();
+        if (state.authSession?.user?.id === userId) {
+            notifications.loaded = true;
+            notifications.loading = false;
+            renderNotificationSurfaces();
+        }
     }
 }
 
 function normalizeAccountNotification(row) {
     const id = String(row?.id || "").trim();
-    const type = String(row?.notification_type || "").trim();
-    if (!id || !["cosmetic_gift", "system"].includes(type)) return null;
+    const type = notificationKind(row);
+    if (!id || !type) return null;
     const cosmeticType = String(row?.cosmetic_type || "").trim();
     const cosmeticId = String(row?.cosmetic_id || "").trim();
-    const cosmetic = cosmeticType && cosmeticId ? progressionCatalogItem(`${cosmeticType}:${cosmeticId}`) : null;
+    const cosmetic = cosmeticType && cosmeticId ? cosmeticCatalogItem(cosmeticType, cosmeticId) : null;
     return {
         id,
         type,
@@ -3520,10 +3528,10 @@ function normalizeAccountNotification(row) {
         readAt: String(row?.read_at || ""),
         claimedAt: String(row?.claimed_at || ""),
         createdAt: String(row?.created_at || ""),
-        cosmeticName: String(row?.cosmetic_name || cosmetic?.name || cosmetic?.label || cosmeticId)
+        cosmeticName: String(cosmetic?.name || cosmetic?.label || row?.cosmetic_name || cosmeticId)
             .trim()
             .slice(0, 80),
-        cosmeticImage: String(cosmetic?.image || "").trim(),
+        cosmeticImage: String(cosmeticType === "badge" && cosmetic ? badgeIconUrl(cosmetic) : cosmetic?.image || "").trim(),
         cosmeticText: String(cosmetic?.text || cosmetic?.name || cosmetic?.label || "")
             .trim()
             .slice(0, 80),
@@ -3545,7 +3553,7 @@ function openNextGiftPopup() {
     if (notifications.giftPopupId) return;
     const seen = notificationPopupSeenIds();
     const gift = notifications.items.find(
-        (item) => item.type === "cosmetic_gift" && !item.claimedAt && !item.readAt && !seen.has(item.id)
+        (item) => rewardPopupEligible(item, seen)
     );
     if (!gift) return;
     notifications.giftPopupId = gift.id;
@@ -4614,6 +4622,7 @@ function renderNotificationGiftDialog() {
 
 function closeNotificationGiftDialog() {
     state.notifications.giftPopupId = "";
+    openNextGiftPopup();
     renderNotificationGiftDialog();
     window.requestAnimationFrame(() => document.querySelector("[data-notification-panel-open]")?.focus());
 }
@@ -10494,7 +10503,8 @@ function renderPlaytestAdmin(playtest) {
                         <span>Other featured dates</span>
                         <textarea name="alternativeSlots" rows="3" placeholder="YYYY-MM-DDTHH:MM">${escapeHtml(draft.alternativeSlots || "")}</textarea>
                     </label>
-                    <label><span>Duration (minutes)</span><input name="durationMinutes" type="number" min="15" max="720" step="1" value="${escapeHtml(draft.durationMinutes || 120)}" required></label>`}
+                    <label><span>Duration (minutes)</span><input name="durationMinutes" type="number" min="15" max="720" step="1" value="${escapeHtml(draft.durationMinutes || 120)}" required></label>
+                    <label class="checkbox-row"><input name="notifyMembers" type="checkbox" ${draft.notifyMembers === "on" || draft.notifyMembers === true ? "checked" : ""}><span>Notify members in their website inbox</span></label>`}
                     <label>
                         <span>Status</span>
                         <select name="status">
@@ -11355,13 +11365,14 @@ async function handlePlaytestSubmit(event) {
             // Keep the ID even if an uncertain response is followed by a draft edit.
             // The database rejects a conflicting retry instead of creating a second event.
             state.playtests.createRequest ||= { id: crypto.randomUUID() };
-            const { data, error } = await state.authClient.rpc("admin_create_playtest", {
+            const { data, error } = await state.authClient.rpc("admin_create_playtest_with_notifications", {
                 p_request_id: state.playtests.createRequest.id,
                 p_title: validated.title,
                 p_description: validated.description,
                 p_status: validated.status,
                 p_starts: validated.starts,
-                p_duration_minutes: validated.durationMinutes
+                p_duration_minutes: validated.durationMinutes,
+                p_notify_members: validated.notifyMembers
             });
             if (error) throw error;
             state.playtests.activeId = data;

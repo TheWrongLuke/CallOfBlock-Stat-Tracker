@@ -407,7 +407,7 @@ const playtestAdminSupabaseStub = adminSupabaseStub
     .replace(
         "rpc: async (name, args = {}) => {",
         `rpc: async (name, args = {}) => {
-    if (name === "admin_create_playtest") {
+    if (name === "admin_create_playtest_with_notifications") {
         window.__playtestCreateCalls = window.__playtestCreateCalls || [];
         window.__playtestCreateCalls.push(args);
         if (!window.__playtestEvents.some(row => row.id === args.p_request_id)) {
@@ -2034,6 +2034,7 @@ test("playtest admin creates atomically and retries the same ID after a lost res
     const form = page.locator("#playtest-create-form");
     await form.locator('[name="title"]').fill("Private BR test");
     await form.locator('[name="mainSlot"]').fill("2030-10-03T19:00");
+    await form.locator('[name="notifyMembers"]').check();
     await form.locator('[name="alternativeSlots"]').fill("bad date");
     await form.locator('button[type="submit"]').click();
     await expect(page.locator("#playtest-admin [role='alert']")).toContainText("Date 2");
@@ -2054,6 +2055,8 @@ test("playtest admin creates atomically and retries the same ID after a lost res
     }));
     expect(result.calls).toHaveLength(2);
     expect(result.calls[0].p_request_id).toBe(result.calls[1].p_request_id);
+    expect(result.calls[0].p_notify_members).toBe(true);
+    expect(result.calls[1].p_notify_members).toBe(true);
     expect(result.events.filter((row) => row.title === "Private BR test")).toHaveLength(1);
     expect(result.slots.filter((row) => row.playtest_id === result.calls[0].p_request_id)).toHaveLength(2);
 });
@@ -2327,6 +2330,22 @@ test("an administrator can search players, inspect collections, and open protect
     await expect(page.locator('[data-player-ban-form] textarea[name="reason"]')).toBeVisible();
     await page.locator("[data-player-ban-close]").click();
     await expect(page.locator("[data-player-ban-form]")).toBeHidden();
+});
+
+test("earned cosmetics show a reward popup without a second claim", async ({ page }) => {
+    const earnedStub = giftSupabaseStub.replace('notification_type: "cosmetic_gift"', 'notification_type: "system"')
+        .replace('gift_source: "friend"', 'gift_source: "unlock"');
+    await installPageStubs(page, earnedStub);
+    await page.goto("/");
+    const dialog = page.locator(".notification-gift-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("Reward Unlocked");
+    await expect(dialog.locator("[data-notification-claim]")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await page.locator("[data-notification-panel-open]").click();
+    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+    await expect(page.locator(".notification-item")).toContainText("Reward unlocked");
 });
 
 test("a cosmetic gift opens once and remains manageable in the private notification inbox", async ({ page }) => {

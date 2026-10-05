@@ -14,6 +14,12 @@ describe("playtest admin", () => {
         const result = validatePlaytestDraft(draft, 0);
         expect(result.starts).toEqual([new Date(draft.mainSlot).toISOString()]);
         expect(result.durationMinutes).toBe(90);
+        expect(result.notifyMembers).toBe(false);
+    });
+    it("member announcements are opt-in and survive checkbox drafts", () => {
+        expect(validatePlaytestDraft({ ...draft, notifyMembers: "on" }, 0).notifyMembers).toBe(true);
+        expect(validatePlaytestDraft({ ...draft, notifyMembers: true }, 0).notifyMembers).toBe(true);
+        expect(validatePlaytestDraft({ ...draft, notifyMembers: "false" }, 0).notifyMembers).toBe(false);
     });
     it.each([
         [{ mainSlot: "2030-02-31T18:00" }, "not a valid"],

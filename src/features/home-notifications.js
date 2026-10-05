@@ -1,4 +1,7 @@
 import { createNotificationApi } from "../api/notifications.js";
+import { notificationKind, rewardPopupEligible } from "../core/notification-kinds.js";
+import { BADGE_CATALOG, badgeArtworkUrl } from "../config/badges.js";
+import { cosmeticArtworkUrl } from "../core/cosmetic-artwork.js";
 import { renderGiftNotificationPopup, renderNotificationInbox } from "../views/notifications.js";
 
 const POPUP_SEEN_KEY = "cob_notification_popup_seen_v1";
@@ -30,13 +33,33 @@ async function initialize(client, drawer) {
     drawer.register("notifications", ({ host }) => renderDrawer(state, host));
     drawer.subscribe(() => renderBell(state));
     await loadNotifications(api, state, true);
+    const refresh = () => {
+        if (!document.hidden && !state.loading && !state.busyId) void loadNotifications(api, state, true);
+    };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener("focus", refresh);
+    client.auth?.onAuthStateChange?.((event) => {
+        if (event !== "SIGNED_OUT") return;
+        window.clearInterval(timer);
+        window.removeEventListener("focus", refresh);
+        state.loadVersion++;
+        state.items = [];
+        state.giftId = "";
+        state.loading = false;
+        render(state);
+    });
 }
 
 async function loadNotifications(api, state, showGift) {
     const loadVersion = ++state.loadVersion;
     state.loading = true;
     render(state);
-    const result = await api.listOwn();
+    let result;
+    try {
+        result = await api.listOwn();
+    } catch (error) {
+        result = { error };
+    }
     if (loadVersion !== state.loadVersion) return;
     state.loading = false;
     if (result.error) {
@@ -45,14 +68,9 @@ async function loadNotifications(api, state, showGift) {
         return;
     }
     state.items = (Array.isArray(result.data) ? result.data : []).map(normalizeNotification).filter(Boolean);
-    if (showGift) {
-        const seen = popupSeenIds();
-        state.giftId =
-            state.items.find(
-                (item) => item.type === "cosmetic_gift" && !item.claimedAt && !item.readAt && !seen.has(item.id)
-            )?.id || "";
-        if (state.giftId) markPopupSeen(state.giftId);
-    }
+    state.error = "";
+    if (!state.items.some((item) => item.id === state.giftId && !item.claimedAt)) state.giftId = "";
+    if (showGift) openNextReward(api, state);
     render(state);
 }
 
@@ -81,6 +99,7 @@ async function handleClick(event, api, state) {
     }
     if (target.closest("[data-notification-gift-close]")) {
         state.giftId = "";
+        openNextReward(api, state);
         render(state);
         return;
     }
@@ -124,6 +143,7 @@ async function handleClick(event, api, state) {
     const claim = target.closest("[data-notification-claim]");
     if (claim) {
         const id = claim.dataset.notificationClaim || "";
+        if (state.items.find((item) => item.id === id)?.type !== "cosmetic_gift") return;
         await withBusy(state, id, async () => {
             const result = await api.claimGift(id);
             if (result.error) throw result.error;
@@ -134,6 +154,7 @@ async function handleClick(event, api, state) {
                 state.message = `${item.cosmeticName || "Cosmetic"} was added to your collection.`;
             }
             state.giftId = "";
+            openNextReward(api, state);
         });
     }
 }
@@ -209,11 +230,23 @@ function renderGift(state) {
     host.innerHTML = gift ? renderGiftNotificationPopup(gift, state.busyId === gift.id) : "";
 }
 
+function openNextReward(api, state) {
+    if (state.giftId) return;
+    const seen = popupSeenIds();
+    const item = state.items.find((entry) => rewardPopupEligible(entry, seen));
+    if (!item) return;
+    state.giftId = item.id;
+    markPopupSeen(item.id);
+    item.readAt = new Date().toISOString();
+    void api.markRead(item.id, true).catch(() => {});
+}
+
 function normalizeNotification(row) {
     const id = String(row?.id || "").trim();
-    const type = String(row?.notification_type || "").trim();
-    if (!id || !["cosmetic_gift", "system"].includes(type)) return null;
+    const type = notificationKind(row);
+    if (!id || !type) return null;
     const cosmeticId = String(row?.cosmetic_id || "").trim();
+    const badge = row?.cosmetic_type === "badge" ? BADGE_CATALOG.find((item) => item.id === cosmeticId) : null;
     return {
         id,
         type,
@@ -225,16 +258,16 @@ function normalizeNotification(row) {
         readAt: String(row?.read_at || ""),
         claimedAt: String(row?.claimed_at || ""),
         createdAt: String(row?.created_at || ""),
-        cosmeticName: String(row?.cosmetic_name || cosmeticId || row?.title || "Gift").slice(0, 80),
-        cosmeticImage: safeImageUrl(row?.cosmetic_image_url || row?.image_url),
-        cosmeticText: String(row?.cosmetic_name || cosmeticId || "Gift").slice(0, 80),
+        cosmeticName: String(badge?.label || row?.cosmetic_name || cosmeticId || row?.title || "Gift").slice(0, 80),
+        cosmeticImage: safeImageUrl(badge ? badgeArtworkUrl(badge.id) : cosmeticArtworkUrl(row?.cosmetic_image_url || row?.image_url)),
+        cosmeticText: String(badge?.label || row?.cosmetic_name || cosmeticId || "Gift").slice(0, 80),
         cosmeticRarity: String(row?.cosmetic_rarity || row?.rarity || "common").toLowerCase()
     };
 }
 
 function safeImageUrl(value) {
     const url = String(value || "").trim();
-    return /^https:\/\//i.test(url) || /^\/?assets\//i.test(url) ? url : "";
+    return /^https:\/\//i.test(url) || /^(?:\.\/|\/)?assets\//i.test(url) ? url : "";
 }
 
 function popupSeenIds() {
@@ -249,5 +282,9 @@ function popupSeenIds() {
 function markPopupSeen(id) {
     const seen = popupSeenIds();
     seen.add(id);
-    sessionStorage.setItem(POPUP_SEEN_KEY, JSON.stringify([...seen].slice(-100)));
+    try {
+        sessionStorage.setItem(POPUP_SEEN_KEY, JSON.stringify([...seen].slice(-100)));
+    } catch {
+        // Inbox read state still prevents repeats when browser storage is unavailable.
+    }
 }

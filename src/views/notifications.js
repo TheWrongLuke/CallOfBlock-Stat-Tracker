@@ -38,19 +38,20 @@ export function renderNotificationInbox({
 }
 
 export function renderGiftNotificationPopup(notification, busy = false) {
-    if (!notification || notification.type !== "cosmetic_gift" || notification.claimedAt) return "";
+    if (!notification || !["cosmetic_gift", "unlock", "achievement"].includes(notification.type) || notification.claimedAt) return "";
+    const gift = notification.type === "cosmetic_gift";
     return `
         <div class="notification-gift-backdrop" data-notification-gift-backdrop>
             <section class="notification-gift-dialog rarity-${rarity(notification)}" role="dialog" aria-modal="true" aria-labelledby="notification-gift-title">
                 <button class="notification-gift-close" type="button" data-notification-gift-close aria-label="Close gift notification">X</button>
                 <div class="notification-gift-preview">${renderCosmeticPreview(notification, true)}</div>
-                <p class="panel-kicker">You Got A Gift</p>
+                <p class="panel-kicker">${gift ? "You Got A Gift" : notification.type === "achievement" ? "Achievement Unlocked" : "Reward Unlocked"}</p>
                 <h2 id="notification-gift-title">${escapeHtml(notification.cosmeticName || notification.title || "New cosmetic")}</h2>
                 ${notification.message ? `<p class="notification-gift-message">${escapeHtml(notification.message)}</p>` : ""}
-                <span class="notification-gift-sender">From ${escapeHtml(notification.senderName || "Call of Block")}</span>
+                ${gift ? `<span class="notification-gift-sender">From ${escapeHtml(notification.senderName || "Call of Block")}</span>` : ""}
                 <div class="notification-gift-actions">
                     <button type="button" data-notification-gift-close ${busy ? "disabled" : ""}>Close</button>
-                    <button class="primary" type="button" data-notification-claim="${escapeHtml(notification.id)}" ${busy ? "disabled" : ""}>${busy ? "Claiming..." : "Claim cosmetic"}</button>
+                    ${gift ? `<button class="primary" type="button" data-notification-claim="${escapeHtml(notification.id)}" ${busy ? "disabled" : ""}>${busy ? "Claiming..." : "Claim cosmetic"}</button>` : `<button class="primary" type="button" data-notification-gift-close>Continue</button>`}
                 </div>
             </section>
         </div>
@@ -137,6 +138,9 @@ function renderCosmeticPreview(notification, large = false) {
 
 function notificationKindLabel(notification) {
     if (notification.type === "cosmetic_gift") return notification.claimedAt ? "Cosmetic claimed" : "Cosmetic gift";
+    if (notification.type === "unlock") return "Reward unlocked";
+    if (notification.type === "achievement") return "Achievement unlocked";
+    if (notification.type === "playtest") return "Playtest announcement";
     return "Account update";
 }
 

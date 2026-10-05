@@ -50,4 +50,14 @@ describe("notification views", () => {
         expect(html).toContain('data-notification-claim="gift-1"');
         expect(renderGiftNotificationPopup({ ...gift, claimedAt: "2026-07-19T12:02:00Z" })).toBe("");
     });
+    it("celebrates granted rewards without creating a second claim", () => {
+        for (const type of ["unlock", "achievement"]) {
+            const html = renderGiftNotificationPopup({ ...gift, type });
+            expect(html).toContain(type === "achievement" ? "Achievement Unlocked" : "Reward Unlocked");
+            expect(html).toContain("Founder Background");
+            expect(html).toContain("Continue");
+            expect(html).not.toContain("data-notification-claim");
+        }
+        expect(renderGiftNotificationPopup({ ...gift, type: "playtest" })).toBe("");
+    });
 });
