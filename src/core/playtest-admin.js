@@ -37,7 +37,12 @@ export function validatePlaytestDraft(draft, now = Date.now()) {
         return date.toISOString();
     });
     if (new Set(starts).size !== starts.length) throw new Error("Featured dates must not repeat.");
-    return { ...details, starts, durationMinutes, notifyMembers: draft.notifyMembers === "on" || draft.notifyMembers === true };
+    return {
+        ...details,
+        starts,
+        durationMinutes,
+        notifyMembers: draft.notifyMembers === "on" || draft.notifyMembers === true
+    };
 }
 
 export function playtestRoster(summaries) {

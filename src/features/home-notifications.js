@@ -16,7 +16,9 @@ export async function initializeHomeNotifications(client, drawer) {
 
 async function initialize(client, drawer) {
     const api = createNotificationApi(client);
+    const session = await client.auth.getSession();
     const state = {
+        userId: session.data?.session?.user?.id || "",
         drawer,
         items: [],
         loading: false,
@@ -32,25 +34,32 @@ async function initialize(client, drawer) {
     document.addEventListener("click", (event) => handleClick(event, api, state));
     drawer.register("notifications", ({ host }) => renderDrawer(state, host));
     drawer.subscribe(() => renderBell(state));
-    await loadNotifications(api, state, true);
     const refresh = () => {
-        if (!document.hidden && !state.loading && !state.busyId) void loadNotifications(api, state, true);
+        if (state.userId && !document.hidden && !state.loading && !state.busyId)
+            void loadNotifications(api, state, true);
     };
-    const timer = window.setInterval(refresh, 30000);
+    window.setInterval(refresh, 30000);
     window.addEventListener("focus", refresh);
-    client.auth?.onAuthStateChange?.((event) => {
-        if (event !== "SIGNED_OUT") return;
-        window.clearInterval(timer);
-        window.removeEventListener("focus", refresh);
+    client.auth.onAuthStateChange((_event, nextSession) => {
+        const nextId = nextSession?.user?.id || "";
+        if (nextId === state.userId) return;
+        state.userId = nextId;
         state.loadVersion++;
         state.items = [];
         state.giftId = "";
         state.loading = false;
+        state.busyId = "";
+        state.message = "";
+        state.error = "";
         render(state);
+        if (nextId) queueMicrotask(refresh);
     });
+    if (state.userId) await loadNotifications(api, state, true);
 }
 
 async function loadNotifications(api, state, showGift) {
+    if (!state.userId || state.loading) return;
+    const userId = state.userId;
     const loadVersion = ++state.loadVersion;
     state.loading = true;
     render(state);
@@ -60,7 +69,7 @@ async function loadNotifications(api, state, showGift) {
     } catch (error) {
         result = { error };
     }
-    if (loadVersion !== state.loadVersion) return;
+    if (loadVersion !== state.loadVersion || userId !== state.userId) return;
     state.loading = false;
     if (result.error) {
         state.error = "Notifications could not be loaded right now.";
@@ -75,6 +84,7 @@ async function loadNotifications(api, state, showGift) {
 }
 
 async function handleClick(event, api, state) {
+    if (!state.userId) return;
     const target = event.target instanceof Element ? event.target : null;
     if (!target) return;
     if (target.closest("[data-notification-panel-open]")) {
@@ -259,7 +269,9 @@ function normalizeNotification(row) {
         claimedAt: String(row?.claimed_at || ""),
         createdAt: String(row?.created_at || ""),
         cosmeticName: String(badge?.label || row?.cosmetic_name || cosmeticId || row?.title || "Gift").slice(0, 80),
-        cosmeticImage: safeImageUrl(badge ? badgeArtworkUrl(badge.id) : cosmeticArtworkUrl(row?.cosmetic_image_url || row?.image_url)),
+        cosmeticImage: safeImageUrl(
+            badge ? badgeArtworkUrl(badge.id) : cosmeticArtworkUrl(row?.cosmetic_image_url || row?.image_url)
+        ),
         cosmeticText: String(badge?.label || row?.cosmetic_name || cosmeticId || "Gift").slice(0, 80),
         cosmeticRarity: String(row?.cosmetic_rarity || row?.rarity || "common").toLowerCase()
     };

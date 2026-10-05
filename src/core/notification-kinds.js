@@ -6,6 +6,10 @@ export function notificationKind(row) {
 }
 
 export function rewardPopupEligible(item, seen) {
-    return ["cosmetic_gift", "unlock", "achievement"].includes(item.type) &&
-        !item.claimedAt && !item.readAt && !seen.has(item.id);
+    return (
+        ["cosmetic_gift", "unlock", "achievement"].includes(item.type) &&
+        !item.claimedAt &&
+        !item.readAt &&
+        !seen.has(item.id)
+    );
 }

@@ -2333,7 +2333,8 @@ test("an administrator can search players, inspect collections, and open protect
 });
 
 test("earned cosmetics show a reward popup without a second claim", async ({ page }) => {
-    const earnedStub = giftSupabaseStub.replace('notification_type: "cosmetic_gift"', 'notification_type: "system"')
+    const earnedStub = giftSupabaseStub
+        .replace('notification_type: "cosmetic_gift"', 'notification_type: "system"')
         .replace('gift_source: "friend"', 'gift_source: "unlock"');
     await installPageStubs(page, earnedStub);
     await page.goto("/");
@@ -2341,11 +2342,40 @@ test("earned cosmetics show a reward popup without a second claim", async ({ pag
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText("Reward Unlocked");
     await expect(dialog.locator("[data-notification-claim]")).toHaveCount(0);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Continue", exact: true }).click();
     await expect(dialog).toBeHidden();
     await page.locator("[data-notification-panel-open]").click();
     await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
     await expect(page.locator(".notification-item")).toContainText("Reward unlocked");
+});
+
+test("homepage sign-out discards an in-flight reward inbox", async ({ page }) => {
+    const stub = giftSupabaseStub
+        .replace(
+            "onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),",
+            `onAuthStateChange: (callback) => {
+                (window.__notificationAuthCallbacks ||= []).push(callback);
+                return {data: {subscription: {unsubscribe() {}}}};
+            },`
+        )
+        .replace(
+            'if (name === "list_my_notifications") {',
+            `if (name === "list_my_notifications") {
+                window.__notificationInboxWaiting = true;
+                await new Promise(resolve => { window.__releaseNotificationInbox = resolve; });`
+        );
+    await installPageStubs(page, stub);
+    await page.goto("/");
+    await expect.poll(() => page.evaluate(() => Boolean(window.__notificationInboxWaiting))).toBe(true);
+    await page.evaluate(() => {
+        for (const callback of window.__notificationAuthCallbacks) callback("SIGNED_OUT", null);
+        window.__releaseNotificationInbox();
+    });
+    await expect(page.locator('[data-account-access="login"]')).toBeVisible();
+    await expect(page.locator(".notification-gift-dialog")).toHaveCount(0);
+    await expect(page.locator("[data-notification-panel-open].has-unread")).toHaveCount(0);
 });
 
 test("a cosmetic gift opens once and remains manageable in the private notification inbox", async ({ page }) => {

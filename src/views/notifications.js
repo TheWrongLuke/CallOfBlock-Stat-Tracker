@@ -38,7 +38,12 @@ export function renderNotificationInbox({
 }
 
 export function renderGiftNotificationPopup(notification, busy = false) {
-    if (!notification || !["cosmetic_gift", "unlock", "achievement"].includes(notification.type) || notification.claimedAt) return "";
+    if (
+        !notification ||
+        !["cosmetic_gift", "unlock", "achievement"].includes(notification.type) ||
+        notification.claimedAt
+    )
+        return "";
     const gift = notification.type === "cosmetic_gift";
     return `
         <div class="notification-gift-backdrop" data-notification-gift-backdrop>
