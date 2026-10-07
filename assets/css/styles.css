@@ -1909,14 +1909,30 @@ body.replay-fullscreen-open {
 }
 
 .tactical-event-lines {
-    z-index: 4;
+    z-index: 14;
     overflow: visible;
     pointer-events: none;
 }
 
-.tactical-event-lines line {
+.tactical-event-lines line,
+.tactical-event-lines .hit-point {
     vector-effect: non-scaling-stroke;
     stroke-width: 2;
+    stroke-linecap: round;
+}
+
+.tactical-event-lines .hit-point {
+    fill: none;
+    stroke: var(--gold);
+    stroke-dasharray: none;
+}
+
+.tactical-event-lines .hit-point[data-hit-type="elimination"] {
+    stroke: var(--red);
+}
+
+.tactical-event-lines .hit-point[data-hit-type="zombie_damage"] {
+    stroke: #ff5a60;
 }
 
 .tactical-event-lines .engagement-line {
@@ -1944,7 +1960,7 @@ body.replay-fullscreen-open {
 
 .tactical-score {
     position: absolute;
-    z-index: 8;
+    z-index: 15;
     top: 10px;
     left: 10px;
     border: 1px solid rgba(255, 255, 255, 0.14);
@@ -1956,7 +1972,7 @@ body.replay-fullscreen-open {
 
 .tactical-marker-tooltip {
     position: absolute;
-    z-index: 12;
+    z-index: 15;
     right: 10px;
     bottom: 10px;
     width: min(280px, calc(100% - 20px));
@@ -2027,7 +2043,7 @@ body.replay-fullscreen-open {
 
 .match-end-overlay {
     position: absolute;
-    z-index: 11;
+    z-index: 15;
     inset: auto 12% 8%;
     display: grid;
     justify-items: center;

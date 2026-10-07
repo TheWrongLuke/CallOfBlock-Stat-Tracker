@@ -1,4 +1,5 @@
 import { mapCoordinateToPercent } from "./match-telemetry-normalizer.js";
+import { interpolateSnapshotAtTime, interpolateZombieStatesAtTime } from "./match-playback-controller.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const CURRENT_ICON_SIZE_PX = 34;
@@ -66,14 +67,7 @@ export class MatchMapRenderer {
         this.zombieStates = new Map((snapshot.zombies || []).map((zombie) => [zombie.zombieId, zombie]));
         const selectedEvent = events.find((event) => event.eventId === currentEventId) || null;
         const activeEvent = selectedEvent || activeCombatEvents.at(-1) || events.at(-1) || null;
-        let selectedCombatEvents = [];
-        if (selectedEvent && ["damage", "elimination", "zombie_damage"].includes(selectedEvent.type)) {
-            selectedCombatEvents = selectedEvent.attackId
-                ? this.telemetry.events.filter(
-                      (event) => event.type === "zombie_damage" && event.attackId === selectedEvent.attackId
-                  )
-                : [selectedEvent];
-        }
+        const lineEvents = combatLineEvents(this.telemetry.events, activeCombatEvents, selectedEvent);
         const highlighted = new Set(
             events.flatMap((event) => [
                 event.attackerId,
@@ -114,7 +108,7 @@ export class MatchMapRenderer {
         this.updateVehicles(snapshot.vehicles);
         this.updateZone(snapshot.zone);
         this.updateScore(snapshot.scores);
-        this.updateEventLines(selectedCombatEvents.length ? selectedCombatEvents : activeCombatEvents);
+        this.updateEventLines(lineEvents);
         if (this.lockedPlayerId) this.showTooltip(this.lockedPlayerId);
         else if (this.lockedVehicleId) this.showVehicleTooltip(this.lockedVehicleId);
     }
@@ -450,11 +444,7 @@ export class MatchMapRenderer {
     updateEventLines(events) {
         this.lines.replaceChildren();
         for (const event of Array.isArray(events) ? events : events ? [events] : []) {
-            const start =
-                event.killerPosition ||
-                event.attackerPosition ||
-                this.positionForPlayer(event.killerId || event.attackerId);
-            const end = event.targetPosition || event.victimPosition || this.positionForPlayer(event.victimId);
+            const { start, end } = combatLinePositions(event, this.telemetry);
             if (!start || !end) continue;
             const startPoint = mapCoordinateToPercent(this.telemetry.map, start.x, start.z);
             const endPoint = mapCoordinateToPercent(this.telemetry.map, end.x, end.z);
@@ -473,6 +463,14 @@ export class MatchMapRenderer {
                       : "engagement-line"
             );
             this.lines.append(line);
+
+            const impact = document.createElementNS(SVG_NS, "circle");
+            impact.setAttribute("cx", String(endPoint.x * 10));
+            impact.setAttribute("cy", String(endPoint.y * 10));
+            impact.setAttribute("r", "5");
+            impact.classList.add("hit-point");
+            impact.setAttribute("data-hit-type", event.type);
+            this.lines.append(impact);
 
             const zombieTarget = event.type === "zombie_damage" || event.targetKind === "zombie";
             const distance = zombieTarget ? null : eventDistance3d(event, start, end);
@@ -587,16 +585,42 @@ export class MatchMapRenderer {
         return { kills, deaths };
     }
 
-    positionForPlayer(playerId) {
-        const state = this.playerStates.get(playerId);
-        return state ? { x: state.x, y: state.y, z: state.z } : null;
-    }
-
     playerName(playerId) {
         const participant = this.telemetry.participants.find((item) => item.playerId === playerId);
         const presentation = this.getPlayerPresentation(playerId, participant) || {};
         return presentation.name || participant?.name || "Player";
     }
+}
+
+export function combatLineEvents(recordedEvents, activeEvents, selectedEvent) {
+    const types = new Set(["damage", "elimination", "zombie_damage"]);
+    const selected = !types.has(selectedEvent?.type)
+        ? []
+        : selectedEvent.type === "zombie_damage" && selectedEvent.attackId
+          ? recordedEvents.filter(
+                (event) =>
+                    event.type === "zombie_damage" &&
+                    event.attackId === selectedEvent.attackId &&
+                    event.attackerId === selectedEvent.attackerId
+            )
+          : [selectedEvent];
+    return [...new Map([...activeEvents, ...selected].map((event) => [event.eventId, event])).values()];
+}
+
+export function combatLinePositions(event, telemetry) {
+    let start = event.killerPosition || event.attackerPosition;
+    let end = event.targetPosition || event.victimPosition;
+    if (!start || (!end && event.victimId)) {
+        const players = interpolateSnapshotAtTime(telemetry.snapshots || [], event.timeMs)?.players || [];
+        start ||= players.find((player) => player.playerId === (event.killerId || event.attackerId));
+        end ||= players.find((player) => player.playerId === event.victimId);
+    }
+    if (!end && (event.type === "zombie_damage" || event.targetKind === "zombie")) {
+        end = interpolateZombieStatesAtTime(telemetry.zombieSnapshots || [], event.timeMs).find(
+            (zombie) => zombie.zombieId === event.targetId
+        );
+    }
+    return { start: start || null, end: end || null };
 }
 
 function createPlayerAvatar(presentation, participant, className) {
