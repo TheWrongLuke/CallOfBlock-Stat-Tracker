@@ -12,6 +12,11 @@ const mission = {
 };
 const row = { missions: [mission], claimed_ids: [], cycle_ends_at: "2026-10-05T00:00:00Z" };
 describe("one mission display for every account panel", () => {
+    it("shows claim diagnostics before the long mission list rather than below it", () => {
+        const html = renderWeeklyMissionPanel({ row, statsProfile: {}, message: "Mission unavailable" });
+        expect(html).toContain('role="status"');
+        expect(html.indexOf("Mission unavailable")).toBeLessThan(html.indexOf('class="mission-list"'));
+    });
     it("uses identical visible content/progress regardless of event adapter", () => {
         const source = { row, statsProfile: {}, message: "Saved progress" };
         const stats = renderWeeklyMissionPanel(source);

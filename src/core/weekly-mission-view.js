@@ -41,8 +41,8 @@ export function renderWeeklyMissionPanel({
         <div class="mission-head"><div><p class="panel-kicker">Renewable Missions</p><h3>Weekly rotation</h3><span>Resets ${escapeHtml(resetLabel)}</span></div><strong>${completed} / ${missions.length}</strong></div>
         <div class="weekly-mission-summary"><span><b>${missions.filter((mission) => mission.difficulty === "easy").length}</b> easy</span><span><b>${missions.filter((mission) => mission.difficulty === "hard").length}</b> hard</span><span><b>${formatNumber(missions.reduce((sum, mission) => sum + number(mission.xp), 0))}</b> XP available</span></div>
         <p class="weekly-mission-rule">Untouched missions rotate every week. Started missions carry over and can be swapped once after the rotation.</p>
+        ${message ? `<p class="mode-empty" role="status">${escapeHtml(message)}</p>` : ""}
         <div class="mission-list">${missions.map((mission) => renderMission(mission, { statsProfile, claimed, busyId, rewardingId, actionsEnabled, actionPrefix })).join("")}</div>
-        ${message ? `<p class="mode-empty">${escapeHtml(message)}</p>` : ""}
     </section>`;
 }
 
