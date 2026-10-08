@@ -98,6 +98,34 @@ test("claim failures remain visible and a successful retry persists on Home and 
         await expect(drawer.locator(".mission-xp.claimed")).toHaveText("Claimed");
         await expect(drawer.locator(".mission-claim-button")).toHaveCount(0);
         await expect(page.locator(".xp-reward-orb")).toHaveCount(4);
+        const arrivals = await page.evaluate(
+            () =>
+                new Promise((resolve) => {
+                    const last = new Map();
+                    function sample() {
+                        const orbs = [...document.querySelectorAll(".xp-reward-orb")];
+                        for (const orb of orbs) {
+                            const rect = orb.getBoundingClientRect();
+                            last.set(orb, { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+                        }
+                        if (orbs.length) return requestAnimationFrame(sample);
+                        const meter = document.querySelector(".profile-drawer .account-xp-meter");
+                        const rect = meter.getBoundingClientRect();
+                        resolve({
+                            points: [...last.values()],
+                            target: {
+                                x: rect.left + (rect.width * meter.value) / meter.max,
+                                y: rect.top + rect.height / 2
+                            }
+                        });
+                    }
+                    sample();
+                })
+        );
+        expect(arrivals.points).toHaveLength(4);
+        for (const point of arrivals.points) {
+            expect(Math.hypot(point.x - arrivals.target.x, point.y - arrivals.target.y)).toBeLessThan(24);
+        }
         await expect(page.locator(".xp-orb-layer")).toHaveCount(0, { timeout: 10000 });
         await expect(drawer).toContainText("1,050 XP total");
         await expect(drawer.locator(".account-xp-meter")).toHaveAttribute("value", "1050");

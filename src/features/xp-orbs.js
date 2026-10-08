@@ -36,36 +36,38 @@ function accountMeters(accountId) {
 }
 
 function visibleMeters(accountId) {
-    return accountMeters(accountId).filter((element) => {
-        const meter = element.querySelector(".account-xp-meter");
-        if (!meter) return false;
-        const rect = meter.getBoundingClientRect();
-        let left = 0,
-            top = 0,
-            right = innerWidth,
-            bottom = innerHeight;
-        // Drawer scrolling can clip a bar even while its parent remains partly visible.
-        for (let parent = meter.parentElement; parent; parent = parent.parentElement) {
-            const style = getComputedStyle(parent);
-            const bounds = parent.getBoundingClientRect();
-            if (/auto|scroll|hidden|clip/.test(style.overflowX)) {
-                left = Math.max(left, bounds.left);
-                right = Math.min(right, bounds.right);
+    return accountMeters(accountId)
+        .filter((element) => {
+            const meter = element.querySelector(".account-xp-meter");
+            if (!meter) return false;
+            const rect = meter.getBoundingClientRect();
+            let left = 0,
+                top = 0,
+                right = innerWidth,
+                bottom = innerHeight;
+            // Drawer scrolling can clip a bar even while its parent remains partly visible.
+            for (let parent = meter.parentElement; parent; parent = parent.parentElement) {
+                const style = getComputedStyle(parent);
+                const bounds = parent.getBoundingClientRect();
+                if (/auto|scroll|hidden|clip/.test(style.overflowX)) {
+                    left = Math.max(left, bounds.left);
+                    right = Math.min(right, bounds.right);
+                }
+                if (/auto|scroll|hidden|clip/.test(style.overflowY)) {
+                    top = Math.max(top, bounds.top);
+                    bottom = Math.min(bottom, bounds.bottom);
+                }
             }
-            if (/auto|scroll|hidden|clip/.test(style.overflowY)) {
-                top = Math.max(top, bounds.top);
-                bottom = Math.min(bottom, bounds.bottom);
-            }
-        }
-        return (
-            rect.width > 0 &&
-            rect.height > 0 &&
-            rect.left >= left &&
-            rect.right <= right &&
-            rect.top >= top &&
-            rect.bottom <= bottom
-        );
-    });
+            return (
+                rect.width > 0 &&
+                rect.height > 0 &&
+                rect.left >= left &&
+                rect.right <= right &&
+                rect.top >= top &&
+                rect.bottom <= bottom
+            );
+        })
+        .sort((a, b) => Number(Boolean(b.closest(".profile-drawer"))) - Number(Boolean(a.closest(".profile-drawer"))));
 }
 
 function paintXp(total, accountId) {
