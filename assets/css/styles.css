@@ -11689,6 +11689,25 @@ body.cosmetic-picker-open {
     color: rgba(238, 244, 255, 0.72);
 }
 
+.xp-orb-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.xp-reward-orb {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #c8ff62;
+    border: 2px solid #4ca631;
+    box-shadow: 0 0 5px #8ad84880, inset 1px 1px #e8ffad;
+    will-change: transform, opacity;
+}
+
 .account-xp-progress {
     display: grid;
     gap: 6px;
@@ -11716,7 +11735,7 @@ body.cosmetic-picker-open {
     border: 0;
     border-radius: 2px;
     background: var(--line);
-    accent-color: var(--gold);
+    accent-color: #72dc83;
     overflow: hidden;
 }
 
@@ -11725,11 +11744,11 @@ body.cosmetic-picker-open {
 }
 
 .account-xp-meter::-webkit-progress-value {
-    background: var(--gold);
+    background: #72dc83;
 }
 
 .account-xp-meter::-moz-progress-bar {
-    background: var(--gold);
+    background: #72dc83;
 }
 
 .account-access-links,

@@ -28,6 +28,8 @@ const directories = ["assets", "data", "src"];
 for (const file of publicFiles) {
     await cp(path.join(root, "public", file), path.join(output, file));
 }
+await mkdir(path.join(output, "preview", "xp"), { recursive: true });
+await cp(path.join(root, "public", "xp-preview.html"), path.join(output, "preview", "xp", "index.html"));
 for (const directory of directories) {
     await cp(path.join(root, directory), path.join(output, directory), {
         recursive: true,

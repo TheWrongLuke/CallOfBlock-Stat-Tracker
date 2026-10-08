@@ -531,7 +531,7 @@ function renderAccountPanel(shell, host) {
                 <div>
                     <strong>${escapeHtml(name)}</strong>
                     ${title ? `<span class="profile-title-cosmetic rarity-${rarity} compact">${escapeHtml(title)}</span>` : ""}
-                    ${renderAccountProgress(profile.xp, { unavailable: progressionUnavailable })}
+                    ${renderAccountProgress(profile.xp, { unavailable: progressionUnavailable, accountId: profile.id })}
                 </div>
             </div>
             ${renderProfileDrawerActions(admin)}

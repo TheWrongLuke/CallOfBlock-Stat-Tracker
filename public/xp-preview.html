@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>XP Reward Preview | Call of Block</title>
+    <link rel="stylesheet" href="/assets/css/styles.css">
+    <link rel="icon" href="/assets/branding/icon.png">
+    <style>
+        body { padding: 32px 20px; }
+        main { max-width: 640px; margin: 0 auto; }
+        h1 { font-size: 26px; }
+        .preview-controls { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0; }
+        label { display: grid; gap: 6px; font-size: 14px; }
+        input, select { width: 150px; min-height: 40px; border: 1px solid #46505e; border-radius: 4px; padding: 8px; color: #f1f4f8; background: #101822; font: inherit; }
+        [data-xp-preview] { margin: 32px 0 80px; }
+        .preview-actions { display: flex; gap: 12px; }
+        button { min-height: 40px; border: 1px solid #46505e; border-radius: 4px; padding: 8px 14px; background: #19242f; color: #f1f4f8; font: inherit; cursor: pointer; }
+        button.primary { background: #f7c66a; border-color: #f7c66a; color: #101822; }
+        button:disabled { opacity: .55; cursor: wait; }
+        button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #f7c66a; outline-offset: 3px; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>XP Reward Preview</h1>
+    <p>Simulation only. No account or rewards are changed.</p>
+    <div class="preview-controls">
+        <label>Starting XP<input id="starting-xp" type="number" min="0" max="9999000" step="50" value="9850"></label>
+        <label>Reward XP<input id="reward-xp" type="number" min="1" max="20000" step="50" value="350"></label>
+        <label>XP per orb<select id="orb-step"><option value="100">100 XP</option><option value="50">50 XP</option></select></label>
+    </div>
+    <div data-xp-preview></div>
+    <div class="preview-actions">
+        <button class="primary" id="preview-claim" type="button">Replay claim animation</button>
+        <button id="preview-reset" type="button">Reset</button>
+    </div>
+    <p id="preview-status" role="status"></p>
+</main>
+<script type="module" src="/src/pages/xp-preview.js"></script>
+</body>
+</html>

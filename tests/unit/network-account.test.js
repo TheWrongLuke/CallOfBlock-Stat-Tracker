@@ -16,6 +16,29 @@ it("pre-link mission plans cannot clear XP or independent cosmetic ownership", (
 import { saveProfileCustomization } from "../../src/api/profile.js";
 import { networkAccountRequest } from "../../src/api/network-account.js";
 afterEach(() => vi.unstubAllGlobals());
+it.each(["lost response", 409, 503])("claim retries %s with the identical mission identity", async (failure) => {
+    vi.stubGlobal("window", { COB_NETWORK_STATS_API_URL: "https://tracking.example", COB_STATS_ENVIRONMENT: "TEST" });
+    const fetcher = vi.fn();
+    if (failure === "lost response") fetcher.mockRejectedValueOnce(new TypeError("Network unavailable"));
+    else fetcher.mockResolvedValueOnce({ ok: false, status: failure, json: async () => ({ error: "Retry" }) });
+    fetcher.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ xp: 350, reward: 0 }) });
+    vi.stubGlobal("fetch", fetcher);
+    const client = { auth: { getSession: async () => ({ data: { session: { access_token: "token" } } }) } };
+    expect((await networkAccountRequest(client, "claim", "stable-mission")).data.xp).toBe(350);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[0][1].body).toBe(fetcher.mock.calls[1][1].body);
+    expect(fetcher.mock.calls[0][1].headers).toEqual(fetcher.mock.calls[1][1].headers);
+});
+it("claim eligibility errors are not retried", async () => {
+    vi.stubGlobal("window", { COB_NETWORK_STATS_API_URL: "https://tracking.example", COB_STATS_ENVIRONMENT: "TEST" });
+    const fetcher = vi
+        .fn()
+        .mockResolvedValue({ ok: false, status: 403, json: async () => ({ error: "Not eligible" }) });
+    vi.stubGlobal("fetch", fetcher);
+    const client = { auth: { getSession: async () => ({ data: { session: { access_token: "token" } } }) } };
+    expect((await networkAccountRequest(client, "claim", "mission")).error.message).toBe("Not eligible");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+});
 it("Minecraft verification uses the authenticated account and never submits browser UUIDs", async () => {
     vi.stubGlobal("window", {
         COB_NETWORK_STATS_API_URL: "https://tracking.example",

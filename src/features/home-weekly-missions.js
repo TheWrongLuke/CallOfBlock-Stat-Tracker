@@ -4,6 +4,7 @@ import { renderWeeklyMissionPanel } from "../core/weekly-mission-view.js";
 export { weeklyMissionProgress } from "../core/weekly-mission-progress.js";
 import { escapeHtml, number } from "../core/site-shell.js";
 import { applyNetworkAccountProjection } from "../core/network-profile.js";
+import { animateXpReward, captureXpOrigin } from "./xp-orbs.js";
 
 const MISSION_LIMIT = 7;
 const initializedShells = new WeakSet();
@@ -53,6 +54,7 @@ async function loadWeeklyMissions(shell, state, force = false) {
     resetIdentity(shell, state);
     if (
         state.loading ||
+        state.busyId ||
         (state.loaded && Date.now() - state.loadedAt < 30_000 && !force) ||
         !shell.client ||
         !shell.profile?.id
@@ -125,7 +127,7 @@ async function handleMissionClick(event, shell, state) {
     const claim = target.closest("[data-home-weekly-claim]");
     if (claim) {
         event.preventDefault();
-        await claimMission(shell, state, claim.dataset.homeWeeklyClaim || "");
+        await claimMission(shell, state, claim.dataset.homeWeeklyClaim || "", captureXpOrigin(claim));
         return;
     }
     const swap = target.closest("[data-home-weekly-swap]");
@@ -172,14 +174,17 @@ async function handleMissionSubmit(event, shell, state) {
     }
 }
 
-async function claimMission(shell, state, missionId) {
+async function claimMission(shell, state, missionId, origin) {
     if (!missionId || state.busyId || !state.statsProfile) return;
     const generation = state.generation;
+    const beforeXp = number(shell.profile?.xp);
     const mission = state.row?.missions.find((entry) => entry.id === missionId);
     const claimed = new Set(state.row?.claimed_ids || []);
     if (!mission || claimed.has(missionId) || !weeklyMissionProgress(state.statsProfile, mission).complete) return;
     state.busyId = missionId;
     shell.refreshAccountPanel();
+    let afterXp = null;
+    let claimError = "";
     try {
         const result = await claimWeeklyMissionReward(shell.client, missionId);
         if (generation !== state.generation) return;
@@ -190,6 +195,7 @@ async function claimMission(shell, state, missionId) {
             shell.setProfile({ ...shell.profile, xp: number(result.data.xp) });
         state.rewardingId = missionId;
         state.message = "";
+        afterXp = number(shell.profile?.xp);
         window.setTimeout(() => {
             if (state.rewardingId !== missionId) return;
             state.rewardingId = "";
@@ -198,11 +204,23 @@ async function claimMission(shell, state, missionId) {
     } catch (error) {
         if (generation !== state.generation) return;
         console.warn("Could not claim the weekly mission", error);
-        state.message = "That mission could not be claimed.";
+        claimError = error?.message || "That mission could not be claimed. Please retry.";
+        state.message = claimError;
     } finally {
         if (generation === state.generation) {
             state.busyId = "";
             await loadWeeklyMissions(shell, state, true);
+            if (generation === state.generation && claimError && !state.row?.claimed_ids?.includes(missionId)) {
+                state.message = claimError;
+                shell.refreshAccountPanel();
+            }
+            if (generation === state.generation && afterXp !== null)
+                void animateXpReward({
+                    origin,
+                    before: beforeXp,
+                    after: number(shell.profile?.xp),
+                    accountId: shell.profile?.id
+                });
         }
     }
 }

@@ -19,6 +19,7 @@ import {
 } from "./api/profile.js";
 import { createProgressionAdminApi } from "./api/progression.js?v=weekly-missions-3";
 import { claimWeeklyMissionReward, ensureWeeklyMissions, swapWeeklyMission } from "./api/weekly-missions.js";
+import { animateXpReward, captureXpOrigin } from "./features/xp-orbs.js";
 import { PLAYTEST_MODE_OPTIONS, labelToDbModePreference, dbModePreferenceToLabel } from "./core/playtest-modes.js";
 import { applyNetworkAccountProjection, mergeSavedAccountProfile } from "./core/network-profile.js";
 import { updateDrawerContent, renderProfileDrawerActions } from "./core/profile-drawer.js";
@@ -1657,7 +1658,7 @@ function bindStaticEvents() {
         const missionClaim = event.target.closest("[data-weekly-claim]");
         if (missionClaim) {
             event.preventDefault();
-            void claimWeeklyMission(missionClaim.dataset.weeklyClaim);
+            void claimWeeklyMission(missionClaim.dataset.weeklyClaim, captureXpOrigin(missionClaim));
             return;
         }
 
@@ -8960,7 +8961,7 @@ async function syncWeeklyMissions() {
     const missionState = state.weeklyMissions;
     const account = state.authProfile;
     const profile = linkedStatsProfile();
-    if (missionState.syncing || !state.authClient || !state.authSession?.user || !account?.id || !state.data) return;
+    if (missionState.syncing || missionState.claimingId || !state.authClient || !state.authSession?.user || !account?.id || !state.data) return;
     if (isCurrentAccountCommunityBanned()) {
         missionState.loading = false;
         missionState.message = "Community access is blocked for this account.";
@@ -9083,10 +9084,11 @@ function renewWeeklyMissions(previousRow, freshMissions, profile, cycle) {
     });
 }
 
-async function claimWeeklyMission(missionId) {
+async function claimWeeklyMission(missionId, origin) {
     const missionState = state.weeklyMissions;
     const accountId = state.authProfile?.id;
     const profile = missionState.statsProfile;
+    const beforeXp = number(state.authProfile?.xp);
     if (
         !missionId ||
         isCurrentAccountCommunityBanned() ||
@@ -9102,6 +9104,8 @@ async function claimWeeklyMission(missionId) {
 
     missionState.claimingId = mission.id;
     renderAccountMissionViews();
+    let afterXp = null;
+    let claimError = "";
     try {
         const { data, error } = await claimWeeklyMissionReward(state.authClient, mission.id);
         if (state.weeklyMissions !== missionState || state.authProfile?.id !== accountId) return;
@@ -9116,19 +9120,29 @@ async function claimWeeklyMission(missionId) {
         }
         missionState.message = "";
         missionState.animatingId = mission.id;
+        renderAccountMissionViews();
+        afterXp = number(data?.xp);
         window.setTimeout(() => {
             if (state.weeklyMissions.animatingId !== mission.id) return;
             state.weeklyMissions.animatingId = "";
             renderAccountMissionViews();
         }, 1400);
     } catch (error) {
-        missionState.message = "That mission could not be claimed. Check the weekly mission Supabase function.";
+        claimError = error?.message || "That mission could not be claimed. Please retry.";
+        missionState.message = claimError;
         console.warn("Could not claim weekly mission", mission.id, error);
     } finally {
         missionState.claimingId = "";
         renderAccountMissionViews();
         if (state.weeklyMissions === missionState && state.authProfile?.id === accountId) {
             await syncWeeklyMissions();
+            if (state.weeklyMissions === missionState && state.authProfile?.id === accountId && claimError
+                && !missionState.row?.claimed_ids?.includes(missionId)) {
+                missionState.message = claimError;
+                renderAccountMissionViews();
+            }
+            if (state.weeklyMissions === missionState && state.authProfile?.id === accountId && afterXp !== null)
+                void animateXpReward({ origin, before: beforeXp, after: number(state.authProfile?.xp), accountId });
         }
     }
 }
@@ -14594,7 +14608,7 @@ function markBadgeSeen(account, badgeId) {
 }
 
 function renderAccountLevelPill(account) {
-    return renderAccountProgress(account?.xp, { unavailable: networkTrackerConfigured() && account?.network_stats_unavailable });
+    return renderAccountProgress(account?.xp, { unavailable: networkTrackerConfigured() && account?.network_stats_unavailable, accountId: account?.id });
 }
 
 function arrayField(value) {

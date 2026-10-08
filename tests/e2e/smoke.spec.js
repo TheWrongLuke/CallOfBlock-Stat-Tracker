@@ -2,6 +2,84 @@ import { expect, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 
+test("claim failures remain visible and a successful retry persists on Home and Account", async ({ page }) => {
+    await installPageStubs(page, memberSupabaseStub.replace("session: {", 'session: { access_token: "fixture-token",'));
+    await page.route("**/api-config.js*", (route) =>
+        route.fulfill({
+            contentType: "text/javascript",
+            body:
+                configStub +
+                '\nwindow.COB_STATS_ENVIRONMENT="TEST";window.COB_NETWORK_STATS_API_URL=location.origin+"/functions/v1/network-stats";'
+        })
+    );
+    await page.route("**/network-stats/network/**", (route) =>
+        route.fulfill({
+            contentType: "application/json",
+            body: JSON.stringify({ ...statsExportFixture, environment: "TEST" })
+        })
+    );
+    const monday = new Date();
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const cycle = [
+        monday.getFullYear(),
+        String(monday.getMonth() + 1).padStart(2, "0"),
+        String(monday.getDate()).padStart(2, "0")
+    ].join("-");
+    let claimed = false,
+        fail = true;
+    await page.route("**/network-stats/account/**", (route) => {
+        if (route.request().url().endsWith("/claim")) {
+            if (fail)
+                return route.fulfill({
+                    status: 403,
+                    contentType: "application/json",
+                    body: JSON.stringify({ error: "Diagnostic eligibility failure" })
+                });
+            claimed = true;
+        }
+        const row = {
+            environment: "TEST",
+            user_id: "123e4567-e89b-42d3-a456-426614174000",
+            awaiting_link: false,
+            cycle_key: cycle,
+            cycle_ends_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+            stats_profile: {},
+            xp: claimed ? 1050 : 700,
+            missions: [
+                {
+                    id: "diagnostic-mission",
+                    label: "Diagnostic mission",
+                    description: "Hit targets",
+                    difficulty: "easy",
+                    metric: "hits",
+                    mode: "overall",
+                    target: 1,
+                    xp: 350,
+                    serverProgress: { value: 1, target: 1, complete: true, progress: 1 }
+                }
+            ],
+            claimed_ids: claimed ? ["diagnostic-mission"] : [],
+            swapped_ids: [],
+            entitlements: []
+        };
+        return route.fulfill({ contentType: "application/json", body: JSON.stringify(row) });
+    });
+    for (const path of ["/", "/account/"]) {
+        claimed = false;
+        fail = true;
+        await page.goto(path);
+        await page.locator(path === "/" ? "[data-shell-account-open]" : "[data-account-panel-open]").click();
+        const drawer = page.locator(".profile-drawer");
+        await drawer.getByRole("button", { name: "Claim 350 XP" }).click();
+        await expect(drawer).toContainText("Diagnostic eligibility failure");
+        fail = false;
+        await drawer.getByRole("button", { name: "Claim 350 XP" }).click();
+        await expect(drawer.locator(".mission-xp.claimed")).toHaveText("Claimed");
+        await expect(drawer.locator(".mission-claim-button")).toHaveCount(0);
+        await expect(drawer).toContainText("1,050 XP total");
+    }
+});
+
 const statsExportFixture = JSON.parse(
     readFileSync(new URL("../../data/stats.sample.json", import.meta.url), "utf8").replace(/^\uFEFF/, "")
 );

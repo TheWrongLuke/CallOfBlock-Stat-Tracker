@@ -19,13 +19,14 @@ export function accountProgress(value) {
     };
 }
 
-export function renderAccountProgress(value, { unavailable = false } = {}) {
+export function renderAccountProgress(value, { unavailable = false, accountId = "" } = {}) {
     if (unavailable) {
         return '<div class="account-xp-progress"><div class="account-level-pill"><strong>LVL ?</strong><span>Progress unavailable</span></div></div>';
     }
     const progress = accountProgress(value);
     const format = (number) => number.toLocaleString();
-    return `<div class="account-xp-progress">
+    const identity = /^[a-f0-9-]{36}$/i.test(accountId) ? accountId : "";
+    return `<div class="account-xp-progress" data-xp-total="${progress.storedXp}" data-xp-account="${identity}">
         <div class="account-level-pill" title="${format(progress.storedXp)} total XP"><strong>LVL ${progress.level}</strong><span>${format(progress.storedXp)} XP total</span></div>
         <progress class="account-xp-meter" max="10000" value="${progress.currentLevelXp}" aria-label="Progress toward next account level"></progress>
         <small>${progress.maximum ? "Maximum level" : `${format(progress.currentLevelXp)} / 10,000 XP &middot; ${format(progress.xpRemaining)} to level ${progress.level + 1}`}</small>

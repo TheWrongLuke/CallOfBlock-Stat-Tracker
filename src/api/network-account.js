@@ -35,7 +35,7 @@ export async function networkAccountRequest(client, action, missionId) {
                   : `/account/missions${action === "read" ? "" : `/${action}`}`,
             base.href
         );
-        const response = await fetch(url, {
+        const options = {
             method: read ? "GET" : "POST",
             cache: "no-store",
             headers: {
@@ -53,8 +53,19 @@ export async function networkAccountRequest(client, action, missionId) {
                                 : { missionId }
                       )
                   })
-        });
-        const body = await response.json();
+        };
+        let response, body;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                response = await fetch(url, { ...options, signal: AbortSignal.timeout(20_000) });
+                body = await response.json();
+                if (action !== "claim" || attempt || ![409, 503].includes(response.status)) break;
+            } catch (error) {
+                if (action !== "claim" || attempt) throw error;
+            }
+            // UUID + assignment identity makes a lost-response retry safe even after commit.
+            await new Promise((resolve) => setTimeout(resolve, 350));
+        }
         return response.ok
             ? { data: body, error: null }
             : {
