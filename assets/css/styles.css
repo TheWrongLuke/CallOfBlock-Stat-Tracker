@@ -4653,6 +4653,17 @@ body.account-drawer-open {
     font-size: 1.1rem;
 }
 
+.profile-drawer-profile-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 12px;
+}
+
+.profile-drawer-profile-header .profile-drawer-identity {
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+}
+
 .profile-drawer-close {
     display: inline-grid;
     place-items: center;

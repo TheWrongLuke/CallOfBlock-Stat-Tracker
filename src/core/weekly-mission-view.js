@@ -30,6 +30,12 @@ export function renderWeeklyMissionPanel({
         return `<section class="profile-drawer-missions"><div class="mission-head"><div><p class="panel-kicker">Renewable Missions</p><h3>${heading}</h3></div></div>${detail ? `<p class="mode-empty">${escapeHtml(detail)}</p>` : ""}</section>`;
     }
     const claimed = new Set(row.claimed_ids || []);
+    const priority = (mission) => {
+        if (mission.id === busyId || mission.id === rewardingId) return 0;
+        if (claimed.has(mission.id)) return 2;
+        return statsProfile && weeklyMissionProgress(statsProfile, mission).complete ? 0 : 1;
+    };
+    const orderedMissions = [...missions].sort((a, b) => priority(a) - priority(b));
     const completed = statsProfile
         ? missions.filter((mission) => weeklyMissionProgress(statsProfile, mission).complete).length
         : "-";
@@ -42,7 +48,7 @@ export function renderWeeklyMissionPanel({
         <div class="weekly-mission-summary"><span><b>${missions.filter((mission) => mission.difficulty === "easy").length}</b> easy</span><span><b>${missions.filter((mission) => mission.difficulty === "hard").length}</b> hard</span><span><b>${formatNumber(missions.reduce((sum, mission) => sum + number(mission.xp), 0))}</b> XP available</span></div>
         <p class="weekly-mission-rule">Untouched missions rotate every week. Started missions carry over and can be swapped once after the rotation.</p>
         ${message ? `<p class="mode-empty" role="status">${escapeHtml(message)}</p>` : ""}
-        <div class="mission-list">${missions.map((mission) => renderMission(mission, { statsProfile, claimed, busyId, rewardingId, actionsEnabled, actionPrefix })).join("")}</div>
+        <div class="mission-list">${orderedMissions.map((mission) => renderMission(mission, { statsProfile, claimed, busyId, rewardingId, actionsEnabled, actionPrefix })).join("")}</div>
     </section>`;
 }
 

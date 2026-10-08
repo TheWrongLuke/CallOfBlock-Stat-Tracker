@@ -522,10 +522,9 @@ function renderAccountPanel(shell, host) {
         host,
         `<div class="profile-drawer-backdrop" data-shell-account-backdrop>
         <aside class="profile-drawer" role="dialog" aria-modal="true" aria-labelledby="shell-profile-drawer-title">
-            <header class="profile-drawer-header">
+            <header class="profile-drawer-header profile-drawer-profile-header">
                 <h2 id="shell-profile-drawer-title">PROFILE</h2>
                 <button class="profile-drawer-close" type="button" data-shell-account-close aria-label="Close profile panel">&times;</button>
-            </header>
             <div class="profile-drawer-identity">
                 ${renderShellAvatar(profile, avatar, name)}
                 <div>
@@ -534,6 +533,7 @@ function renderAccountPanel(shell, host) {
                     ${renderAccountProgress(profile.xp, { unavailable: progressionUnavailable, accountId: profile.id })}
                 </div>
             </div>
+            </header>
             ${renderProfileDrawerActions(admin)}
             ${shell.accountPanelAddon?.() || ""}
         </aside>

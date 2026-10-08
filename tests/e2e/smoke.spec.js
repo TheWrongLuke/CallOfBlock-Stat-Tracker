@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test";
 import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 
-test("claim failures remain visible and a successful retry persists on Home and Account", async ({ page }) => {
+test("claim failures remain visible and a successful retry persists on Home and Account", async ({
+    page
+}, testInfo) => {
     await installPageStubs(page, memberSupabaseStub.replace("session: {", 'session: { access_token: "fixture-token",'));
     await page.route("**/api-config.js*", (route) =>
         route.fulfill({
@@ -56,7 +58,18 @@ test("claim failures remain visible and a successful retry persists on Home and 
                     target: 1,
                     xp: 350,
                     serverProgress: { value: 1, target: 1, complete: true, progress: 1 }
-                }
+                },
+                ...Array.from({ length: 6 }, (_, index) => ({
+                    id: `pending-${index}`,
+                    label: `Pending mission ${index}`,
+                    description: "Keep playing",
+                    difficulty: "easy",
+                    metric: "hits",
+                    mode: "overall",
+                    target: 100,
+                    xp: 100,
+                    serverProgress: { value: 0, target: 100, complete: false, progress: 0 }
+                }))
             ],
             claimed_ids: claimed ? ["diagnostic-mission"] : [],
             swapped_ids: [],
@@ -73,10 +86,21 @@ test("claim failures remain visible and a successful retry persists on Home and 
         await drawer.getByRole("button", { name: "Claim 350 XP" }).click();
         await expect(drawer).toContainText("Diagnostic eligibility failure");
         fail = false;
+        await drawer.evaluate((element) => {
+            element.scrollTop = element.scrollHeight;
+        });
+        const meter = await drawer.locator(".account-xp-meter").boundingBox();
+        expect(meter.y).toBeGreaterThanOrEqual(0);
+        expect(meter.y + meter.height).toBeLessThan(page.viewportSize().height);
+        await expect(drawer.getByRole("button", { name: "Close profile panel" })).toBeVisible();
+        await page.screenshot({ path: testInfo.outputPath(`pinned-profile-${path === "/" ? "home" : "account"}.png`) });
         await drawer.getByRole("button", { name: "Claim 350 XP" }).click();
         await expect(drawer.locator(".mission-xp.claimed")).toHaveText("Claimed");
         await expect(drawer.locator(".mission-claim-button")).toHaveCount(0);
+        await expect(page.locator(".xp-reward-orb")).toHaveCount(4);
+        await expect(page.locator(".xp-orb-layer")).toHaveCount(0, { timeout: 10000 });
         await expect(drawer).toContainText("1,050 XP total");
+        await expect(drawer.locator(".account-xp-meter")).toHaveAttribute("value", "1050");
     }
 });
 

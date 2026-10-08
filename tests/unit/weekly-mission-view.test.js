@@ -12,6 +12,17 @@ const mission = {
 };
 const row = { missions: [mission], claimed_ids: [], cycle_ends_at: "2026-10-05T00:00:00Z" };
 describe("one mission display for every account panel", () => {
+    it("puts claimable missions first and claimed missions last without changing persisted order", () => {
+        const ready = { ...mission, id: "ready", label: "Ready reward", serverProgress: { complete: true } };
+        const done = { ...ready, id: "done", label: "Already claimed" };
+        const source = { ...row, missions: [mission, done, ready], claimed_ids: [done.id] };
+        const html = renderWeeklyMissionPanel({ row: source, statsProfile: {} });
+        expect(html.indexOf("Ready reward")).toBeLessThan(html.indexOf("Ten kills"));
+        expect(html.indexOf("Ten kills")).toBeLessThan(html.indexOf("Already claimed"));
+        expect(source.missions.map((item) => item.id)).toEqual(["kill-10", "done", "ready"]);
+        const rewarding = renderWeeklyMissionPanel({ row: source, statsProfile: {}, rewardingId: done.id });
+        expect(rewarding.indexOf("Already claimed")).toBeLessThan(rewarding.indexOf("Ten kills"));
+    });
     it("shows claim diagnostics before the long mission list rather than below it", () => {
         const html = renderWeeklyMissionPanel({ row, statsProfile: {}, message: "Mission unavailable" });
         expect(html).toContain('role="status"');

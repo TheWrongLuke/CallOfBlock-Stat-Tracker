@@ -4567,9 +4567,21 @@ function renderAccountSidePanel() {
     updateDrawerContent(host, `
         <div class="profile-drawer-backdrop" data-account-panel-backdrop>
             <aside class="profile-drawer ${notificationsOpen ? "notification-drawer" : ""}" role="dialog" aria-modal="true" aria-labelledby="profile-drawer-title">
-                <header class="profile-drawer-header">
+                <header class="profile-drawer-header ${notificationsOpen ? "" : "profile-drawer-profile-header"}">
                     <h2 id="profile-drawer-title">${notificationsOpen ? "NOTIFICATIONS" : "PROFILE"}</h2>
                     <button class="profile-drawer-close" type="button" data-account-panel-close aria-label="Close profile panel">&times;</button>
+                ${notificationsOpen ? "" : `
+                    <div class="profile-drawer-identity">
+                        <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
+                            ${renderAvatarImage(avatarUrl, account, profile, 72, "eager")}
+                        </span>
+                        <div>
+                            <strong>${escapeHtml(accountDisplayName(account))}</strong>
+                            ${renderProfileTitle(account, { compact: true })}
+                            ${renderAccountLevelPill(account)}
+                        </div>
+                    </div>
+                `}
                 </header>
                 ${
                     notificationsOpen
@@ -4584,16 +4596,6 @@ function renderAccountSidePanel() {
                               error: state.notifications.error
                           })
                         : `
-                    <div class="profile-drawer-identity">
-                        <span class="account-avatar-frame ${avatarFrameClass(account)}"${avatarFrameStyle(account)} ${avatarCosmeticOwnershipDataAttributes(account)}>
-                            ${renderAvatarImage(avatarUrl, account, profile, 72, "eager")}
-                        </span>
-                        <div>
-                            <strong>${escapeHtml(accountDisplayName(account))}</strong>
-                            ${renderProfileTitle(account, { compact: true })}
-                            ${renderAccountLevelPill(account)}
-                        </div>
-                    </div>
                     ${renderProfileDrawerActions(isPlaytestAdmin())}
                     ${renderWeeklyMissions(profile)}
                 `

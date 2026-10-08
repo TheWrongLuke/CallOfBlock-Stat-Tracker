@@ -29,15 +29,41 @@ export function advanceXpOrb(body, target, seconds, attraction = 10) {
     }
 }
 
+function accountMeters(accountId) {
+    return [...document.querySelectorAll(".account-xp-progress[data-xp-total]")].filter(
+        (element) => element.dataset.xpAccount === accountId
+    );
+}
+
 function visibleMeters(accountId) {
-    return [...document.querySelectorAll(".account-xp-progress[data-xp-total]")].filter((element) => {
-        const rect = element.getBoundingClientRect();
+    return accountMeters(accountId).filter((element) => {
+        const meter = element.querySelector(".account-xp-meter");
+        if (!meter) return false;
+        const rect = meter.getBoundingClientRect();
+        let left = 0,
+            top = 0,
+            right = innerWidth,
+            bottom = innerHeight;
+        // Drawer scrolling can clip a bar even while its parent remains partly visible.
+        for (let parent = meter.parentElement; parent; parent = parent.parentElement) {
+            const style = getComputedStyle(parent);
+            const bounds = parent.getBoundingClientRect();
+            if (/auto|scroll|hidden|clip/.test(style.overflowX)) {
+                left = Math.max(left, bounds.left);
+                right = Math.min(right, bounds.right);
+            }
+            if (/auto|scroll|hidden|clip/.test(style.overflowY)) {
+                top = Math.max(top, bounds.top);
+                bottom = Math.min(bottom, bounds.bottom);
+            }
+        }
         return (
-            element.dataset.xpAccount === accountId &&
             rect.width > 0 &&
             rect.height > 0 &&
-            rect.bottom > 0 &&
-            rect.top < innerHeight
+            rect.left >= left &&
+            rect.right <= right &&
+            rect.top >= top &&
+            rect.bottom <= bottom
         );
     });
 }
@@ -45,7 +71,7 @@ function visibleMeters(accountId) {
 function paintXp(total, accountId) {
     const progress = accountProgress(total);
     const format = (value) => Math.round(value).toLocaleString();
-    for (const element of visibleMeters(accountId)) {
+    for (const element of accountMeters(accountId)) {
         element.querySelector(".account-xp-meter").value = progress.currentLevelXp;
         element.querySelector(".account-level-pill strong").textContent = `LVL ${progress.level}`;
         element.querySelector(".account-level-pill span").textContent = `${format(progress.storedXp)} XP total`;
