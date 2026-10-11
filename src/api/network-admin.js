@@ -37,6 +37,8 @@ export function createNetworkAdminApi(
             ),
         detail: (id) => request(matchPath(id)),
         accountLinks: () => request("/accounts"),
+        players: () => request("/players"),
+        editPlayer: (id, input) => request(`/players${matchPath(id)}`, input),
         linkAccount: (accountId, playerUuid) => request("/accounts/link", { accountId, playerUuid, confirmed: true }),
         replay: (id, artifactId) => request(`${matchPath(id)}/replay${artifactId ? matchPath(artifactId) : ""}`),
         uploadRecording: (id, file, metadata) =>

@@ -1,7 +1,9 @@
 const REVISION = "20261004";
 const FILES = new Set([
-    ...["green", "gold", "blue", "red", "private-playtester"].map((name) => `/assets/pfp-borders/${name}.png`),
-    ...["default", "battle-royale", "deathmatch", "night-ops", "private-playtester"].map(
+    ...["green", "gold", "blue", "red", "private-playtester", "ffa", "duels"].map(
+        (name) => `/assets/pfp-borders/${name}.png`
+    ),
+    ...["default", "battle-royale", "deathmatch", "night-ops", "private-playtester", "ffa", "duels"].map(
         (name) => `/assets/profile-backgrounds/${name}.png`
     )
 ]);

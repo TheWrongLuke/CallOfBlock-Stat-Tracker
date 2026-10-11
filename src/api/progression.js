@@ -1,3 +1,4 @@
+import { createNetworkAdminApi } from "./network-admin.js";
 const RULE_COLUMNS =
     "id, cosmetic_type, cosmetic_id, mode, metric, target, active, sort_order, created_by, created_at, updated_at";
 const INVENTORY_COLUMNS = "profile_id, cosmetic_type, cosmetic_id, source, grant_note, granted_by, acquired_at";
@@ -5,8 +6,45 @@ const WEEKLY_TEMPLATE_COLUMNS =
     "id, family, difficulty, label, description, metric, target, xp, mode, weapon_scope, weapon_id, weapon_category, requirements, active, sort_order, created_at, updated_at";
 const BADGE_OVERRIDE_COLUMNS = "badge_id, label, description, icon_url, tiers, created_at, updated_at";
 
-export function createProgressionAdminApi(client) {
+export function createProgressionAdminApi(client, { network = null } = {}) {
     if (!client) throw new Error("A Supabase client is required.");
+    const uuidMode = () => globalThis.window?.COB_STATS_ENVIRONMENT === "TEST";
+    const networkApi = network || createNetworkAdminApi(client);
+    let directory = null;
+    const operations = new Map();
+    const loadDirectory = () =>
+        (directory ||= networkApi.players().catch((error) => {
+            directory = null;
+            throw error;
+        }));
+    const invalidate = () => {
+        directory = null;
+    };
+    async function withPlayers(load, merge) {
+        try {
+            const [result, players] = await Promise.all([load(), loadDirectory()]);
+            if (result.error) return result;
+            return { data: merge(result.data || [], players), error: null };
+        } catch (error) {
+            return { data: null, error };
+        }
+    }
+    async function uuidMutation(profileId, payload) {
+        try {
+            const players = await loadDirectory();
+            const player = players.find((p) => (p.account_id || p.player_uuid) === profileId);
+            if (!player) return null;
+            const key = JSON.stringify([profileId, payload]);
+            const operationId = operations.get(key) || crypto.randomUUID();
+            operations.set(key, operationId);
+            const data = await networkApi.editPlayer(player.player_uuid, { ...payload, operationId });
+            operations.delete(key);
+            invalidate();
+            return { data, error: null, uuidOwned: true };
+        } catch (error) {
+            return { data: null, error };
+        }
+    }
 
     return {
         async listRules() {
@@ -19,19 +57,80 @@ export function createProgressionAdminApi(client) {
         },
 
         async listInventory() {
-            return client
-                .from("profile_cosmetic_inventory")
-                .select(INVENTORY_COLUMNS)
-                .order("acquired_at", { ascending: false })
-                .limit(10000);
+            const load = () =>
+                client
+                    .from("profile_cosmetic_inventory")
+                    .select(INVENTORY_COLUMNS)
+                    .order("acquired_at", { ascending: false })
+                    .limit(10000);
+            if (!uuidMode()) return load();
+            return withPlayers(load, (rows, players) => {
+                const ids = new Set(players.map((p) => p.account_id || p.player_uuid));
+                return [
+                    ...rows.filter((row) => !ids.has(row.profile_id)),
+                    ...players.flatMap((p) =>
+                        (p.entitlements || []).map((item) => {
+                            const sources =
+                                p.entitlement_sources?.[JSON.stringify([item.type, item.id])]?.sources || [];
+                            const protectedItem = sources.some((s) =>
+                                /^(baseline:|purchase:|legacy:|independent:|default:|owner:)/.test(s)
+                            );
+                            return {
+                                profile_id: p.account_id || p.player_uuid,
+                                cosmetic_type: item.type,
+                                cosmetic_id: item.id,
+                                source: protectedItem
+                                    ? "legacy"
+                                    : sources.some((s) => s.startsWith("gift:"))
+                                      ? "friend"
+                                      : sources.some((s) => s.startsWith("admin:"))
+                                        ? "admin"
+                                        : "progression",
+                                protected: protectedItem
+                            };
+                        })
+                    )
+                ];
+            });
         },
 
         async listManagedPlayers() {
-            return client.rpc("admin_list_managed_players");
+            invalidate();
+            const load = () => client.rpc("admin_list_managed_players");
+            if (!uuidMode()) return load();
+            return withPlayers(load, (rows, players) => {
+                const result = new Map(rows.map((p) => [p.id, p]));
+                for (const player of players) {
+                    const id = player.account_id || player.player_uuid;
+                    result.set(id, {
+                        ...player,
+                        ...result.get(id),
+                        id,
+                        player_uuid: player.player_uuid,
+                        uuid_owned: true,
+                        account_id: player.account_id,
+                        xp: player.xp,
+                        level: player.level,
+                        mission_progress: player.missions,
+                        mission_assignments: player.mission_assignments,
+                        badge_progress: player.badges,
+                        achievement_ids: player.achievements,
+                        progression_pending: player.pending
+                    });
+                }
+                return [...result.values()];
+            });
         },
 
         async listCosmeticRevocations() {
-            return client.rpc("admin_list_cosmetic_revocation_history");
+            const load = () => client.rpc("admin_list_cosmetic_revocation_history");
+            if (!uuidMode()) return load();
+            return withPlayers(load, (rows, players) => [
+                ...rows,
+                ...players.flatMap((p) =>
+                    (p.revocations || []).map((r) => ({ ...r, profile_id: p.account_id || p.player_uuid }))
+                )
+            ]);
         },
 
         async listPendingCosmeticGifts() {
@@ -47,6 +146,16 @@ export function createProgressionAdminApi(client) {
         },
 
         async sendCosmeticGift(grant) {
+            if (uuidMode()) {
+                const result = await uuidMutation(grant.profileId, {
+                    action: "GRANT",
+                    type: grant.cosmeticType,
+                    id: grant.cosmeticId,
+                    source: grant.source === "friend" ? "gift" : "admin",
+                    note: grant.note || ""
+                });
+                if (result) return result;
+            }
             return client.rpc("admin_send_cosmetic_gift", {
                 p_profile_id: grant.profileId,
                 p_cosmetic_type: grant.cosmeticType,
@@ -57,6 +166,16 @@ export function createProgressionAdminApi(client) {
         },
 
         async revokePlayerCosmetic(profileId, cosmeticType, cosmeticId, note) {
+            if (uuidMode()) {
+                const result = await uuidMutation(profileId, {
+                    action: "REVOKE",
+                    type: cosmeticType,
+                    id: cosmeticId,
+                    source: "admin",
+                    note
+                });
+                if (result) return result;
+            }
             return client.rpc("admin_revoke_player_cosmetic_reearnable", {
                 p_profile_id: profileId,
                 p_cosmetic_type: cosmeticType,

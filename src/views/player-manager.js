@@ -6,7 +6,8 @@ const COLLECTION_GROUPS = [
     { type: "background", label: "Backgrounds" },
     { type: "icon", label: "Profile icons" },
     { type: "border", label: "Icon borders" },
-    { type: "title", label: "Titles" }
+    { type: "title", label: "Titles" },
+    { type: "badge", label: "Badges" }
 ];
 
 export function renderPlayerManagerContent({
@@ -47,7 +48,7 @@ export function renderPlayerManagerContent({
         ${message ? `<p class="progression-notice">${escapeHtml(message)}</p>` : ""}
         ${error ? `<p class="progression-notice error" role="alert">${escapeHtml(error)}</p>` : ""}
         <section class="progression-metrics" aria-label="Player Manager overview">
-            <div><span>Registered players</span><strong>${escapeHtml(players.length)}</strong></div>
+            <div><span>Players</span><strong>${escapeHtml(players.length)}</strong></div>
             <div><span>Search results</span><strong>${escapeHtml(visiblePlayers.length)}</strong></div>
             <div><span>Community bans</span><strong>${escapeHtml(bannedCount)}</strong></div>
             <div><span>Selected collection</span><strong>${escapeHtml(selectedGrants.length)}</strong></div>
@@ -56,7 +57,7 @@ export function renderPlayerManagerContent({
             <div class="player-manager-directory">
                 <label class="player-manager-search">
                     <span>Find player</span>
-                    <input type="search" value="${escapeHtml(filters.search || "")}" data-player-manager-search placeholder="Display, Discord, or Minecraft name">
+                    <input type="search" value="${escapeHtml(filters.search || "")}" data-player-manager-search placeholder="Name or Minecraft UUID">
                 </label>
                 <div class="player-manager-list" aria-live="polite">
                     ${visiblePlayers.length ? visiblePlayers.map((profile) => renderPlayerRow(profile, selected?.id)).join("") : `<p class="progression-empty">No players match this search.</p>`}
@@ -101,15 +102,16 @@ function renderPlayerDetail(
     const pending = new Map(pendingGifts.map((gift) => [cosmeticKey(gift), gift]));
     const revocationHistory = new Map(revocations.map((entry) => [cosmeticKey(entry), entry]));
     const collectionGroups = groupCollection(catalog, inventory, collectionFilter, collectionSort);
-    const canBan = profile.id !== currentUserId && !profile.is_owner;
+    const canBan = profile.id !== currentUserId && !profile.is_owner && !(profile.uuid_owned && !profile.account_id);
     return `
         <header class="player-manager-identity">
             ${renderPlayerAvatar(profile, 64)}
             <div>
-                <p class="panel-kicker">Player Account</p>
+                <p class="panel-kicker">${profile.uuid_owned && !profile.account_id ? "Minecraft player" : "Player Account"}</p>
                 <h3>${escapeHtml(playerName(profile))}</h3>
                 <span>${escapeHtml([discordUsername(profile), profile.minecraft_player_name].filter(Boolean).join(" / ") || "No linked game name")}</span>
                 <small>${escapeHtml(`Joined ${safeDate(profile.created_at)}`)}</small>
+                ${profile.player_uuid ? `<small>UUID: ${escapeHtml(profile.player_uuid)}</small>` : ""}
             </div>
             <div class="player-manager-status-actions">
                 ${profile.is_owner ? `<span class="player-role owner">Owner</span>` : ""}
@@ -118,6 +120,7 @@ function renderPlayerDetail(
                 <button type="button" data-player-ban-open ${canBan ? "" : "disabled"}>${profile.banned_from_voting ? "Review ban" : "Ban player"}</button>
             </div>
         </header>
+        ${profile.uuid_owned ? renderUuidProgression(profile) : ""}
         ${
             profile.banned_from_voting
                 ? `
@@ -155,6 +158,27 @@ function renderPlayerDetail(
     `;
 }
 
+function renderUuidProgression(profile) {
+    const progress = profile.mission_progress || {};
+    const assignments = profile.mission_assignments || {};
+    const complete = Object.values(progress).filter((m) => m.complete).length;
+    return `<section class="player-uuid-progression">
+        <div class="progression-metrics">
+            <div><span>Level</span><strong>${escapeHtml(profile.level || 1)}</strong></div>
+            <div><span>XP</span><strong>${escapeHtml(profile.xp || 0)}</strong></div>
+            <div><span>Completed objectives</span><strong>${complete} / ${Object.keys(progress).length}</strong></div>
+            <div><span>Achievements</span><strong>${escapeHtml(profile.achievement_ids?.length || 0)}</strong></div>
+        </div>
+        ${profile.progression_pending ? `<p role="status">Progression update pending.</p>` : ""}
+        <details><summary>Mission progress</summary><ul>${Object.entries(progress)
+            .map(
+                ([id, m]) =>
+                    `<li>${escapeHtml(assignments[id]?.mission?.title || assignments[id]?.mission?.label || assignments[id]?.mission?.id || id)}: ${escapeHtml(m.value || 0)} / ${escapeHtml(m.target || 0)}${m.complete ? " (complete)" : ""}${assignments[id]?.claimedBy ? " (claimed)" : ""}</li>`
+            )
+            .join("")}</ul></details>
+    </section>`;
+}
+
 function renderCollectionGroup(profile, group, inventory, pending, revocationHistory, collectionFilter) {
     const filterLabel =
         collectionFilter === "owned" ? "owned" : collectionFilter === "unowned" ? "unowned" : "matching";
@@ -174,7 +198,7 @@ function renderCollectionGroup(profile, group, inventory, pending, revocationHis
 function renderCollectionItem(profile, item, grant, pendingGift, revocation) {
     const owned = Boolean(grant);
     const requiredFallback = REQUIRED_FALLBACKS.has(cosmeticKey(item));
-    const automaticProtected = grant?.source === "default" || grant?.source === "owner";
+    const automaticProtected = grant?.protected || grant?.source === "default" || grant?.source === "owner";
     const revocable = owned && !requiredFallback && !automaticProtected;
     const ownerRestricted = item.acquisitionType === "owner" && !profile.is_owner;
     const grantDisabled = item.active === false || ownerRestricted || Boolean(pendingGift);
@@ -235,7 +259,7 @@ function renderGiftDialog(profile, catalog, revocations, grantKey, saving) {
                             <label class="wide"><span>Gift note</span><textarea name="note" rows="4" maxlength="200" placeholder="Optional message stored with this gift"></textarea></label>
                         </div>
                     </fieldset>
-                    <p class="progression-editor-status" role="status">The player receives a private notification. Ownership is added only when they claim the gift.${restoring ? " The earlier revocation note remains in private history." : ""}</p>
+                    <p class="progression-editor-status" role="status">${profile.uuid_owned ? "Ownership is granted immediately to this Minecraft UUID, including before website registration." : "The player receives a private notification. Ownership is added only when they claim the gift."}${restoring ? " The earlier revocation note remains in private history." : ""}</p>
                     <footer class="progression-dialog-actions">
                         <button class="primary" type="submit" ${saving ? "disabled" : ""}>${saving ? "Sending..." : "Send gift"}</button>
                     </footer>
@@ -267,7 +291,7 @@ function renderRevokeDialog(profile, catalog, revokeKey, saving) {
                         <span>Revocation note</span>
                         <textarea name="note" rows="4" minlength="3" maxlength="300" required placeholder="Why this cosmetic is being revoked"></textarea>
                     </label>
-                    <p class="progression-editor-status" role="status">The note is kept in the revocation history. Progression rewards remain earnable and may return immediately when their requirement is already met.</p>
+                    <p class="progression-editor-status" role="status">${profile.uuid_owned ? "The note is kept in UUID history. This item stays revoked until an explicit new grant; existing purchases and protected legacy ownership cannot be removed here." : "The note is kept in the revocation history. Progression rewards remain earnable and may return immediately when their requirement is already met."}</p>
                     <footer class="progression-dialog-actions">
                         <button class="danger" type="submit" ${saving ? "disabled" : ""}>${saving ? "Saving..." : "Confirm revocation"}</button>
                     </footer>
@@ -313,7 +337,7 @@ function renderBanDialog(profile, currentUserId, saving) {
 }
 
 function renderNoPlayerSelected(playerCount) {
-    return `<div class="player-manager-empty"><strong>${playerCount ? "Select a player" : "No registered players"}</strong><span>${playerCount ? "Choose an account from the directory." : "Accounts will appear after their first Discord login."}</span></div>`;
+    return `<div class="player-manager-empty"><strong>${playerCount ? "Select a player" : "No players yet"}</strong><span>${playerCount ? "Choose a player from the directory." : "Minecraft players appear after tracked gameplay; website accounts appear after registration."}</span></div>`;
 }
 
 function renderCollectionFilter(value, label, selected) {
@@ -328,10 +352,11 @@ function filterPlayers(players, searchValue) {
         .filter(
             (profile) =>
                 !search ||
-                [profile.display_name, profile.username, profile.minecraft_player_name].some((value) =>
-                    String(value || "")
-                        .toLowerCase()
-                        .includes(search)
+                [profile.display_name, profile.username, profile.minecraft_player_name, profile.player_uuid].some(
+                    (value) =>
+                        String(value || "")
+                            .toLowerCase()
+                            .includes(search)
                 )
         )
         .sort(
@@ -404,7 +429,8 @@ function cosmeticTypeLabel(value) {
             background: "Background",
             border: "Icon border",
             icon: "Profile icon",
-            title: "Title"
+            title: "Title",
+            badge: "Badge"
         }[value] || "Cosmetic"
     );
 }

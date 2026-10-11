@@ -221,8 +221,8 @@ describe("progression admin view", () => {
         });
 
         expect(html).toContain('data-progression-section="players"');
-        expect(html).toContain("Registered players");
-        expect(html).toContain("No registered players");
+        expect(html).toContain("Players");
+        expect(html).toContain("No players yet");
         expect(html).not.toContain("data-progression-cosmetic-new");
     });
 });

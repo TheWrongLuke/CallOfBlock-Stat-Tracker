@@ -385,6 +385,10 @@ const PROFILE_BACKGROUNDS = [
         unlock: "veteran",
         image: "./assets/profile-backgrounds/night-ops.png"
     },
+    { id: "ffa", label: "FFA Fracture", category: "Game Modes", rarity: "rare",
+        unlock: "ffa_winner", image: "./assets/profile-backgrounds/ffa.png" },
+    { id: "duels", label: "Duels Deadlock", category: "Game Modes", rarity: "rare",
+        unlock: "duels_winner", image: "./assets/profile-backgrounds/duels.png" },
     {
         id: "private_playtester", label: "Private Playtester", category: "Exclusive", rarity: "epic",
         unlock: "inventory", image: "./assets/profile-backgrounds/private-playtester.png"
@@ -442,11 +446,17 @@ const PFP_BORDERS = [
         id: "private_playtester", label: "Private Playtester", category: "Exclusive", rarity: "epic",
         unlock: "inventory", image: "./assets/pfp-borders/private-playtester.png", inset: 0
     },
+    { id: "ffa", label: "FFA Fracture", category: "Game Modes", rarity: "rare",
+        unlock: "ffa_winner", image: "./assets/pfp-borders/ffa.png", inset: 0 },
+    { id: "duels", label: "Duels Deadlock", category: "Game Modes", rarity: "rare",
+        unlock: "duels_winner", image: "./assets/pfp-borders/duels.png", inset: 0 },
     ...storeCatalogEntries("border")
 ].map((entry) => ({ ...entry, image: entry.image ? cosmeticArtworkUrl(entry.image) : entry.image }));
 const PROFILE_TITLES = [
     { id: "none", label: "No title", text: "", category: "Default", rarity: "common", unlock: "default" },
     { id: "owner", label: "Owner", text: "Owner", category: "Exclusive", rarity: "mythic", unlock: "inventory" },
+    { id: "ffa_victor", label: "FFA Victor", text: "FFA Victor", category: "Game Modes", rarity: "rare", unlock: "ffa_winner" },
+    { id: "duels_victor", label: "Duels Victor", text: "Duels Victor", category: "Game Modes", rarity: "rare", unlock: "duels_winner" },
     {
         id: "linked_operative",
         label: "Linked Operative",
@@ -5577,7 +5587,7 @@ function renderProgressionAdminPage({ forceBadgeEditor = false } = {}) {
         player: {
             ready: state.progression.ready && state.progression.playersReady,
             players: state.progression.players,
-            catalog: adminCatalog,
+            catalog: playerManagerCatalogItems(),
             grants: state.progression.grants,
             pendingGifts: state.progression.pendingGifts,
             revocations: state.progression.revocations,
@@ -5836,6 +5846,16 @@ function normalizeManagedPlayer(row) {
     if (!id) return null;
     return {
         id,
+        player_uuid: String(row?.player_uuid || ""),
+        uuid_owned: Boolean(row?.uuid_owned),
+        account_id: row?.account_id || null,
+        xp: number(row?.xp),
+        level: number(row?.level) || 1,
+        mission_progress: row?.mission_progress || {},
+        mission_assignments: row?.mission_assignments || {},
+        badge_progress: row?.badge_progress || {},
+        achievement_ids: Array.isArray(row?.achievement_ids) ? row.achievement_ids : [],
+        progression_pending: Boolean(row?.progression_pending),
         username: String(row?.username || "")
             .trim()
             .slice(0, 80),
@@ -5866,7 +5886,7 @@ function normalizeCosmeticRevocation(row) {
     const profileId = String(row?.profile_id || "").trim();
     const type = String(row?.cosmetic_type || "").trim();
     const id = String(row?.cosmetic_id || "").trim();
-    if (!profileId || !STORE_CATEGORY_LABELS[type] || type === "all" || !id) return null;
+    if (!profileId || (!STORE_CATEGORY_LABELS[type] && type !== "badge") || type === "all" || !id) return null;
     return {
         profile_id: profileId,
         cosmetic_type: type,
@@ -5952,6 +5972,14 @@ function progressionAdminCatalogItems() {
     return [...merged.values()];
 }
 
+function playerManagerCatalogItems() {
+    const cosmetics = progressionAdminCatalogItems();
+    if (window.COB_STATS_ENVIRONMENT !== "TEST") return cosmetics;
+    return [...cosmetics, ...badgeCatalog().map(badge => ({id:badge.id,type:"badge",name:badge.label || badge.id,
+        image:badge.iconUrl || badge.icon || "",active:true,rarity:badge.tiers?.[0]?.rarity || "common",
+        acquisitionType:badge.id === "owner" ? "owner" : "progression",remoteCatalog:true}))];
+}
+
 function requiredFallbackCosmetic(type, id) {
     return (
         (type === "icon" && id === "minecraft") ||
@@ -6003,6 +6031,8 @@ function inferredCosmeticRule(unlockId) {
         first_win: { mode: "overall", metric: "wins", target: 1 },
         br_winner: { mode: "battle_royale", metric: "wins", target: 1 },
         dm_winner: { mode: "deathmatch", metric: "wins", target: 1 },
+        ffa_winner: { mode: "free_for_all", metric: "wins", target: 1 },
+        duels_winner: { mode: "duels", metric: "wins", target: 1 },
         br_wins_live: { mode: "battle_royale", metric: "wins", target: 100 },
         dm_wins_live: { mode: "deathmatch", metric: "wins", target: 100 },
         br_kills_10000: { mode: "battle_royale", metric: "kills", target: 10000 },
@@ -6902,7 +6932,7 @@ async function submitProgressionGrant(form) {
         progression.playerError = "";
         progression.playerMessage = "";
         renderProgressionAdminPage();
-        if (!cosmetic.remoteCatalog) {
+        if (!cosmetic.remoteCatalog && !profile.uuid_owned) {
             await ensureProgressionCatalogOverride(cosmetic);
             const reconciliation = await progression.api.reconcileCosmetic(cosmetic.type, cosmetic.id);
             if (reconciliation.error) throw reconciliation.error;
@@ -6920,7 +6950,7 @@ async function submitProgressionGrant(form) {
         });
         if (result.error) throw result.error;
         progression.playerGrantKey = "";
-        progression.playerMessage = `${cosmetic.name} was sent to ${profile.display_name || profile.username || "the selected player"}. It will be owned after they claim it.`;
+        progression.playerMessage = `${cosmetic.name} was sent to ${profile.display_name || profile.username || "the selected player"}. ${result.uuidOwned ? "Ownership is saved to their Minecraft UUID." : "It will be owned after they claim it."}`;
         progression.loaded = false;
         await loadProgressionAdminData({ force: true });
         await loadAccountProfiles({ force: true });
@@ -6963,7 +6993,7 @@ async function submitProgressionRevoke(form) {
         renderProgressionAdminPage();
         const result = await progression.api.revokePlayerCosmetic(profileId, cosmetic.type, cosmetic.id, note);
         if (result.error) throw result.error;
-        if (cosmetic.acquisitionType === "progression") {
+        if (cosmetic.acquisitionType === "progression" && !result.uuidOwned) {
             const reconciliation = await progression.api.reconcileCosmetic(cosmetic.type, cosmetic.id);
             if (reconciliation.error) {
                 console.warn("Could not immediately reconcile revoked progression cosmetic", reconciliation.error);
@@ -6980,7 +7010,9 @@ async function submitProgressionRevoke(form) {
                 entry.cosmetic_type === cosmetic.type &&
                 entry.cosmetic_id === cosmetic.id
         );
-        progression.playerMessage = reearned
+        progression.playerMessage = result.uuidOwned
+            ? `${cosmetic.name || "Cosmetic"} revoked for this Minecraft UUID. It stays revoked until an explicit new grant; the note is saved.`
+            : reearned
             ? `${cosmetic.name || "Cosmetic"} was revoked and immediately re-earned because its progression requirement is already met. The note was saved.`
             : cosmetic.acquisitionType === "progression"
               ? `${cosmetic.name || "Cosmetic"} revoked. The note was saved, and the cosmetic can be earned through progression again.`
@@ -7035,7 +7067,7 @@ async function submitPlayerCommunityBan(form) {
 function progressionCatalogItem(value) {
     const [type, id, extra] = String(value || "").split(":");
     if (extra || !type || !id) return null;
-    return progressionAdminCatalogItems().find((item) => item.type === type && item.id === id) || null;
+    return playerManagerCatalogItems().find((item) => item.type === type && item.id === id) || null;
 }
 
 function progressionAdminErrorMessage(error, fallback = "Progression administration is unavailable.") {
@@ -14292,6 +14324,8 @@ function legacyCosmeticUnlockIds(context) {
     if (number(context?.stats?.wins) >= 1) ids.add("first_win");
     if (number(context?.br?.stats?.wins) >= 1) ids.add("br_winner");
     if (number(context?.dm?.stats?.wins) >= 1) ids.add("dm_winner");
+    if (number(context?.profile?.freeForAll?.stats?.wins) >= 1) ids.add("ffa_winner");
+    if (number(context?.profile?.duel?.stats?.wins) >= 1) ids.add("duels_winner");
     if (number(context?.br?.stats?.wins) >= 10) ids.add("br_wins_10");
     if (number(context?.br?.stats?.wins) >= 50) ids.add("br_wins_50");
     if (number(context?.br?.stats?.wins) >= 100) ids.add("br_wins_live");
