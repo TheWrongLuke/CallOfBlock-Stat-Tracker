@@ -2,6 +2,13 @@ import { describe, it, expect } from "vitest";
 import { cosmeticArtworkUrl } from "../../src/core/cosmetic-artwork.js";
 
 describe("approved bundled cosmetic artwork", () => {
+    it("refreshes only the reworked FFA artwork", () => {
+        expect(cosmeticArtworkUrl("/assets/profile-backgrounds/ffa.png")).toBe(
+            "/assets/profile-backgrounds/ffa.png?v=20261011"
+        );
+        expect(cosmeticArtworkUrl("/assets/pfp-borders/ffa.png")).toBe("/assets/pfp-borders/ffa.png?v=20261011");
+        expect(cosmeticArtworkUrl("/assets/pfp-borders/gold.png")).toContain("v=20261004");
+    });
     it("versions local and same-origin catalog paths without losing parameters", () => {
         expect(cosmeticArtworkUrl("./assets/pfp-borders/green.png")).toBe("/assets/pfp-borders/green.png?v=20261004");
         expect(

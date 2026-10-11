@@ -13,7 +13,8 @@ export function cosmeticArtworkUrl(value, origin = globalThis.location?.origin |
     try {
         const url = new URL(value, `${origin}/`);
         if (url.origin !== origin || !FILES.has(url.pathname)) return value;
-        url.searchParams.set("v", REVISION);
+        const revision = url.pathname.endsWith("/ffa.png") ? "20261011" : REVISION;
+        url.searchParams.set("v", revision);
         return `${url.pathname}${url.search}${url.hash}`;
     } catch {
         return value;
