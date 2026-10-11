@@ -4,6 +4,12 @@ import { loadMatchPlaybackPreferences, saveMatchPlaybackPreferences } from "./ma
 import { validateMatchTelemetry } from "./match-telemetry-normalizer.js";
 import { renderReplayUploadForm, replayMetadataFromForm } from "./replay-admin-form.js";
 import { gameModeLabel, modernizeModeText } from "../core/game-modes.js";
+import {
+    buildReplayEventDecorations,
+    renderReplayEventIcon,
+    replayKda,
+    groupReplayTimelineEvents
+} from "./replay-event-icons.js";
 
 const FILTER_LABELS = {
     engagements: "Engagements",
@@ -52,6 +58,11 @@ export function createMatchDetailPage({
     let summary = null;
     let viewerSummary = null;
     let telemetry = null;
+    let eventDecorations = new Map();
+    let timelineEventById = new Map();
+    let timelineResizeObserver = null;
+    let timelineGroups = new Map();
+    let timelineGroupsKey = "";
     let playback = null;
     let mapRenderer = null;
     let playbackPreferences = loadMatchPlaybackPreferences();
@@ -119,6 +130,8 @@ export function createMatchDetailPage({
             const loaded = await api.load(id, { force, signal: controller.signal });
             if (token !== requestToken || activeMatchId !== id) return;
             telemetry = loaded;
+            eventDecorations = buildReplayEventDecorations(telemetry);
+            timelineEventById = new Map(telemetry.events.map((event) => [event.eventId, event]));
             renderLoaded();
             void loadReplays(token);
         } catch (error) {
@@ -150,6 +163,10 @@ export function createMatchDetailPage({
     }
 
     function closePlayback() {
+        timelineResizeObserver?.disconnect();
+        timelineResizeObserver = null;
+        timelineGroups = new Map();
+        timelineGroupsKey = "";
         leaveReplayFullscreen();
         timelineScrub = emptyTimelineScrub();
         playback?.destroy();
@@ -249,6 +266,10 @@ export function createMatchDetailPage({
         mapRenderer = new MatchMapRenderer(mapHost, telemetry, getPlayerPresentation, playbackPreferences.markers);
         playback = new MatchPlaybackController(telemetry, updatePlayback, playbackPreferences);
         updatePlayback(playback.state());
+        const markerHost = container.querySelector("[data-match-timeline-markers]");
+        layoutTimelineMarkers();
+        timelineResizeObserver = new ResizeObserver(layoutTimelineMarkers);
+        timelineResizeObserver.observe(markerHost);
     }
 
     function renderMatchHeader() {
@@ -392,7 +413,6 @@ export function createMatchDetailPage({
                 <div class="match-timeline-track">
                     <input id="match-timeline-range" type="range" min="0" max="${Math.max(1, telemetry.durationMs)}" step="100" value="0" data-match-timeline>
                     <div class="match-timeline-markers" data-match-timeline-markers>
-                        ${telemetry.events.filter(isTimelineEvent).map(renderTimelineMarker).join("")}
                     </div>
                 </div>
                 <div>
@@ -404,18 +424,47 @@ export function createMatchDetailPage({
         `;
     }
 
-    function renderTimelineMarker(event) {
-        const left =
-            telemetry.durationMs > 0 ? Math.min(100, Math.max(0, (event.timeMs / telemetry.durationMs) * 100)) : 0;
+    function layoutTimelineMarkers() {
+        const host = container.querySelector("[data-match-timeline-markers]");
+        if (!host || !telemetry) return;
+        const groups = groupReplayTimelineEvents(
+            telemetry.events.filter(isTimelineEvent),
+            telemetry.durationMs,
+            host.clientWidth,
+            eventDecorations
+        );
+        const key = groups
+            .map((group) => `${group.left}:${group.events.map((event) => event.eventId).join(",")}`)
+            .join(";");
+        if (key === timelineGroupsKey) return;
+        timelineGroupsKey = key;
+        timelineGroups = new Map(
+            groups.map((group) => [group.events[0].eventId, group.events.map((event) => event.eventId)])
+        );
+        host.innerHTML = groups.map(renderTimelineMarker).join("");
+        if (playback) updatePlayback(playback.state());
+    }
+
+    function renderTimelineMarker(group) {
+        const event = group.events[0];
+        const decoration = eventDecorations.get(event.eventId);
+        const label = decoration?.label || eventLabel(event.type);
+        const tooltip = group.events
+            .map(
+                (item) =>
+                    `${eventDecorations.get(item.eventId)?.label || eventLabel(item.type)} at ${formatMatchTime(item.timeMs)}`
+            )
+            .join("; ");
         return `
             <button
                 type="button"
                 class="timeline-event-marker event-${escapeHtml(event.type)}"
-                style="left:${left}%"
+                style="left:${group.left}%"
                 data-match-event="${escapeHtml(event.eventId)}"
                 data-event-type="${escapeHtml(event.type)}"
-                aria-label="${escapeHtml(`${eventLabel(event.type)} at ${formatMatchTime(event.timeMs)}`)}"
-            ></button>
+                aria-label="${escapeHtml(`${label} at ${formatMatchTime(event.timeMs)}${group.events.length > 1 ? `; ${group.events.length} grouped events` : ""}`)}"
+                title="${escapeHtml(tooltip)}"
+            >${renderReplayEventIcon(event, decoration)}${group.events.length > 1 ? `<span class="replay-event-count">${group.events.length}</span>` : ""}</button>
         `;
     }
 
@@ -433,7 +482,7 @@ export function createMatchDetailPage({
                 <div class="match-scoreboard-wrap" tabindex="0">
                     <table>
                         <thead>
-                            <tr><th>Player</th><th>Team</th><th>Result</th><th>Place</th><th>Kills</th><th>Deaths</th><th>HS kills</th><th>Streak</th><th>Longest</th></tr>
+                            <tr><th>Player</th><th>Team</th><th>Result</th><th>Place</th><th>Kills</th><th>Deaths</th><th>Assists</th><th title="(Kills + assists) / max(1, deaths); unavailable without recorded assists">KDA</th><th>HS kills</th><th>Streak</th><th>Longest</th></tr>
                         </thead>
                         <tbody>
                             ${telemetry.participants
@@ -466,6 +515,8 @@ export function createMatchDetailPage({
                 <td>${valueOrUnavailable(result?.placement)}</td>
                 <td>${valueOrUnavailable(result?.kills)}</td>
                 <td>${valueOrUnavailable(result?.deaths)}</td>
+                <td>${valueOrUnavailable(result?.assists)}</td>
+                <td>${replayKda(result) === null ? "Unavailable" : replayKda(result).toFixed(2)}</td>
                 <td>${valueOrUnavailable(result?.headshotKills)}</td>
                 <td>${valueOrUnavailable(result?.bestKillStreak)}</td>
                 <td>${result?.longestKillDistance === null || result?.longestKillDistance === undefined ? "Unavailable" : `${round(result.longestKillDistance)} blocks`}</td>
@@ -623,10 +674,18 @@ export function createMatchDetailPage({
 
     function updateTimelineMarkers(playbackState) {
         container.querySelectorAll("[data-event-type]").forEach((marker) => {
-            const filter = filterForEventType(marker.dataset.eventType);
-            marker.hidden = filter ? !playbackState.filters[filter] : false;
-            marker.classList.toggle("selected", marker.dataset.matchEvent === playbackState.currentEventId);
+            const group = timelineGroups.get(marker.dataset.matchEvent) || [marker.dataset.matchEvent];
+            marker.hidden = !group.some((id) => timelineEventVisible(id, playbackState));
+            const selectedId =
+                eventDecorations.get(playbackState.currentEventId)?.mergedInto || playbackState.currentEventId;
+            marker.classList.toggle("selected", timelineGroups.get(marker.dataset.matchEvent)?.includes(selectedId));
         });
+    }
+
+    function timelineEventVisible(id, playbackState) {
+        if (eventDecorations.get(id)?.ends.length) return true;
+        const filter = filterForEventType(timelineEventById.get(id)?.type);
+        return filter ? playbackState.filters[filter] : true;
     }
 
     function renderEventFeed(playbackState) {
@@ -641,9 +700,16 @@ export function createMatchDetailPage({
         ].join(":");
         if (renderKey === lastEventFeedKey) return;
         lastEventFeedKey = renderKey;
-        const visible = telemetry.events.filter((event) => eventPassesFilters(event, playbackState.filters));
+        const visible = telemetry.events.filter(
+            (event) =>
+                (eventPassesFilters(event, playbackState.filters) ||
+                    eventDecorations.get(event.eventId)?.ends.length) &&
+                !eventDecorations.get(event.eventId)?.mergedInto
+        );
+        const selectedId =
+            eventDecorations.get(playbackState.currentEventId)?.mergedInto || playbackState.currentEventId;
         const current =
-            visible.find((event) => event.eventId === playbackState.currentEventId) ||
+            visible.find((event) => event.eventId === selectedId) ||
             [...visible].reverse().find((event) => event.timeMs <= time && time - event.timeMs <= 1500) ||
             null;
         const recent = visible
@@ -675,7 +741,7 @@ export function createMatchDetailPage({
         ].filter(Boolean);
         return `
             <article class="match-event-card ${current ? "current" : ""}">
-                <span>${escapeHtml(eventLabel(event.type))} - ${formatMatchTime(event.timeMs)}</span>
+                <span class="match-event-heading">${renderReplayEventIcon(event, eventDecorations.get(event.eventId))}<span>${escapeHtml(eventDecorations.get(event.eventId)?.label || eventLabel(event.type))} - ${formatMatchTime(event.timeMs)}</span></span>
                 <strong>${escapeHtml(actorId ? playerName(actorId) : event.teamId || "Match")}${targetId ? ` -> ${escapeHtml(playerName(targetId))}` : ""}</strong>
                 ${lines.map((line) => `<small>${escapeHtml(line)}</small>`).join("")}
             </article>
@@ -685,7 +751,7 @@ export function createMatchDetailPage({
     function renderEventButton(event) {
         return `
             <button type="button" data-match-event="${escapeHtml(event.eventId)}">
-                <span>${formatMatchTime(event.timeMs)} - ${escapeHtml(eventLabel(event.type))}</span>
+                <span class="match-event-heading">${renderReplayEventIcon(event, eventDecorations.get(event.eventId))}<span>${formatMatchTime(event.timeMs)} - ${escapeHtml(eventDecorations.get(event.eventId)?.label || eventLabel(event.type))}</span></span>
                 <strong>${escapeHtml(eventSummary(event))}</strong>
             </button>
         `;
@@ -777,7 +843,23 @@ export function createMatchDetailPage({
             if (host) host.innerHTML = diagnosticsMarkup(validateMatchTelemetry(telemetry));
         } else {
             const eventButton = event.target.closest("[data-match-event]");
-            if (eventButton) playback.selectEvent(eventButton.dataset.matchEvent);
+            if (eventButton) {
+                const candidates = eventButton.matches(".timeline-event-marker")
+                    ? timelineGroups.get(eventButton.dataset.matchEvent)
+                    : null;
+                const state = playback.state();
+                const group = candidates?.filter((id) => timelineEventVisible(id, state));
+                const selectedId = group
+                    ? group[
+                          (group.indexOf(
+                              eventDecorations.get(state.currentEventId)?.mergedInto || state.currentEventId
+                          ) +
+                              1) %
+                              group.length
+                      ]
+                    : eventButton.dataset.matchEvent;
+                playback.selectEvent(selectedId);
+            }
         }
     }
 

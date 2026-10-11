@@ -10,6 +10,7 @@ describe("public build file allowlist", () => {
             "assets/maps/raid.png",
             "assets/css/styles.css",
             "assets/font.woff2",
+            "assets/icons/replay/LICENSE.txt",
             "data/stats.json"
         ]) {
             expect(isPublicBuildFile(file), file).toBe(true);

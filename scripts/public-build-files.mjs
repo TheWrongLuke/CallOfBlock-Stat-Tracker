@@ -19,5 +19,6 @@ export function isPublicBuildFile(relativePath, isDirectory = false) {
     if (/\.(?:bak|backup|log|err|sql|pem|key|dpapi)(?:\.|$)/i.test(name)) return false;
     if (parts[0] === "data" && name.startsWith("fixture-")) return false;
     const extension = path.posix.extname(name).toLowerCase();
+    if (parts.join("/") === "assets/icons/replay/LICENSE.txt") return true;
     return isDirectory || extensions[parts[0]].has(extension);
 }
