@@ -642,6 +642,133 @@ const PERMANENT_GAMEPLAY_BADGES = [
     )
 ];
 
+const MODE_BADGES = [
+    tieredBadge({
+        id: "duel_wins_counter",
+        badgeType: "live-counter",
+        metric: { scope: "duel", stat: "wins" },
+        unit: "Duels wins",
+        description: "Win completed Duels matches.",
+        liveValueAtFinalTier: true,
+        tiers: [
+            tier("common", "Duelist", 1),
+            tier("rare", "Challenger", 10),
+            tier("epic", "Head-to-Head", 25),
+            tier("legendary", "Duel Champion", 50),
+            tier("mythic", "Unrivaled", 100)
+        ]
+    }),
+    tieredBadge({
+        id: "ffa_wins_counter",
+        badgeType: "live-counter",
+        metric: { scope: "freeForAll", stat: "wins" },
+        unit: "FFA wins",
+        description: "Win completed Free For All matches.",
+        liveValueAtFinalTier: true,
+        tiers: [
+            tier("common", "Lone Victor", 1),
+            tier("rare", "Independent", 10),
+            tier("epic", "Solo Threat", 25),
+            tier("legendary", "Lone Champion", 50),
+            tier("mythic", "One Against All", 100)
+        ]
+    }),
+    tieredBadge({
+        id: "tdm_wins_counter",
+        badgeType: "live-counter",
+        metric: { scope: "teamDeathmatch", stat: "wins" },
+        unit: "TDM wins",
+        description: "Win completed Team Deathmatch matches.",
+        liveValueAtFinalTier: true,
+        tiers: [
+            tier("common", "Squad Victor", 1),
+            tier("rare", "Team Player", 10),
+            tier("epic", "Squad Anchor", 25),
+            tier("legendary", "Team Champion", 50),
+            tier("mythic", "Squad Legend", 100)
+        ]
+    }),
+    tieredBadge({
+        id: "zombie_kills_counter",
+        badgeType: "live-counter",
+        metric: { scope: "zombieSurvival", stat: "zombieKills" },
+        unit: "Zombie kills",
+        description: "Eliminate zombies in completed Zombie Survival matches.",
+        liveValueAtFinalTier: true,
+        tiers: [
+            tier("common", "Horde Recruit", 25),
+            tier("rare", "Horde Fighter", 100),
+            tier("epic", "Horde Breaker", 500),
+            tier("legendary", "Undead Exterminator", 2000),
+            tier("mythic", "Horde's End", 10000)
+        ]
+    }),
+    tieredBadge({
+        id: "zombie_survival_record",
+        badgeType: "limited",
+        metric: { scope: "zombieSurvival", stat: "longestSurvivalMs", transform: "seconds" },
+        unit: "seconds survived",
+        description: "Set a single-match Zombie Survival time record.",
+        tiers: [
+            tier("common", "Still Breathing", 300),
+            tier("rare", "Hold On", 600),
+            tier("epic", "Lasting Resistance", 1200),
+            tier("legendary", "Never Surrender", 1800),
+            tier("mythic", "Unbroken", 3600)
+        ]
+    }),
+    tieredBadge({
+        id: "medic_revives_counter",
+        badgeType: "live-counter",
+        metric: { scope: "cooperative", stat: "revives" },
+        unit: "teammates revived",
+        description: "Successfully revive teammates in completed team BR or Zombie matches.",
+        liveValueAtFinalTier: true,
+        tiers: [
+            tier("common", "Medic", 1),
+            tier("rare", "Field Medic", 10),
+            tier("epic", "Combat Medic", 25),
+            tier("legendary", "Lifeline", 50),
+            tier("mythic", "Guardian Angel", 100)
+        ]
+    }),
+    tieredBadge({
+        id: "zombie_supply_counter",
+        badgeType: "live-counter",
+        metric: { scope: "zombieSurvival", stat: "chestsOpened" },
+        unit: "supply chests",
+        description: "Open distinct supply chests in completed Zombie Survival matches.",
+        liveValueAtFinalTier: true,
+        tiers: [
+            tier("common", "Supply Runner", 5),
+            tier("rare", "Scrounger", 25),
+            tier("epic", "Quartermaster", 100),
+            tier("legendary", "Supply Specialist", 250),
+            tier("mythic", "Horde Provisioner", 1000)
+        ]
+    }),
+    tieredBadge({
+        id: "duel_clean_sweep",
+        badgeType: "limited",
+        metric: { scope: "duel", stat: "cleanSweeps" },
+        unit: "clean-sweep matches",
+        description: "Win a completed Duels match without losing a round. Tracked from this release onward.",
+        tiers: [tier("rare", "Clean Sweep", 1), tier("epic", "Round Lock", 5), tier("legendary", "No Reply", 25)]
+    }),
+    tieredBadge({
+        id: "hold_the_line",
+        badgeType: "limited",
+        metric: { scope: "cooperative", stat: "bestMatchRevives", aggregate: "max" },
+        unit: "revives in one match",
+        description: "Rescue multiple teammates in one completed team BR or Zombie match.",
+        tiers: [
+            tier("rare", "Hold the Line", 3),
+            tier("epic", "Nobody Left Behind", 5),
+            tier("legendary", "Last Lifeline", 10)
+        ]
+    })
+];
+
 const SPECIAL_BADGES = [
     specialBadge("admin", "Admin", "legendary", "Granted to active administrators.", "admin"),
     specialBadge("owner", "Owner", "mythic", "Reserved for the Call of Block owner.", "owner"),
@@ -653,12 +780,14 @@ export const BADGE_CATALOG = Object.freeze([
     ...LIVE_COUNTER_BADGES,
     ...LIMITED_UPGRADABLE_BADGES,
     ...PERMANENT_GAMEPLAY_BADGES,
+    ...MODE_BADGES,
     ...SPECIAL_BADGES
 ]);
 
 export const BADGE_TYPE_COUNTS = Object.freeze({
-    "live-counter": LIVE_COUNTER_BADGES.length,
-    limited: LIMITED_UPGRADABLE_BADGES.length,
+    "live-counter":
+        LIVE_COUNTER_BADGES.length + MODE_BADGES.filter((badge) => badge.badgeType === "live-counter").length,
+    limited: LIMITED_UPGRADABLE_BADGES.length + MODE_BADGES.filter((badge) => badge.badgeType === "limited").length,
     permanent: PERMANENT_GAMEPLAY_BADGES.length,
     special: SPECIAL_BADGES.length
 });

@@ -23,7 +23,7 @@ describe("badge administration view", () => {
     it("renders every default badge as an editable card", () => {
         const html = renderBadgeAdminContent(baseProps);
 
-        expect(html.match(/data-badge-editor-open=/g)).toHaveLength(64);
+        expect(html.match(/data-badge-editor-open=/g)).toHaveLength(73);
         expect(html).toContain('data-badge-editor-open="br_wins_counter"');
         expect(html).toContain('data-badge-editor-open="owner"');
     });

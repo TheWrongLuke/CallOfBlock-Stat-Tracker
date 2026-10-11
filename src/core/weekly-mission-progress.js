@@ -13,7 +13,10 @@ export function weeklyMissionBaseline(profile, mission) {
         };
     }
     if (requirement.type === "distinct") {
-        return { type: "distinct", values: distinctValues(profile, mission, requirement) };
+        return {
+            type: "distinct",
+            values: distinctValues(profile, mission, requirement)
+        };
     }
     return requirementValue(profile, mission, requirement);
 }
@@ -108,7 +111,10 @@ function normalizeRequirements(value) {
             type: "all",
             components: (Array.isArray(source.components) ? source.components : [])
                 .filter((component) => component && typeof component === "object")
-                .map((component) => ({ ...component, target: Math.max(1, number(component.target)) }))
+                .map((component) => ({
+                    ...component,
+                    target: Math.max(1, number(component.target))
+                }))
         };
     if (source.type === "distinct")
         return {
@@ -118,7 +124,11 @@ function normalizeRequirements(value) {
             perItemTarget: Math.max(1, number(source.perItemTarget) || 1)
         };
     if (source.type === "counter")
-        return { type: "counter", key: String(source.key || ""), scope: source.scope || "mode" };
+        return {
+            type: "counter",
+            key: String(source.key || ""),
+            scope: source.scope || "mode"
+        };
     if (source.type === "map_stat") return { type: "map_stat", metric: source.metric || "games" };
     return { type: "stat" };
 }
@@ -207,7 +217,11 @@ export function weaponEntries(profile, mode, version = 3) {
     )) {
         const id = String(weapon?.id || weapon?.label || "");
         if (!id) continue;
-        const current = merged.get(id) || { ...weapon, id, stats: normalizeStats(null) };
+        const current = merged.get(id) || {
+            ...weapon,
+            id,
+            stats: normalizeStats(null)
+        };
         current.stats = combineStats(current.stats, weapon.stats);
         merged.set(id, current);
     }
@@ -254,6 +268,11 @@ export function progressionStats(stats, mode, weapons = []) {
 function normalizeStats(stats) {
     const keys = [
         "wins",
+        "roundWins",
+        "flawlessRounds",
+        "chestsOpened",
+        "lastSurvivorCount",
+        "revives",
         "kills",
         "deaths",
         "games",

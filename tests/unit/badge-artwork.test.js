@@ -3,10 +3,10 @@ import { readFileSync } from "node:fs";
 import { BADGE_CATALOG, badgeArtworkUrl, isBundledBadgeArtwork } from "../../src/config/badges.js";
 
 describe("approved combat badge artwork", () => {
-    it("ships a valid transparent 512px PNG for all 129 stable award identities", () => {
+    it("ships a valid transparent 512px PNG for all 170 stable award identities", () => {
         const images = BADGE_CATALOG.flatMap((badge) => (badge.tiers?.length ? badge.tiers : [badge]));
-        expect(images).toHaveLength(129);
-        expect(new Set(images.map((entry) => entry.icon)).size).toBe(129);
+        expect(images).toHaveLength(170);
+        expect(new Set(images.map((entry) => entry.icon)).size).toBe(170);
         for (const entry of images) {
             expect(isBundledBadgeArtwork(entry.icon)).toBe(true);
             const png = readFileSync(new URL(`../../${entry.icon.slice(2)}`, import.meta.url));

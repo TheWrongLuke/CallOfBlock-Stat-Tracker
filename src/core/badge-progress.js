@@ -52,6 +52,12 @@ export function badgeRequirementSnapshot(badge, tier, context, normalizeStats) {
 
 export function badgeMetricValue(metric, context) {
     if (!metric) return 0;
+    if (metric.scope === "cooperative") {
+        const values = [context?.br?.stats, context?.modes?.zombieSurvival?.stats].map((stats) =>
+            number(stats?.[metric.stat])
+        );
+        return metric.aggregate === "max" ? Math.max(...values) : values.reduce((total, value) => total + value, 0);
+    }
     const source =
         metric.scope === "battleRoyale"
             ? context?.br?.stats
@@ -67,5 +73,6 @@ export function badgeMetricValue(metric, context) {
     const camelStat = String(metric.stat || "").replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
     let value = number(source?.[metric.stat] ?? source?.[camelStat]);
     if (metric.transform === "hours") value /= 3600;
+    if (metric.transform === "seconds") value /= 1000;
     return value;
 }

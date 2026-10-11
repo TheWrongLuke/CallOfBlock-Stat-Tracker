@@ -7,12 +7,12 @@ import {
 } from "../../src/config/badges.js";
 
 describe("badge catalog", () => {
-    it("contains the complete 64-badge structure with stable IDs", () => {
-        expect(BADGE_CATALOG).toHaveLength(64);
-        expect(new Set(BADGE_CATALOG.map((badge) => badge.id)).size).toBe(64);
+    it("preserves existing badges and includes nine five-mode/cooperative families", () => {
+        expect(BADGE_CATALOG).toHaveLength(73);
+        expect(new Set(BADGE_CATALOG.map((badge) => badge.id)).size).toBe(73);
         expect(BADGE_TYPE_COUNTS).toEqual({
-            "live-counter": 10,
-            limited: 10,
+            "live-counter": 16,
+            limited: 13,
             permanent: 40,
             special: 4
         });
@@ -63,9 +63,9 @@ describe("badge catalog", () => {
             badge.tiers?.length ? badge.tiers.map((tier) => tier.advancementId) : [badge.advancementId]
         );
 
-        expect(visible).toHaveLength(57);
-        expect(visibleAwards).toHaveLength(117);
-        expect(new Set(visibleAwards).size).toBe(117);
+        expect(visible).toHaveLength(66);
+        expect(visibleAwards).toHaveLength(158);
+        expect(new Set(visibleAwards).size).toBe(158);
         expect(BADGE_CATALOG.find((badge) => badge.id === "first_blood")).toMatchObject({
             advancementId: "first_blood",
             showInGame: true,

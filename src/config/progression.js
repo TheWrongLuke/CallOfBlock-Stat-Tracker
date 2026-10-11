@@ -70,7 +70,12 @@ export const WEEKLY_MISSION_METRICS = Object.freeze([
     { value: "topMatchKills", label: "Best kills in one match" },
     { value: "utilityKills", label: "Utility kills" },
     { value: "vehicleKills", label: "Vehicle kills" },
-    { value: "playtimeSeconds", label: "Playtime seconds" }
+    { value: "playtimeSeconds", label: "Playtime seconds" },
+    { value: "roundWins", label: "Duels round wins" },
+    { value: "flawlessRounds", label: "Duels round wins without elimination" },
+    { value: "chestsOpened", label: "Zombie supply chests" },
+    { value: "lastSurvivorCount", label: "Zombie last-survivor finishes" },
+    { value: "revives", label: "Completed teammate revives (BR / Zombie)" }
 ]);
 
 export const WEEKLY_MISSION_WEAPON_SCOPES = Object.freeze([
