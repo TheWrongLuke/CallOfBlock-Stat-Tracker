@@ -47,7 +47,7 @@ import {
     normalizeBadgeCatalogOverride
 } from "./config/badge-catalog.js?v=badge-editor-2";
 import { BADGE_CATALOG, badgeTierLevel, isBundledBadgeArtwork } from "./config/badges.js";
-import { badgeTierState as sharedBadgeTierState, badgeMetricValue } from "./core/badge-progress.js";
+import { badgeTierState as sharedBadgeTierState, badgeMetricValue, badgeGameplayCounters } from "./core/badge-progress.js";
 import {
     TICKET_SUBMIT_COOLDOWN_MS,
     USER_CLOSABLE_TICKET_STATUSES,
@@ -3520,7 +3520,10 @@ function normalizeAccountNotification(row) {
     if (!id || !type) return null;
     const cosmeticType = String(row?.cosmetic_type || "").trim();
     const cosmeticId = String(row?.cosmetic_id || "").trim();
-    const cosmetic = cosmeticType && cosmeticId ? cosmeticCatalogItem(cosmeticType, cosmeticId) : null;
+    const item = cosmeticType && cosmeticId ? cosmeticCatalogItem(cosmeticType, cosmeticId) : null;
+    const cosmetic = cosmeticType === "badge" && item
+        ? badgeDisplay(item, accountBadgeState(state.authProfile, accountLinkedStatsProfile(state.authProfile)).context, true)
+        : item;
     return {
         id,
         type,
@@ -14413,6 +14416,9 @@ function badgeProgressState(badge, context, unlocked, tierState = badgeTierState
         const status = [];
         if (tierState.currentTier) {
             status.push(`${tierState.currentTier.name} - ${RARITY_LABELS[cleanRarity(tierState.currentTier.rarity)]}`);
+            if (tierState.nextTier) status.push(
+                `${formatBadgeValue(progressSnapshot.actual)} / ${formatBadgeValue(progressSnapshot.target)} ${progressSnapshot.unit}`.trim()
+            );
         } else if (tierState.nextTier) {
             status.push(
                 `${formatBadgeValue(progressSnapshot.actual)} / ${formatBadgeValue(progressSnapshot.target)} ${progressSnapshot.unit}`.trim()
@@ -16103,6 +16109,7 @@ function specialZombieKillCount(variantKills) {
 
 function normalizeStats(stats) {
     return {
+        ...badgeGameplayCounters(stats),
         wins: number(stats?.wins),
         kills: number(stats?.kills),
         deaths: number(stats?.deaths),

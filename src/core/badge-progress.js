@@ -1,5 +1,13 @@
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
+export function badgeGameplayCounters(stats) {
+    return Object.fromEntries(
+        ["zombieKills", "longestSurvivalMs", "chestsOpened", "cleanSweeps", "revives", "bestMatchRevives"].map(
+            (field) => [field, Math.max(0, number(stats?.[field]))]
+        )
+    );
+}
+
 // The caller supplies its existing stat normalizer; tier rules are shared by UI and server projections.
 export function badgeTierState(badge, context, normalizeStats) {
     if (!badge?.tiers?.length) return null;

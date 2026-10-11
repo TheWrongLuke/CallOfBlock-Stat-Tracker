@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { BADGE_CATALOG } from "../../src/config/badges.js";
-import { badgeTierState, badgeMetricValue, badgeRequirementSnapshot } from "../../src/core/badge-progress.js";
+import {
+    badgeTierState,
+    badgeMetricValue,
+    badgeRequirementSnapshot,
+    badgeGameplayCounters
+} from "../../src/core/badge-progress.js";
 const normalize = (stats) => ({
     ...stats,
     games: stats?.games ?? stats?.matches ?? 0
@@ -8,6 +13,39 @@ const normalize = (stats) => ({
 const badge = (id) => BADGE_CATALOG.find((item) => item.id === id);
 
 describe("shared badge rule evaluation", () => {
+    it("retains all split-mode and cooperative badge counters through the website normalizer", () => {
+        const raw = {
+            zombieKills: 268,
+            longestSurvivalMs: 700000,
+            chestsOpened: 60,
+            cleanSweeps: 3,
+            revives: 12,
+            bestMatchRevives: 4
+        };
+        const normalized = { ...badgeGameplayCounters(raw), kills: 268 };
+        const context = {
+            br: { stats: badgeGameplayCounters({ revives: 2 }) },
+            modes: {
+                zombieSurvival: { stats: normalized },
+                duel: { stats: normalized }
+            }
+        };
+        const tier = badgeTierState(badge("zombie_kills_counter"), context, normalize);
+        expect(tier.currentTier.name).toBe("Horde Fighter");
+        expect(tier.nextSnapshot).toMatchObject({ actual: 268, target: 500 });
+        for (const item of BADGE_CATALOG.filter((entry) =>
+            ["zombieSurvival", "cooperative"].includes(entry.metric?.scope)
+        )) {
+            expect(badgeMetricValue(item.metric, context), item.id).toBeGreaterThan(0);
+        }
+        expect(badgeMetricValue({ scope: "cooperative", stat: "revives" }, context)).toBe(14);
+        expect(badgeMetricValue({ scope: "duel", stat: "cleanSweeps" }, context)).toBe(3);
+        expect(badgeGameplayCounters({ zombieKills: "268", revives: -1, cleanSweeps: "bad" })).toMatchObject({
+            zombieKills: 268,
+            revives: 0,
+            cleanSweeps: 0
+        });
+    });
     it("evaluates every shipped tier at and below its own threshold", () => {
         for (const item of BADGE_CATALOG.filter((entry) => entry.tiers?.length)) {
             for (const tier of item.tiers) {
