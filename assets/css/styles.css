@@ -1887,23 +1887,31 @@ body.replay-fullscreen-open {
 .tactical-zone {
     position: absolute;
     z-index: 3;
-    left: var(--zone-x, 50%);
-    top: var(--zone-y, 50%);
-    width: var(--zone-width, 50%);
-    height: var(--zone-height, 50%);
-    transform: translate(-50%, -50%);
-    border: 2px solid rgba(126, 200, 255, 0.88);
-    border-radius: 50%;
-    background: rgba(126, 200, 255, 0.055);
+    inset: 0;
     pointer-events: none;
+}
+
+.tactical-zone-geometry {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.tactical-zone-outside {
+    fill: rgba(255, 68, 68, 0.22);
+}
+
+.tactical-zone-ring {
+    fill: none;
+    stroke: #ff5656;
+    stroke-width: 2px;
 }
 
 .tactical-zone span {
     position: absolute;
-    top: -22px;
-    left: 50%;
-    transform: translateX(-50%);
-    color: var(--blue);
+    transform: translate(-50%, -120%);
+    color: #ff7777;
+    text-shadow: 0 1px 3px #080b10;
     font: 700 0.66rem "Chakra Petch", sans-serif;
     white-space: nowrap;
 }

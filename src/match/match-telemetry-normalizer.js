@@ -136,7 +136,7 @@ export function normalizeMatchTelemetry(raw, expectedMatchId = "") {
     };
 }
 
-export function mapCoordinateToPercent(map, x, z) {
+export function mapCoordinateToPercent(map, x, z, { clampToBounds = true } = {}) {
     const minX = finite(map?.worldMinX);
     const maxX = finite(map?.worldMaxX);
     const minZ = finite(map?.worldMinZ);
@@ -160,9 +160,22 @@ export function mapCoordinateToPercent(map, x, z) {
         normalizedY = centeredX * Math.sin(radians) + centeredY * Math.cos(radians) + 0.5;
     }
     return {
-        x: clamp(normalizedX * 100, 0, 100),
-        y: clamp(normalizedY * 100, 0, 100),
+        x: clampToBounds ? clamp(normalizedX * 100, 0, 100) : normalizedX * 100,
+        y: clampToBounds ? clamp(normalizedY * 100, 0, 100) : normalizedY * 100,
         outsideBounds: normalizedX < 0 || normalizedX > 1 || normalizedY < 0 || normalizedY > 1
+    };
+}
+
+export function mapZoneToPercent(map, zone) {
+    const radius = finiteNonNegative(zone?.radius);
+    const point = mapCoordinateToPercent(map, zone?.centerX, zone?.centerZ, { clampToBounds: false });
+    if (!zone || radius === null || !point) return null;
+    return {
+        x: point.x,
+        y: point.y,
+        radiusX: (radius * 100) / (Number(map.worldMaxX) - Number(map.worldMinX)),
+        radiusY: (radius * 100) / (Number(map.worldMaxZ) - Number(map.worldMinZ)),
+        rotation: (((finite(map.rotationDegrees) ?? 0) % 360) + 360) % 360
     };
 }
 

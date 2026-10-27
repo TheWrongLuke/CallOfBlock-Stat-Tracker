@@ -1,8 +1,9 @@
-import { mapCoordinateToPercent } from "./match-telemetry-normalizer.js";
+import { mapCoordinateToPercent, mapZoneToPercent } from "./match-telemetry-normalizer.js";
 import { interpolateSnapshotAtTime, interpolateZombieStatesAtTime } from "./match-playback-controller.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const CURRENT_ICON_SIZE_PX = 34;
+let zoneOverlaySequence = 0;
 const DEFAULT_MARKER_OPTIONS = Object.freeze({
     size: 2,
     showIcons: true,
@@ -180,6 +181,26 @@ export class MatchMapRenderer {
         this.zone = document.createElement("div");
         this.zone.className = "tactical-zone";
         this.zone.hidden = true;
+        this.zone.setAttribute("role", "img");
+        const maskId = `replay-zone-outside-${++zoneOverlaySequence}`;
+        const geometry = document.createElementNS(SVG_NS, "svg");
+        geometry.classList.add("tactical-zone-geometry");
+        geometry.setAttribute("viewBox", "0 0 1000 1000");
+        geometry.setAttribute("preserveAspectRatio", "none");
+        geometry.setAttribute("aria-hidden", "true");
+        geometry.innerHTML = `
+            <defs>
+                <mask id="${maskId}" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="1000">
+                    <rect width="1000" height="1000" fill="white" />
+                    <ellipse data-zone-mask fill="black" />
+                </mask>
+            </defs>
+            <rect class="tactical-zone-outside" width="1000" height="1000" mask="url(#${maskId})" />
+            <ellipse class="tactical-zone-ring" vector-effect="non-scaling-stroke" />
+        `;
+        this.zoneMask = geometry.querySelector("[data-zone-mask]");
+        this.zoneRing = geometry.querySelector(".tactical-zone-ring");
+        this.zone.append(geometry);
         this.zoneLabel = document.createElement("span");
         this.zone.append(this.zoneLabel);
         this.stage.append(this.zone);
@@ -402,22 +423,24 @@ export class MatchMapRenderer {
     }
 
     updateZone(zone) {
-        if (!zone) {
-            this.zone.hidden = true;
-            return;
-        }
-        const point = mapCoordinateToPercent(this.telemetry.map, zone.centerX, zone.centerZ);
-        const xSpan = Number(this.telemetry.map.worldMaxX) - Number(this.telemetry.map.worldMinX);
-        const zSpan = Number(this.telemetry.map.worldMaxZ) - Number(this.telemetry.map.worldMinZ);
-        if (!point || !(xSpan > 0) || !(zSpan > 0)) {
+        const projected = mapZoneToPercent(this.telemetry.map, zone);
+        if (!projected) {
             this.zone.hidden = true;
             return;
         }
         this.zone.hidden = false;
-        this.zone.style.setProperty("--zone-x", `${point.x}%`);
-        this.zone.style.setProperty("--zone-y", `${point.y}%`);
-        this.zone.style.setProperty("--zone-width", `${(zone.radius * 2 * 100) / xSpan}%`);
-        this.zone.style.setProperty("--zone-height", `${(zone.radius * 2 * 100) / zSpan}%`);
+        const { x, y, radiusX, radiusY, rotation } = projected;
+        for (const ellipse of [this.zoneMask, this.zoneRing]) {
+            ellipse.setAttribute("cx", String(x * 10));
+            ellipse.setAttribute("cy", String(y * 10));
+            ellipse.setAttribute("rx", String(radiusX * 10));
+            ellipse.setAttribute("ry", String(radiusY * 10));
+            ellipse.setAttribute("transform", `rotate(${rotation} ${x * 10} ${y * 10})`);
+        }
+        const angle = (rotation * Math.PI) / 180;
+        const topRadius = Math.hypot(radiusX * Math.sin(angle), radiusY * Math.cos(angle));
+        this.zoneLabel.style.left = `${x}%`;
+        this.zoneLabel.style.top = `${y - topRadius}%`;
         this.zoneLabel.textContent = `Zone ${zone.phase ?? "?"}`;
         this.zone.setAttribute(
             "aria-label",
